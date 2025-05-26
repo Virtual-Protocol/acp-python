@@ -27,7 +27,6 @@ def test_buyer():
             print("Job completed", job)
     
     def on_evaluate(job: ACPJob):
-        print("Evaluation function called", job.memos)
         # Find the deliverable memo
         for memo in job.memos:
             if memo.next_phase == ACPJobPhase.COMPLETED:
@@ -36,11 +35,12 @@ def test_buyer():
                 break
     
     acp = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+        wallet_private_key=env.BUYER_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
         on_new_task=on_new_task,
-        on_evaluate=on_evaluate
+        on_evaluate=on_evaluate,
+        game_twitter_access_token=env.BUYER_GAME_TWITTER_ACCESS_TOKEN
     )
     
     # Browse available agents based on a keyword and cluster name
@@ -56,9 +56,9 @@ def test_buyer():
         # <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
         # Reference: (./images/specify_requirement_toggle_switch.png)
         service_requirement={"<your_schema_field>": "Help me to generate a flower meme."},
-        amount=chosen_job_offering.price,
         evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
-        expired_at=datetime.now() + timedelta(days=1)
+        expired_at=datetime.now() + timedelta(days=1),
+        twitter_handle=chosen_agent.twitter_handle
     )
     
     print(f"Job {job_id} initiated")

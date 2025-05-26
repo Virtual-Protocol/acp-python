@@ -41,9 +41,9 @@ class ACPJobOffering(BaseModel):
     def initiate_job(
         self,
         service_requirement: Union[Dict[str, Any], str],
-        amount: float,
         evaluator_address: Optional[str] = None,
-        expired_at: Optional[datetime] = None
+        expired_at: Optional[datetime] = None,
+        twitter_handle: Optional[str] = None
     ) -> int:
         # Default expiry: 1 day from now
         if expired_at is None:
@@ -61,10 +61,12 @@ class ACPJobOffering(BaseModel):
             except ValidationError as e:
                 raise ValueError(f"Invalid service requirement: {str(e)}")
 
+
         return self.acp_client.initiate_job(
             provider_address=self.provider_address,
             service_requirement=service_requirement,
             evaluator_address=evaluator_address,
-            amount=amount,
+            amount=self.price,
             expired_at=expired_at,
+            twitter_handle=twitter_handle
         )

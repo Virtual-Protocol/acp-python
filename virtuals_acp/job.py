@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import ACPJobPhase
+from virtuals_acp.models import ACPJobPhase, IACPAgent
 
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
@@ -10,6 +10,8 @@ if TYPE_CHECKING:
 class ACPJob(BaseModel):
     id: int
     provider_address: str
+    client_address: str
+    evaluator_address: str
     price: float
     acp_client: "VirtualsACP"
     memos: List[ACPMemo] = Field(default_factory=list)
@@ -26,6 +28,39 @@ class ACPJob(BaseModel):
             f"  phase={self.phase}\n"
             f")"
         )
+        
+    @property
+    def service_requirement(self) -> Optional[str]:
+        """Get the service requirement from the negotiation memo"""
+        memo = next(
+            (m for m in self.memos if ACPJobPhase(m.next_phase) == ACPJobPhase.NEGOTIATION),
+            None
+        )
+        return memo.content if memo else None
+
+    @property 
+    def deliverable(self) -> Optional[str]:
+        """Get the deliverable from the completed memo"""
+        memo = next(
+            (m for m in self.memos if ACPJobPhase(m.next_phase) == ACPJobPhase.COMPLETED),
+            None
+        )
+        return memo.content if memo else None
+
+    @property
+    def provider_agent(self) -> Optional["IACPAgent"]:
+        """Get the provider agent details"""
+        return self.acp_client.get_agent(self.provider_address)
+
+    @property
+    def client_agent(self) -> Optional["IACPAgent"]:
+        """Get the client agent details"""
+        return self.acp_client.get_agent(self.acp_client.agent_address)
+
+    @property
+    def evaluator_agent(self) -> Optional["IACPAgent"]:
+        """Get the evaluator agent details"""
+        return self.acp_client.get_agent(self.acp_client.agent_address)
     
     def pay(self, amount: int, reason: Optional[str] = None):
         memo = next(
@@ -53,7 +88,9 @@ class ACPJob(BaseModel):
         if not reason:
             reason = f"Job {self.id} {'accepted' if accept else 'rejected'}."
             
-        return self.acp_client.respond_to_job_memo(self.id, memo.id, accept, reason)
+        client_twitter_handle = self.client_agent.twitter_handle
+        
+        return self.acp_client.respond_to_job_memo(self.id, memo.id, accept, reason, client_twitter_handle)
 
     def deliver(self, deliverable: str):
         memo = next(

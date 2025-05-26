@@ -23,12 +23,12 @@ def test_buyer():
                     break
         elif job.phase == ACPJobPhase.COMPLETED:
             print("Job completed", job)
-            
     acp = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+        wallet_private_key=env.BUYER_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
-        on_new_task=on_new_task
+        on_new_task=on_new_task,
+        game_twitter_access_token=env.BUYER_GAME_TWITTER_ACCESS_TOKEN
     )
     
     # Browse available agents based on a keyword and cluster name
@@ -44,9 +44,9 @@ def test_buyer():
         # <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
         # Reference: (./images/specify_requirement_toggle_switch.png)
         service_requirement={"<your_schema_field>": "Help me to generate a flower meme."},
-        amount=chosen_job_offering.price,
         evaluator_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
-        expired_at=datetime.now() + timedelta(days=1)
+        expired_at=datetime.now() + timedelta(days=1),
+        twitter_handle=chosen_agent.twitter_handle
     )
     
     print(f"Job {job_id} initiated")

@@ -20,6 +20,7 @@ from virtuals_acp.configs import ACPContractConfig, DEFAULT_CONFIG
 from virtuals_acp.offering import ACPJobOffering
 from virtuals_acp.job import ACPJob
 from virtuals_acp.memo import ACPMemo
+import virtuals_tweepy
 
 class VirtualsACP:
     def __init__(self, 
@@ -27,7 +28,9 @@ class VirtualsACP:
                  agent_wallet_address: Optional[str] = None, 
                  config: Optional[ACPContractConfig] = DEFAULT_CONFIG,
                  on_new_task: Optional[callable] = None,
-                 on_evaluate: Optional[callable] = None):
+                 on_evaluate: Optional[callable] = None,
+                 game_twitter_access_token: Optional[str] = None,
+                 ):
         
         self.config = config
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
@@ -49,6 +52,12 @@ class VirtualsACP:
         # Initialize the contract manager here
         self.contract_manager = _ACPContractManager(self.w3, config, wallet_private_key)
         self.acp_api_url = config.acp_api_url
+        
+        self.game_twitter_client = None
+        if (game_twitter_access_token):
+            self.game_twitter_client = virtuals_tweepy.Client(
+                game_twitter_access_token = game_twitter_access_token
+            )
         
         # Socket.IO setup
         self.on_new_task = on_new_task
@@ -79,6 +88,8 @@ class VirtualsACP:
                     acp_client=self,
                     id=data["id"],
                     provider_address=data["providerAddress"],
+                    client_address=data["clientAddress"],
+                    evaluator_address=data["evaluatorAddress"],
                     memos=memos,
                     phase=data["phase"],
                     price=data["price"]
@@ -98,11 +109,12 @@ class VirtualsACP:
                     next_phase=memo["nextPhase"],
                 ) for memo in data["memos"]]
                 
-                
                 job = ACPJob(
                     acp_client=self,
                     id=data["id"],
                     provider_address=data["providerAddress"],
+                    client_address=data["clientAddress"],
+                    evaluator_address=data["evaluatorAddress"],
                     memos=memos,
                     phase=data["phase"],
                     price=data["price"]
@@ -201,7 +213,8 @@ class VirtualsACP:
         service_requirement: Union[Dict[str, Any], str],
         amount: float,
         evaluator_address: Optional[str] = None,
-        expired_at: Optional[datetime] = None
+        expired_at: Optional[datetime] = None,
+        twitter_handle: Optional[str] = None
     ) -> int:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(days=1)
@@ -261,6 +274,21 @@ class VirtualsACP:
         )
         print(f"Initial memo for job {job_id} created.")
         
+        if (self.game_twitter_client and twitter_handle):
+            try:
+                get_provider_user_fn = self.game_twitter_client.get_user
+                provider_user = get_provider_user_fn(username=twitter_handle)
+                if (provider_user.data.get("id") is None):
+                    raise Exception(f"Unable to find user {twitter_handle} on Twitter")
+                
+                result =self.game_twitter_client.follow(provider_user.data.get("id"))
+                
+                if (not result.data.get("following")):
+                    raise Exception(f"Failed to follow {twitter_handle}")
+            except Exception as e:
+                print(f"Error following {twitter_handle}: {e}")
+                raise e
+        
         payload = {
             "jobId": job_id,
             "clientAddress": self.agent_address,
@@ -281,6 +309,7 @@ class VirtualsACP:
                 "Content-Type": "application/json",
             }
         )
+        #todo : move twitter logic here
         return job_id
 
     def respond_to_job_memo(
@@ -288,9 +317,9 @@ class VirtualsACP:
         job_id: int, 
         memo_id: int, 
         accept: bool, 
-        reason: Optional[str] = ""
+        reason: Optional[str] = "",
+        twitter_handle: Optional[str] = None
     ) -> str:
-        
         try:
             tx_hash = self.contract_manager.sign_memo(self.agent_address, memo_id, accept, reason or "")
             time.sleep(10)
@@ -304,7 +333,23 @@ class VirtualsACP:
                 is_secured=False,
                 next_phase=ACPJobPhase.TRANSACTION
             )
+            #todo : move twitter logic here
+
             print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
+            
+            if (self.game_twitter_client and accept is True):
+                try:
+                    if (not twitter_handle):
+                        raise Exception("Client or provider twitter handle is required")
+                    
+                    get_user_fn = self.game_twitter_client.get_user
+                    user = get_user_fn(username=twitter_handle)
+                    result =self.game_twitter_client.follow(user.data.get("id"))
+                    
+                    if (not result.data.get("following")):
+                        raise Exception(f"Failed to follow {twitter_handle}")
+                except Exception as e:
+                    raise e
             return tx_hash
         except Exception as e:
             print(f"Error in respond_to_job_memo: {e}")
@@ -525,6 +570,45 @@ class VirtualsACP:
             
         except Exception as e:
             raise ACPApiError(f"Failed to get memo by ID: {e}")
+        
+    def get_agent(self, wallet_address: str) -> Optional[IACPAgent]:
+        url = f"{self.acp_api_url}/agents?filters[walletAddress]={wallet_address}"
+        
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+            
+            agents_data = data.get("data", [])
+            if not agents_data:
+                return None
+                
+            agent_data = agents_data[0]
+            
+            offerings = [
+                ACPJobOffering(
+                    acp_client=self,
+                    provider_address=agent_data["walletAddress"], 
+                    type=off["name"],
+                    price=off["price"],
+                    requirementSchema=off.get("requirementSchema", None)
+                )
+                for off in agent_data.get("offerings", [])
+            ]
+            
+            return IACPAgent(
+                id=agent_data["id"],
+                name=agent_data.get("name"),
+                description=agent_data.get("description"), 
+                wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
+                offerings=offerings,
+                twitter_handle=agent_data.get("twitterHandle")
+            )
+            
+        except requests.exceptions.RequestException as e:
+            raise ACPApiError(f"Failed to get agent: {e}")
+        except Exception as e:
+            raise ACPError(f"An unexpected error occurred while getting agent: {e}")
 
 # Rebuild the AcpJob model after VirtualsACP is defined
 ACPJob.model_rebuild()
