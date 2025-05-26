@@ -188,6 +188,7 @@ class VirtualsACP:
                         provider_address=agent_data["walletAddress"],
                         type=off["name"],
                         price=off["price"],
+                        agent_twitter_handle=agent_data.get("twitterHandle"),
                         requirementSchema=off.get("requirementSchema", None)
                     )
                     for off in agent_data.get("offerings", [])
@@ -591,8 +592,9 @@ class VirtualsACP:
             offerings = [
                 ACPJobOffering(
                     acp_client=self,
-                    provider_address=agent_data["walletAddress"], 
+                    provider_address=agent_data.get("walletAddress"), 
                     type=off["name"],
+                    agent_twitter_handle=agent_data.get("twitterHandle"),
                     price=off["price"],
                     requirementSchema=off.get("requirementSchema", None)
                 )
@@ -603,7 +605,7 @@ class VirtualsACP:
                 id=agent_data["id"],
                 name=agent_data.get("name"),
                 description=agent_data.get("description"), 
-                wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
+                wallet_address=Web3.to_checksum_address(agent_data.get("walletAddress")),
                 offerings=offerings,
                 twitter_handle=agent_data.get("twitterHandle")
             )

@@ -12,6 +12,7 @@ class ACPJobOffering(BaseModel):
     provider_address: str
     type: str
     price: float
+    agent_twitter_handle: Optional[str] = None
     requirementSchema: Optional[Dict[str, Any]] = None
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -43,7 +44,6 @@ class ACPJobOffering(BaseModel):
         service_requirement: Union[Dict[str, Any], str],
         evaluator_address: Optional[str] = None,
         expired_at: Optional[datetime] = None,
-        twitter_handle: Optional[str] = None
     ) -> int:
         # Default expiry: 1 day from now
         if expired_at is None:
@@ -68,5 +68,5 @@ class ACPJobOffering(BaseModel):
             evaluator_address=evaluator_address,
             amount=self.price,
             expired_at=expired_at,
-            twitter_handle=twitter_handle
+            twitter_handle=self.agent_twitter_handle
         )

@@ -46,7 +46,6 @@ def test_buyer():
         service_requirement={"<your_schema_field>": "Help me to generate a flower meme."},
         evaluator_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
         expired_at=datetime.now() + timedelta(days=1),
-        twitter_handle=chosen_agent.twitter_handle
     )
     
     print(f"Job {job_id} initiated")
