@@ -274,7 +274,10 @@ class VirtualsACP:
         )
         print(f"Initial memo for job {job_id} created.")
         
-        if (self.game_twitter_client and twitter_handle):
+        if (self.game_twitter_client):
+            if (not twitter_handle):
+                raise Exception("Provider twitter handle is required")
+            
             try:
                 get_provider_user_fn = self.game_twitter_client.get_user
                 provider_user = get_provider_user_fn(username=twitter_handle)
@@ -340,7 +343,7 @@ class VirtualsACP:
             if (self.game_twitter_client and accept is True):
                 try:
                     if (not twitter_handle):
-                        raise Exception("Client or provider twitter handle is required")
+                        raise Exception("Client twitter handle is required")
                     
                     get_user_fn = self.game_twitter_client.get_user
                     user = get_user_fn(username=twitter_handle)
