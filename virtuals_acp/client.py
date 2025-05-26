@@ -282,10 +282,11 @@ class VirtualsACP:
             try:
                 get_provider_user_fn = self.game_twitter_client.get_user
                 provider_user = get_provider_user_fn(username=twitter_handle)
-                if (provider_user.data.get("id") is None):
+                user_id = provider_user.data.get("id", None)
+                if (user_id is None):
                     raise Exception(f"Unable to find user {twitter_handle} on Twitter")
                 
-                result =self.game_twitter_client.follow(provider_user.data.get("id"))
+                result =self.game_twitter_client.follow(user_id)
                 
                 if (not result.data.get("following")):
                     raise Exception(f"Failed to follow {twitter_handle}")
@@ -348,7 +349,11 @@ class VirtualsACP:
                     
                     get_user_fn = self.game_twitter_client.get_user
                     user = get_user_fn(username=twitter_handle)
-                    result =self.game_twitter_client.follow(user.data.get("id"))
+                    user_id = user.data.get("id", None)
+                    if (not user_id):
+                        raise Exception(f"Unable to find user {twitter_handle} on Twitter")
+                    
+                    result =self.game_twitter_client.follow(user_id)
                     
                     if (not result.data.get("following")):
                         raise Exception(f"Failed to follow {twitter_handle}")
