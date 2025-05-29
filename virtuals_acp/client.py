@@ -458,7 +458,7 @@ class VirtualsACP:
         
         
     def get_completed_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/completed?pagination[page]=${page}&pagination[pageSize]=${pageSize}"
+        url = f"{self.acp_api_url}/jobs/completed?pagination[page]={page}&pagination[pageSize]={pageSize}"
         headers = {
             "wallet-address": self.agent_address
         }
