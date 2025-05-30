@@ -55,12 +55,12 @@ class ACPJob(BaseModel):
     @property
     def client_agent(self) -> Optional["IACPAgent"]:
         """Get the client agent details"""
-        return self.acp_client.get_agent(self.acp_client.agent_address)
+        return self.acp_client.get_agent(self.client_address)
 
     @property
     def evaluator_agent(self) -> Optional["IACPAgent"]:
         """Get the evaluator agent details"""
-        return self.acp_client.get_agent(self.acp_client.agent_address)
+        return self.acp_client.get_agent(self.client_address)
     
     def pay(self, amount: int, reason: Optional[str] = None):
         memo = next(
