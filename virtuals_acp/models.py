@@ -1,7 +1,7 @@
 # virtuals_acp/models.py
 
 from dataclasses import dataclass, field
-from typing import List, Optional, TYPE_CHECKING
+from typing import Any, List, Optional, TYPE_CHECKING, Dict
 from enum import Enum
 
 if TYPE_CHECKING:
@@ -22,6 +22,14 @@ class ACPJobPhase(Enum):
     EVALUATION = 3
     COMPLETED = 4
     REJECTED = 5
+    
+class ACPAgentSort(Enum):
+    SUCCESSFUL_JOB_COUNT = "successfulJobCount"
+    SUCCESS_RATE = "successRate" 
+    UNIQUE_BUYER_COUNT = "uniqueBuyerCount"
+    MINS_FROM_LAST_ONLINE = "minsFromLastOnlineTime"
+    IS_ONLINE = "isOnline"
+
 
 @dataclass
 class IACPAgent:
@@ -41,5 +49,6 @@ class IACPAgent:
     cluster: Optional[str] = None
     symbol: Optional[str] = None
     virtual_agent_id: Optional[str] = None
+    metrics: Optional[Dict[str, Any]] = None
 
 

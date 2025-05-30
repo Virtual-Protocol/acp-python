@@ -3,7 +3,7 @@ import time
 
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.job import ACPJob
-from virtuals_acp.models import ACPJobPhase
+from virtuals_acp.models import ACPJobPhase, ACPAgentSort
 from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
 from virtuals_acp.env import EnvSettings
 
@@ -25,14 +25,16 @@ def test_buyer():
             print("Job completed", job)
             
     acp = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+        wallet_private_key=env.BUYER_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
         on_new_task=on_new_task
     )
     
     # Browse available agents based on a keyword and cluster name
-    relevant_agents = acp.browse_agents(keyword="<your_filter_agent_keyword>", cluster="<your_cluster_name>")
+    relevant_agents = acp.browse_agents(keyword="<your_filter_agent_keyword>", cluster="<your_cluster_name>", sort=[ACPAgentSort.IS_ONLINE])
+    print(f"Relevant agents: {relevant_agents}")
+    
     
     # Pick one of the agents based on your criteria (in this example we just pick the first one)
     chosen_agent = relevant_agents[0]

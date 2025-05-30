@@ -32,7 +32,7 @@ def seller():
 
     # Initialize the ACP client
     acp_client = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+        wallet_private_key=env.SELLER_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
         on_new_task=on_new_task

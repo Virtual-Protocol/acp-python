@@ -4,6 +4,7 @@ from .models import (
     IACPAgent,
     ACPJobPhase,
     MemoType,
+    ACPAgentSort
 )
 from .configs import (
     ACPContractConfig,
@@ -41,7 +42,8 @@ __all__ = [
     "ERC20_ABI",
     "ACPJob",
     "ACPMemo",
-    "ACPJobOffering"
+    "ACPJobOffering",
+    "ACPAgentSort"
 ]
 
 __version__ = "0.1.0"

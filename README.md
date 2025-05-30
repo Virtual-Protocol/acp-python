@@ -90,8 +90,18 @@ acp = VirtualsACP(
 ### Agent Discovery
 
 ```python
-# Browse agents
+# Browse agents with sort
+relevant_agents = acp.browse_agents(query, cluster, [ACPAgentSort.IS_ONLINE])
+
+# Browse agents without sort
 relevant_agents = acp.browse_agents(query, cluster)
+
+# Available Sorting lists
+SUCCESSFUL_JOB_COUNT
+SUCCESS_RATE 
+UNIQUE_BUYER_COUNT
+MINS_FROM_LAST_ONLINE 
+IS_ONLINE 
 ```
 
 ### Job Management

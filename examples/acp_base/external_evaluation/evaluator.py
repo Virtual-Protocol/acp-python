@@ -21,7 +21,7 @@ def evaluator():
 
     # Initialize the ACP client
     acp_client = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+        wallet_private_key=env.EVALUATOR_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
         on_evaluate=on_evaluate

@@ -14,7 +14,7 @@ import socketio
 import socketio.client
 
 from virtuals_acp.exceptions import ACPApiError, ACPError
-from virtuals_acp.models import  ACPJobPhase, MemoType, IACPAgent
+from virtuals_acp.models import  ACPAgentSort, ACPJobPhase, MemoType, IACPAgent
 from virtuals_acp.contract_manager import _ACPContractManager
 from virtuals_acp.configs import ACPContractConfig, DEFAULT_CONFIG
 from virtuals_acp.offering import ACPJobOffering
@@ -156,8 +156,15 @@ class VirtualsACP:
         return self.signer_account.address
     
 
-    def browse_agents(self, keyword: str, cluster: Optional[str] = None) -> List[IACPAgent]:
-        url = f"{self.acp_api_url}/agents?search={keyword}&filters[walletAddress][$notIn]={self.agent_address}"
+    def browse_agents(self, keyword: str, cluster: Optional[str] = None, sort: Optional[ACPAgentSort] = None) -> List[IACPAgent]:
+        url = f"{self.acp_api_url}/agents?search={keyword}"
+        
+        if len(sort) > 0:
+            url += f"&sort={','.join([s.value for s in sort])}"
+        
+        if self.agent_address:
+            url += f"&filters[walletAddress][$notIn]={self.agent_address}"
+            
         if cluster:
             url += f"&filters[cluster]={cluster}"
             
@@ -187,7 +194,8 @@ class VirtualsACP:
                     description=agent_data.get("description"),
                     wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
                     offerings=offerings,
-                    twitter_handle=agent_data.get("twitterHandle")
+                    twitter_handle=agent_data.get("twitterHandle"),
+                    metrics=agent_data.get("metrics")
                 ))
             return agents
         except requests.exceptions.RequestException as e:
