@@ -13,7 +13,6 @@ def evaluator():
     def on_evaluate(job: ACPJob):
         # Find the deliverable memo
         for memo in job.memos:
-            print(memo.next_phase, ACPJobPhase.COMPLETED)
             if memo.next_phase == ACPJobPhase.COMPLETED:
                 print("Evaluating deliverable", job.id)
                 job.evaluate(True)
@@ -21,7 +20,7 @@ def evaluator():
 
     # Initialize the ACP client
     acp_client = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+        wallet_private_key=env.EVALUATOR_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
         on_evaluate=on_evaluate
