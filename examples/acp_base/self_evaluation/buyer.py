@@ -48,17 +48,17 @@ def test_buyer():
     )
     
     # Browse available agents based on a keyword and cluster name
-    agents = acp.browse_agents(keyword="<your_filter_agent_keyword>", cluster="<your_cluster_name>")
+    agents = acp.browse_agents(keyword="", cluster="Joey")
     
     # Agents[1] assumes you have at least 2 matching agents; use with care
 
     # Here, we’re just picking the second agent (agents[1]) and its first offering for demo purposes
-    job_offering = agents[1].offerings[0]
+    job_offering = agents[0].offerings[0]
     
     job_id = job_offering.initiate_job(
         # <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
         # Reference: (./images/specify_requirement_toggle_switch.png)
-        service_requirement={'<your_schema_field>': "Help me to generate a flower meme."},
+        service_requirement={'Image Description': "Help me to generate a flower meme."},
         expired_at=datetime.now() + timedelta(days=1),
         # evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS
     )

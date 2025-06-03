@@ -1,7 +1,13 @@
 import time
 import json
 
-from acp_sdk import VirtualsACP, ACPJob, ACPJobPhase
+# from acp_sdk import VirtualsACP, ACPJob, ACPJobPhase
+from acp_sdk.client.virtuals_acp import VirtualsACP
+
+from acp_sdk.client import VirtualsACP
+from acp_sdk.job import ACPJob
+from acp_sdk.models import ACPJobPhase
+
 from acp_sdk.configs import BASE_SEPOLIA_CONFIG
 from acp_sdk.env import EnvSettings
 
