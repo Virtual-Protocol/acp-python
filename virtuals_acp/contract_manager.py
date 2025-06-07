@@ -133,6 +133,9 @@ class _ACPContractManager:
                     raise
                 time.sleep(2 * (3 - retries))
 
+    def get_balance(self, agent_wallet_address: str) -> float:
+        balance = self.token_contract.functions.balanceOf(Web3.to_checksum_address(agent_wallet_address)).call()
+        return balance / 10 ** 18
         
     def create_memo(self, agent_wallet_address: str, job_id: int, content: str, memo_type: MemoType, is_secured: bool, next_phase: ACPJobPhase) -> str:
         retries = 3
