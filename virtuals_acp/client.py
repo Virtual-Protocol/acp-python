@@ -158,12 +158,14 @@ class VirtualsACP:
     @property
     def signer_address(self) -> str:
         return self.signer_account.address
-    
+
+    def get_balance(self) -> float:
+        return self.contract_manager.get_balance(self.agent_address)
 
     def browse_agents(self, keyword: str, cluster: Optional[str] = None, sortBy: Optional[ACPAgentSort] = None, rerank: Optional[bool] = False, top_k: Optional[int] = None) -> List[IACPAgent]:
         url = f"{self.acp_api_url}/agents?search={keyword}"
         
-        if len(sortBy) > 0:
+        if sortBy and len(sortBy) > 0:
             url += f"&sort={','.join([s.value for s in sortBy])}"
             
         if rerank is True:
@@ -205,6 +207,7 @@ class VirtualsACP:
                     wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
                     offerings=offerings,
                     twitter_handle=agent_data.get("twitterHandle"),
+                    virtual_agent_id = agent_data.get("virtualAgentId"),
                     metrics=agent_data.get("metrics")
                 ))
             return agents
@@ -549,6 +552,48 @@ class VirtualsACP:
             
         except Exception as e:
             raise ACPApiError(f"Failed to get memo by ID: {e}")
+
+    def get_agent_by_id(self, agent_id: int) -> IACPAgent:
+        url = f"{self.acp_api_url}/agents?filters[id][$eq]={agent_id}"
+        
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+            
+            agents_data = data.get("data", [])
+            if not agents_data:
+                raise ACPApiError(f"No agent found with id {agent_id}")
+                
+            agent_data = agents_data[0]
+            
+            offerings = [
+                ACPJobOffering(
+                    acp_client=self,
+                    provider_address=agent_data["walletAddress"],
+                    type=off["name"],
+                    price=off["price"],
+                    requirementSchema=off.get("requirementSchema", None)
+                )
+                for off in agent_data.get("offerings", [])
+            ]
+            
+            return IACPAgent(
+                id=agent_data["id"],
+                name=agent_data.get("name"),
+                description=agent_data.get("description"),
+                wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
+                offerings=offerings,
+                twitter_handle=agent_data.get("twitterHandle"),
+                virtual_agent_id=agent_data.get("virtualAgentId"),
+                metrics=agent_data.get("metrics")
+            )
+        except requests.exceptions.RequestException as e:
+            raise ACPApiError(f"Failed to get agent by id: {e}")
+        except Exception as e:
+            raise ACPError(f"An unexpected error occurred while getting agent by id: {e}")
+
+
 
     def get_agent(self, wallet_address: str) -> Optional[IACPAgent]:
         url = f"{self.acp_api_url}/agents?filters[walletAddress]={wallet_address}"
