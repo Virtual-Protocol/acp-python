@@ -314,15 +314,26 @@ class VirtualsACP:
             time.sleep(10)
             
             print(f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
-            self.contract_manager.create_memo(
-                self.agent_address,
-                job_id,
-                f"{reason if reason else f'Job {job_id} accepted.'}",
-                MemoType.MESSAGE,
-                is_secured=False,
-                next_phase=ACPJobPhase.TRANSACTION
-            )
-            print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
+            if accept:
+                self.contract_manager.create_memo(
+                    self.agent_address,
+                    job_id,
+                    f"{reason if reason else f'Job {job_id} accepted.'}",
+                    MemoType.MESSAGE,
+                    is_secured=False,
+                    next_phase=ACPJobPhase.TRANSACTION
+                )
+                print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
+            else:
+                self.contract_manager.create_memo(
+                    self.agent_address,
+                    job_id,
+                    f"{reason if reason else f'Job {job_id} rejected.'}",
+                    MemoType.MESSAGE,
+                    is_secured=False,
+                    next_phase=ACPJobPhase.REJECTED
+                )
+                print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             return tx_hash
         except Exception as e:
             print(f"Error in respond_to_job_memo: {e}")
