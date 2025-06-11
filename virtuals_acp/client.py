@@ -323,7 +323,6 @@ class VirtualsACP:
                     is_secured=False,
                     next_phase=ACPJobPhase.TRANSACTION
                 )
-                print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             else:
                 self.contract_manager.create_memo(
                     self.agent_address,
@@ -333,7 +332,8 @@ class VirtualsACP:
                     is_secured=False,
                     next_phase=ACPJobPhase.REJECTED
                 )
-                print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
+            
+            print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             return tx_hash
         except Exception as e:
             print(f"Error in respond_to_job_memo: {e}")
