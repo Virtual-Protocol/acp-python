@@ -310,12 +310,12 @@ class VirtualsACP:
     ) -> str:
         
         try:
-            tx_hash = self.contract_manager.sign_memo(self.agent_address, memo_id, accept, reason or "")
-            time.sleep(10)
-            
             print(f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             if accept:
-                self.contract_manager.create_memo(
+                self.contract_manager.sign_memo(self.agent_address, memo_id, accept, reason or "")
+                time.sleep(10)
+
+                transaction_result = self.contract_manager.create_memo(
                     self.agent_address,
                     job_id,
                     f"{reason if reason else f'Job {job_id} accepted.'}",
@@ -324,7 +324,7 @@ class VirtualsACP:
                     next_phase=ACPJobPhase.TRANSACTION
                 )
             else:
-                self.contract_manager.create_memo(
+                transaction_result = self.contract_manager.create_memo(
                     self.agent_address,
                     job_id,
                     f"{reason if reason else f'Job {job_id} rejected.'}",
@@ -334,7 +334,7 @@ class VirtualsACP:
                 )
             
             print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
-            return tx_hash
+            return transaction_result
         except Exception as e:
             print(f"Error in respond_to_job_memo: {e}")
             raise
