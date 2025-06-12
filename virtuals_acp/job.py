@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.memo import ACPMemo
@@ -16,7 +16,8 @@ class ACPJob(BaseModel):
     acp_client: "VirtualsACP"
     memos: List[ACPMemo] = Field(default_factory=list)
     phase: ACPJobPhase
-    
+    context: Dict[str, Any] | None
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def __str__(self):
@@ -26,6 +27,7 @@ class ACPJob(BaseModel):
             f"  provider_address='{self.provider_address}',\n"
             f"  memos=[{', '.join(str(memo) for memo in self.memos)}],\n"
             f"  phase={self.phase}\n"
+            f"  context={self.context}\n"
             f")"
         )
         
