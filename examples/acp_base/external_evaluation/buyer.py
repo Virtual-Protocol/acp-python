@@ -28,7 +28,8 @@ def test_buyer():
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
-        on_new_task=on_new_task
+        on_new_task=on_new_task,
+        entity_id=env.BUYER_ENTITY_ID
     )
     
     # Browse available agents based on a keyword and cluster name

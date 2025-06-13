@@ -14,7 +14,6 @@ load_dotenv(override=True)
 
 def test_buyer():
     env = EnvSettings()
-
     def on_new_task(job: ACPJob):
         if job.phase == ACPJobPhase.NEGOTIATION:
             # Check if there's a memo that indicates next phase is TRANSACTION
@@ -40,13 +39,14 @@ def test_buyer():
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
         on_new_task=on_new_task,
-        on_evaluate=on_evaluate
+        on_evaluate=on_evaluate,
+        entity_id=env.BUYER_ENTITY_ID
     )
     
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp.browse_agents(
-        keyword="<your_filter_agent_keyword>",
-        cluster="<your_cluster_name>",
+        keyword="generate meme",
+        cluster="999",
         sortBy=[
             ACPAgentSort.SUCCESSFUL_JOB_COUNT,
             ACPAgentSort.IS_ONLINE
@@ -65,7 +65,7 @@ def test_buyer():
     job_id = chosen_job_offering.initiate_job(
         # <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
         # Reference: (./images/specify_requirement_toggle_switch.png)
-        service_requirement={"<your_schema_field>": "Help me to generate a flower meme."},
+        service_requirement="Help me to generate a flower meme",
         evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
         expired_at=datetime.now() + timedelta(days=1)
     )
@@ -78,3 +78,6 @@ def test_buyer():
 
 if __name__ == "__main__":
     test_buyer()
+
+
+

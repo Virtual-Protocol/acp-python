@@ -24,7 +24,8 @@ def evaluator():
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
-        on_evaluate=on_evaluate
+        on_evaluate=on_evaluate,
+        entity_id=env.EVALUATOR_ENTITY_ID
     )
     
     # Keep the script running to listen for evaluation tasks
