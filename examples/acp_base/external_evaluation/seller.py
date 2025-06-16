@@ -35,7 +35,8 @@ def seller():
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
-        on_new_task=on_new_task
+        on_new_task=on_new_task,
+        entity_id=env.SELLER_ENTITY_ID
     )
     
     # Keep the script running to listen for new tasks

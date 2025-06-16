@@ -25,6 +25,7 @@ from virtuals_acp.memo import ACPMemo
 class VirtualsACP:
     def __init__(self, 
                  wallet_private_key: str, 
+                 entity_id: int,
                  agent_wallet_address: Optional[str] = None, 
                  config: Optional[ACPContractConfig] = DEFAULT_CONFIG,
                  on_new_task: Optional[callable] = None,
@@ -32,6 +33,7 @@ class VirtualsACP:
         
         self.config = config
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
+        self.entity_id = entity_id
 
         if config.chain_env == "base-sepolia":
             self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
@@ -48,7 +50,7 @@ class VirtualsACP:
             # print(f"Warning: agent_wallet_address not provided, defaulting to signer EOA: {self._agent_wallet_address}")
 
         # Initialize the contract manager here
-        self.contract_manager = _ACPContractManager(self.w3, config, wallet_private_key)
+        self.contract_manager = _ACPContractManager(self.w3, self._agent_wallet_address, entity_id, config, wallet_private_key)
         self.acp_api_url = config.acp_api_url
         
         # Socket.IO setup
@@ -67,6 +69,9 @@ class VirtualsACP:
         return True
 
     def _on_evaluate(self, data):
+        print('--------------------------------')
+        print(f"Evaluating job {data}")
+        print('--------------------------------')
         if self.on_evaluate:
             print(f"Evaluating job {data}")
             try:
@@ -78,6 +83,7 @@ class VirtualsACP:
 
     def _on_new_task(self, data):
         if self.on_new_task:
+            print(data, "data")
             print("Received new task:", data["memos"])
             try:
                 threading.Thread(target=self.handle_new_task, args=(data,)).start()
@@ -244,29 +250,50 @@ class VirtualsACP:
         retry_count = 3
         retry_delay = 3
         
-        tx_hash = self.contract_manager.create_job(
+        user_op_hash = self.contract_manager.create_job(
             self.agent_address, provider_address, eval_addr, expired_at
         )
-
+        
+        print(f"User op hash: {user_op_hash}")
+        
+        
         time.sleep(retry_delay) 
         for attempt in range(retry_count):
             try:
-                response = self.contract_manager.validate_transaction(tx_hash['txHash'])
-                data = response.get("data", {})
-                if not data:
-                    raise Exception("Invalid tx_hash!")
+                response = self.contract_manager.validate_transaction(user_op_hash)
                 
-                if data.get("status") == "retry":
-                    raise Exception("Transaction failed, retrying...")
-                
-                if data.get("status") == "failed":
-                    break
-                
-                if data.get("status") == "success":
-                    job_id = int(data.get("result").get("jobId"))
+                if response.get("status") == 200:
+                    logs = response.get("receipts", [])[0].get("logs", [])
+                    contract_logs = next(
+                        (log for log in logs if log.get("address", "").lower() == self.contract_manager.config.contract_address.lower()),
+                        None
+                    )
                     
-                if job_id is not None and job_id != "":
-                    break  
+                    if not contract_logs:
+                        raise Exception("Failed to get contract logs")
+                        
+                    try:
+                        job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
+                        break
+                    except (ValueError, TypeError, AttributeError):
+                        raise Exception("Failed to parse job ID from contract logs")
+                
+                
+                # data = response.get("data", {})
+                # if not data:
+                #     raise Exception("Invalid tx_hash!")
+                
+                # if data.get("status") == "retry":
+                #     raise Exception("Transaction failed, retrying...")
+                
+                # if data.get("status") == "failed":
+                #     break
+                
+                # if data.get("status") == "success":
+                #     job_id = int(data.get("result").get("jobId"))
+                    
+                # if job_id is not None and job_id != "":
+                #     break  
                 
             except Exception as e:
                 if (attempt == retry_count - 1):
@@ -280,7 +307,7 @@ class VirtualsACP:
             raise Exception("Failed to create job")
         
         amount_in_wei = self.w3.to_wei(amount, "ether")
-        set_budget_tx_hash = self.contract_manager.set_budget(self.agent_address, job_id, amount_in_wei)
+        self.contract_manager.set_budget(self.agent_address, job_id, amount_in_wei)
         time.sleep(10)
         
         self.contract_manager.create_memo(
@@ -395,9 +422,10 @@ class VirtualsACP:
         reason: Optional[str] = ""
     ) -> str:
         
-        tx_hash = self.contract_manager.sign_memo(self.agent_address, memo_id_of_deliverable, accept, reason or "")
-        print(f"Evaluation (signMemo) tx: {tx_hash} for deliverable memo ID {memo_id_of_deliverable} is {accept}")
-        return tx_hash
+        data = self.contract_manager.sign_memo(self.agent_address, memo_id_of_deliverable, accept, reason or "")
+        txHash = data.get('receipts',[])[0].get('txHash')
+        print(f"Evaluation (signMemo) tx: {txHash} for deliverable memo ID {memo_id_of_deliverable} is {accept}")
+        return txHash
 
 
     def get_active_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:

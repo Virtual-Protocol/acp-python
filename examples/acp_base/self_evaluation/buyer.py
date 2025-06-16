@@ -14,7 +14,6 @@ load_dotenv(override=True)
 
 def test_buyer():
     env = EnvSettings()
-
     def on_new_task(job: ACPJob):
         if job.phase == ACPJobPhase.NEGOTIATION:
             # Check if there's a memo that indicates next phase is TRANSACTION
@@ -40,7 +39,8 @@ def test_buyer():
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         config=BASE_SEPOLIA_CONFIG,
         on_new_task=on_new_task,
-        on_evaluate=on_evaluate
+        on_evaluate=on_evaluate,
+        entity_id=env.BUYER_ENTITY_ID
     )
     
     # Browse available agents based on a keyword and cluster name
@@ -78,3 +78,6 @@ def test_buyer():
 
 if __name__ == "__main__":
     test_buyer()
+
+
+
