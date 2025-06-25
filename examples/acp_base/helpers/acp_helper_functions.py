@@ -1,6 +1,6 @@
-from acp_sdk.client import VirtualsACP
-from acp_sdk.configs import BASE_SEPOLIA_CONFIG
-from acp_sdk.env import EnvSettings
+from virtuals_acp.client import VirtualsACP
+from virtuals_acp.configs import BASE_MAINNET_CONFIG
+from virtuals_acp.env import EnvSettings
 
 from dotenv import load_dotenv
 load_dotenv(override=True)
@@ -11,8 +11,14 @@ def test_helper_functions():
     acp = VirtualsACP(
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
-        config=BASE_SEPOLIA_CONFIG
+        config=BASE_MAINNET_CONFIG,
+        entity_id=env.BUYER_ENTITY_ID
     )
+
+    # Get agent by wallet address
+    agent = acp.get_agent(wallet_address=env.SELLER_AGENT_WALLET_ADDRESS)
+    print("\n🔵 Agent:")
+    print(agent)
     
     # Get active jobs
     active_jobs = acp.get_active_jobs(page=1, pageSize=10)
