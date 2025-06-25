@@ -14,7 +14,19 @@ from eth_account.signers.local import LocalAccount
 import socketio
 import socketio.client
 
-from virtuals_acp.exceptions import ACPApiError, ACPError
+from virtuals_acp.exceptions import (
+    ACPApiError, 
+    ACPError, 
+    ACPRPCConnectionError,
+    ACPSocketConnectionError,
+    ACPInvalidPrivateKeyError,
+    ACPJobCreationError,
+    ACPContractLogParsingError,
+    ACPApiRequestError,
+    ACPJobNotFoundError,
+    ACPMemoNotFoundError,
+    ACPAgentNotFoundError
+)
 from virtuals_acp.models import  ACPAgentSort, ACPJobPhase, MemoType, IACPAgent
 from virtuals_acp.contract_manager import _ACPContractManager
 from virtuals_acp.configs import ACPContractConfig, DEFAULT_CONFIG
@@ -23,6 +35,28 @@ from virtuals_acp.job import ACPJob
 from virtuals_acp.memo import ACPMemo
 
 class VirtualsACP:
+    """
+    VirtualsACP is the main client for interacting with the ACP (Agent Communication Protocol) platform.
+    
+    This client provides a comprehensive interface for:
+    - Discovering and browsing agents on the platform
+    - Creating and managing jobs between clients and service providers
+    - Real-time communication via WebSocket connections
+    - Blockchain transaction management for payments and contracts
+    - Job lifecycle management (initiation, negotiation, execution, evaluation)
+    
+    The client handles both on-chain interactions (via smart contracts) and off-chain 
+    communication (via API and WebSocket connections) seamlessly.
+    
+    Attributes:
+        config (ACPContractConfig): Network and contract configuration
+        w3 (Web3): Web3 instance for blockchain interactions
+        entity_id (int): Unique entity identifier on the platform
+        contract_manager (_ACPContractManager): Handles smart contract interactions
+        acp_api_url (str): Base URL for ACP API endpoints
+        sio (socketio.Client): WebSocket client for real-time communication
+    """
+    
     def __init__(self, 
                  wallet_private_key: str, 
                  entity_id: int,
@@ -30,6 +64,27 @@ class VirtualsACP:
                  config: ACPContractConfig = DEFAULT_CONFIG,
                  on_new_task: Optional[Callable] = None,
                  on_evaluate: Optional[Callable] = None):
+        """
+        Initialize the VirtualsACP client.
+        
+        Args:
+            wallet_private_key (str): Private key for signing transactions (without 0x prefix)
+            entity_id (int): Unique entity identifier registered on the platform
+            agent_wallet_address (Optional[str], optional): Wallet address for the agent. 
+                If not provided, derives from private key. Defaults to None.
+            config (ACPContractConfig, optional): Network configuration. 
+                Defaults to DEFAULT_CONFIG.
+            on_new_task (Optional[Callable], optional): Callback function called when 
+                receiving new job assignments. Function signature: (job: ACPJob) -> None. 
+                Defaults to None.
+            on_evaluate (Optional[Callable], optional): Callback function called when 
+                evaluation is required. Function signature: (job: ACPJob) -> Tuple[bool, str]. 
+                Defaults to None.
+        
+        Raises:
+            ConnectionError: If unable to connect to the specified RPC URL
+            ValueError: If private key format is invalid
+        """
         
         self.config = config
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
@@ -39,9 +94,12 @@ class VirtualsACP:
             self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
 
         if not self.w3.is_connected():
-            raise ConnectionError(f"Failed to connect to RPC URL: {config.rpc_url}")
+            raise ACPRPCConnectionError(f"Failed to connect to RPC URL: {config.rpc_url}")
 
-        self.signer_account: LocalAccount = Account.from_key(wallet_private_key)
+        try:
+            self.signer_account: LocalAccount = Account.from_key(wallet_private_key)
+        except Exception as e:
+            raise ACPInvalidPrivateKeyError(f"Invalid private key format: {e}")
         
         if agent_wallet_address:
             self._agent_wallet_address = Web3.to_checksum_address(agent_wallet_address)
@@ -163,7 +221,7 @@ class VirtualsACP:
             signal.signal(signal.SIGTERM, signal_handler)
             
         except Exception as e:
-            print(f"Failed to connect to socket server: {e}")
+            raise ACPSocketConnectionError(f"Failed to connect to socket server: {e}")
 
     def __del__(self):
         """Cleanup when the object is destroyed."""
@@ -180,6 +238,33 @@ class VirtualsACP:
     
 
     def browse_agents(self, keyword: str, cluster: Optional[str] = None, sortBy: Optional[List[ACPAgentSort]] = None, rerank: Optional[bool] = True, top_k: Optional[int] = None) -> List[IACPAgent]:
+        """
+        Search and browse available agents on the platform.
+        
+        This method allows you to discover agents based on various criteria including
+        keywords, clusters, and sorting preferences. The results can be reranked using
+        semantic similarity and limited to a specific number of results.
+        
+        Args:
+            keyword (str): Search keyword to match against agent names, descriptions, 
+                and service offerings
+            cluster (Optional[str], optional): Filter agents by cluster name. 
+                Defaults to None.
+            sortBy (Optional[List[ACPAgentSort]], optional): List of sorting criteria. 
+                Available options: SUCCESS_RATE, JOB_COUNT, IS_ONLINE, etc. 
+                Defaults to None.
+            rerank (Optional[bool], optional): Whether to use semantic reranking 
+                for better relevance. Defaults to True.
+            top_k (Optional[int], optional): Maximum number of agents to return. 
+                Defaults to None (no limit).
+        
+        Returns:
+            List[IACPAgent]: List of matching agents with their offerings and metadata
+        
+        Raises:
+            ACPApiError: If the API request fails
+            ACPError: If an unexpected error occurs during browsing
+        """
         url = f"{self.acp_api_url}/agents?search={keyword}"
         
         if sortBy and len(sortBy) > 0:
@@ -234,7 +319,7 @@ class VirtualsACP:
                 ))
             return agents
         except requests.exceptions.RequestException as e:
-            raise ACPApiError(f"Failed to browse agents: {e}")
+            raise ACPApiRequestError(f"Failed to browse agents: {e}")
         except Exception as e:
             raise ACPError(f"An unexpected error occurred while browsing agents: {e}")
 
@@ -246,6 +331,32 @@ class VirtualsACP:
         evaluator_address: Optional[str] = None,
         expired_at: Optional[datetime] = None
     ) -> int:
+        """
+        Create a new job request with a service provider.
+        
+        This method initiates the complete job lifecycle including:
+        1. Creating the job on-chain via smart contract
+        2. Setting the job budget 
+        3. Creating the initial service requirement memo
+        4. Registering the job with the ACP API
+        
+        Args:
+            provider_address (str): Ethereum address of the service provider
+            service_requirement (Union[Dict[str, Any], str]): Description of the 
+                required service. Can be a string or structured data matching 
+                the provider's requirement schema.
+            amount (float): Payment amount in ETH for the job
+            evaluator_address (Optional[str], optional): Address of the evaluator. 
+                If not provided, defaults to the client's address. Defaults to None.
+            expired_at (Optional[datetime], optional): Job expiration timestamp. 
+                If not provided, defaults to 1 day from now. Defaults to None.
+        
+        Returns:
+            int: Unique job ID that can be used to track the job
+        
+        Raises:
+            Exception: If job creation fails or transaction is rejected
+        """
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(days=1)
         
@@ -272,13 +383,13 @@ class VirtualsACP:
                     )
                     
                     if not contract_logs:
-                        raise Exception("Failed to get contract logs")
+                        raise ACPContractLogParsingError("Failed to get contract logs")
                         
                     try:
                         job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
                         break
-                    except (ValueError, TypeError, AttributeError):
-                        raise Exception("Failed to parse job ID from contract logs")
+                    except (ValueError, TypeError, AttributeError) as e:
+                        raise ACPContractLogParsingError(f"Failed to parse job ID from contract logs: {e}")
                 
                 
                 # data = response.get("data", {})
@@ -306,7 +417,7 @@ class VirtualsACP:
                     raise
         
         if job_id is None or job_id == "":
-            raise Exception("Failed to create job")
+            raise ACPJobCreationError("Failed to create job")
         
         amount_in_wei = self.w3.to_wei(amount, "ether")
         self.contract_manager.set_budget(job_id, amount_in_wei)
@@ -350,6 +461,24 @@ class VirtualsACP:
         accept: bool, 
         reason: Optional[str] = ""
     ) -> str:
+        """
+        Respond to a job memo during the negotiation phase.
+        
+        This method is typically used by service providers to accept or reject
+        job proposals during the negotiation phase.
+        
+        Args:
+            job_id (int): ID of the job being responded to
+            memo_id (int): ID of the specific memo being responded to
+            accept (bool): Whether to accept (True) or reject (False) the proposal
+            reason (Optional[str], optional): Reason for the decision. Defaults to "".
+        
+        Returns:
+            str: Transaction hash of the response
+        
+        Raises:
+            Exception: If the response transaction fails
+        """
         try:
             data = self.contract_manager.sign_memo(memo_id, accept, reason or "")
             tx_hash = data.get('receipts',[])[0].get('txHash')
@@ -379,6 +508,26 @@ class VirtualsACP:
         amount: Union[float, str], 
         reason: Optional[str] = ""
     ) -> Dict[str, Any]:
+        """
+        Make payment for an accepted job.
+        
+        This method handles the complete payment process including:
+        1. Approving token allowance for the contract
+        2. Signing the payment memo
+        3. Creating a payment confirmation memo
+        
+        Args:
+            job_id (int): ID of the job being paid for
+            memo_id (int): ID of the memo authorizing payment
+            amount (Union[float, str]): Payment amount in ETH
+            reason (Optional[str], optional): Payment reason or description. Defaults to "".
+        
+        Returns:
+            Dict[str, Any]: Transaction result data
+        
+        Raises:
+            Exception: If payment processing fails
+        """
         
         amount_in_wei = self.w3.to_wei(amount, "ether")
         time.sleep(10)
@@ -405,6 +554,19 @@ class VirtualsACP:
         job_id: int, 
         deliverable_content: str
     ) -> str:
+        """
+        Submit job deliverable to the client.
+        
+        This method is used by service providers to submit their completed work
+        to the client for evaluation.
+        
+        Args:
+            job_id (int): ID of the job for which deliverable is being submitted
+            deliverable_content (str): The deliverable content (URL, JSON, or text)
+        
+        Returns:
+            str: Transaction hash of the submission
+        """
         
         data = self.contract_manager.create_memo(
             job_id,
@@ -423,6 +585,20 @@ class VirtualsACP:
         accept: bool, 
         reason: Optional[str] = ""
     ) -> str:
+        """
+        Evaluate a job deliverable as an evaluator.
+        
+        This method is used by evaluators to approve or reject submitted deliverables,
+        which determines whether the service provider gets paid.
+        
+        Args:
+            memo_id_of_deliverable (int): ID of the memo containing the deliverable
+            accept (bool): Whether to accept (True) or reject (False) the deliverable
+            reason (Optional[str], optional): Evaluation reason or feedback. Defaults to "".
+        
+        Returns:
+            str: Transaction hash of the evaluation
+        """
         
         data = self.contract_manager.sign_memo(memo_id_of_deliverable, accept, reason or "")
         txHash = data.get('receipts',[])[0].get('transactionHash')
@@ -431,6 +607,19 @@ class VirtualsACP:
 
 
     def get_active_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
+        """
+        Retrieve active jobs for the current agent.
+        
+        Args:
+            page (int, optional): Page number for pagination. Defaults to 1.
+            pageSize (int, optional): Number of jobs per page. Defaults to 10.
+        
+        Returns:
+            List[ACPJob]: List of active jobs
+        
+        Raises:
+            ACPApiError: If the API request fails
+        """
         url = f"{self.acp_api_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={pageSize}"
         headers = {
             "wallet-address": self.agent_address
@@ -549,7 +738,7 @@ class VirtualsACP:
             data = response.json()
             
             if data.get("error"):
-                raise ACPApiError(data["error"]["message"])
+                raise ACPJobNotFoundError(data["error"]["message"])
             
             memos = []
             for memo in data.get("data", {}).get("memos", []):
@@ -584,7 +773,7 @@ class VirtualsACP:
             data = response.json()
             
             if data.get("error"):
-                raise ACPApiError(data["error"]["message"])
+                raise ACPMemoNotFoundError(data["error"]["message"])
             
             return ACPMemo(
                 id=data.get("data", {}).get("id"),
@@ -597,6 +786,19 @@ class VirtualsACP:
             raise ACPApiError(f"Failed to get memo by ID: {e}")
 
     def get_agent(self, wallet_address: str) -> Optional[IACPAgent]:
+        """
+        Retrieve agent information by wallet address.
+        
+        Args:
+            wallet_address (str): Ethereum address of the agent
+        
+        Returns:
+            Optional[IACPAgent]: Agent information if found, None otherwise
+        
+        Raises:
+            ACPApiError: If the API request fails
+            ACPError: If an unexpected error occurs
+        """
         url = f"{self.acp_api_url}/agents?filters[walletAddress]={wallet_address}"
         
         try:
@@ -633,7 +835,7 @@ class VirtualsACP:
             )
             
         except requests.exceptions.RequestException as e:
-            raise ACPApiError(f"Failed to get agent: {e}")
+            raise ACPApiRequestError(f"Failed to get agent: {e}")
         except Exception as e:
             raise ACPError(f"An unexpected error occurred while getting agent: {e}")
 

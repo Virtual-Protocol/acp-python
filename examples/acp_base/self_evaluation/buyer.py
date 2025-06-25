@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 import time
 
 from virtuals_acp.client import VirtualsACP
+from virtuals_acp.configs import BASE_MAINNET_CONFIG
 from virtuals_acp.job import ACPJob
 from virtuals_acp.models import ACPAgentSort, ACPJobPhase
 from virtuals_acp.env import EnvSettings
@@ -47,8 +48,11 @@ def test_buyer():
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         on_new_task=on_new_task,
         on_evaluate=on_evaluate,
-        entity_id=env.BUYER_ENTITY_ID
+        entity_id=env.BUYER_ENTITY_ID,
+        config=BASE_MAINNET_CONFIG
     )
+
+    print(f"ACP client: {acp.agent_address}")
     
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp.browse_agents(
