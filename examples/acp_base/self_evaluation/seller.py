@@ -12,7 +12,9 @@ from acp_sdk.configs import BASE_SEPOLIA_CONFIG
 from acp_sdk.env import EnvSettings
 
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
+
 
 def seller():
     env = EnvSettings()
@@ -44,11 +46,12 @@ def seller():
         config=BASE_SEPOLIA_CONFIG,
         on_new_task=on_new_task
     )
-    
+
     # Keep the script running to listen for new tasks
     while True:
         print("Waiting for new task...")
         time.sleep(30)
+
 
 if __name__ == "__main__":
     seller()

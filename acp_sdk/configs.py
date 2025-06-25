@@ -20,7 +20,11 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
     chain_id=84532,
     contract_address="0x2422c1c43451Eb69Ff49dfD39c4Dc8C5230fA1e6",
     virtuals_token_address="0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
+<<<<<<< Updated upstream:acp_sdk/configs.py
     acp_api_url="https://acpx.virtuals.gg/api",
+=======
+    acp_api_url="https://acpx.virtuals.gg/api", #dev
+>>>>>>> Stashed changes:virtuals_acp/configs.py
 )
 
 # Configuration for Base Mainnet
