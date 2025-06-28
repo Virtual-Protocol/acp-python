@@ -1,8 +1,9 @@
-from acp_sdk.client import VirtualsACP
-from acp_sdk.configs import BASE_SEPOLIA_CONFIG
-from acp_sdk.env import EnvSettings
+from virtuals_acp.client import VirtualsACP
+from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
+from virtuals_acp.env import EnvSettings
 
 from dotenv import load_dotenv
+
 load_dotenv(override=True)
 
 def test_helper_functions():
@@ -11,7 +12,7 @@ def test_helper_functions():
     acp = VirtualsACP(
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
-        config=BASE_SEPOLIA_CONFIG
+        entity_id=env.BUYER_ENTITY_ID
     )
     
     # Get active jobs
@@ -30,15 +31,15 @@ def test_helper_functions():
     print(cancelled_jobs or "No cancelled jobs found.")
 
     if completed_jobs:
-        onchain_job_id = completed_jobs[0].get("id")
+        onchain_job_id = completed_jobs[0].id
         if onchain_job_id:
             job = acp.get_job_by_onchain_id(onchain_job_id=onchain_job_id)
             print(f"\n📄 Job Details (Job ID: {onchain_job_id}):")
             print(job)
 
-        memos = completed_jobs[0].get("memos", [])
+        memos = completed_jobs[0].memos
         if memos:
-            memo_id = memos[0].get("id")
+            memo_id = memos[0].id
             memo = acp.get_memo_by_id(onchain_job_id=onchain_job_id, memo_id=memo_id)
             print(f"\n📝 Memo Details (Job ID: {onchain_job_id}, Memo ID: {memo_id}):")
             print(memo)

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "virtuals-acp"
-version = "0.1.6"
+version = "0.1.13"
 description = "Agent Commerce Protocol Python SDK by Virtuals"
 authors = ["Steven Lee Soon Fatt <steven@virtuals.io>"]
 readme = "README.md"
