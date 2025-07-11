@@ -10,12 +10,81 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-
-def buyer():
+def buyer(use_thread_lock: bool = True):
     env = EnvSettings()
+
+    if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
+        raise ValueError("WHITELISTED_WALLET_PRIVATE_KEY is not set")
+    if env.BUYER_AGENT_WALLET_ADDRESS is None:
+        raise ValueError("BUYER_AGENT_WALLET_ADDRESS is not set")
+    if env.BUYER_ENTITY_ID is None:
+        raise ValueError("BUYER_ENTITY_ID is not set")
+
+    job_queue = []
+    job_queue_lock = threading.Lock()
+    job_event = threading.Event()
+
+    def safe_append_job(job):
+        if use_thread_lock:
+            print(f"[safe_append_job] Acquiring lock to append job {job.id}")
+            with job_queue_lock:
+                print(f"[safe_append_job] Lock acquired, appending job {job.id} to queue")
+                job_queue.append(job)
+        else:
+            job_queue.append(job)
+
+    def safe_pop_job():
+        if use_thread_lock:
+            print(f"[safe_pop_job] Acquiring lock to pop job")
+            with job_queue_lock:
+                if job_queue:
+                    job = job_queue.pop(0)
+                    print(f"[safe_pop_job] Lock acquired, popped job {job.id}")
+                    return job
+                else:
+                    print("[safe_pop_job] Queue is empty after acquiring lock")
+        else:
+            if job_queue:
+                job = job_queue.pop(0)
+                print(f"[safe_pop_job] Popped job {job.id} without lock")
+                return job
+            else:
+                print("[safe_pop_job] Queue is empty (no lock)")
+        return None
+
+    def job_worker():
+        while True:
+            job_event.wait()
+            while True:
+                job = safe_pop_job()
+                if not job:
+                    break
+                try:
+                    process_job(job)
+                except Exception as e:
+                    print(f"\u274c Error processing job: {e}")
+            if use_thread_lock:
+                with job_queue_lock:
+                    if not job_queue:
+                        job_event.clear()
+            else:
+                if not job_queue:
+                    job_event.clear()
+
     def on_new_task(job: ACPJob):
+        print(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
+        safe_append_job(job)
+        job_event.set()
+
+    def on_evaluate(job: ACPJob):
+        print("Evaluation function called", job.memos)
+        for memo in job.memos:
+            if memo.next_phase == ACPJobPhase.COMPLETED:
+                job.evaluate(True)
+                break
+
+    def process_job(job: ACPJob):
         if job.phase == ACPJobPhase.NEGOTIATION:
-            # Check if there's a memo that indicates next phase is TRANSACTION
             for memo in job.memos:
                 if memo.next_phase == ACPJobPhase.TRANSACTION:
                     print("Paying job", job.id)
@@ -26,21 +95,7 @@ def buyer():
         elif job.phase == ACPJobPhase.REJECTED:
             print("Job rejected", job)
 
-    def on_evaluate(job: ACPJob):
-        print("Evaluation function called", job.memos)
-        # Find the deliverable memo
-        for memo in job.memos:
-            if memo.next_phase == ACPJobPhase.COMPLETED:
-                # Evaluate the deliverable by accepting it
-                job.evaluate(True)
-                break
-
-    if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
-        raise ValueError("WHITELISTED_WALLET_PRIVATE_KEY is not set")
-    if env.BUYER_AGENT_WALLET_ADDRESS is None:
-        raise ValueError("BUYER_AGENT_WALLET_ADDRESS is not set")
-    if env.BUYER_ENTITY_ID is None:
-        raise ValueError("BUYER_ENTITY_ID is not set")
+    threading.Thread(target=job_worker, daemon=True).start()
 
     acp = VirtualsACP(
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,

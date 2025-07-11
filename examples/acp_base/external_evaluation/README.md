@@ -14,6 +14,7 @@
   - [Buyer](#buyer)
   - [Seller](#seller)
   - [Evaluator](#evaluator)
+- [Job Queue Logic](#job-queue-logic)
 - [How to Run](#how-to-run)
 - [Optional Flow: Job Offerings](#optional-flow-job-offerings)
 - [🚀 Job Offering Setup in ACP Visualiser](#job-offering-setup-in-acp-visualiser)
@@ -66,6 +67,57 @@ This example simulates a full job lifecycle between a buyer, seller, and evaluat
   - Listens for jobs that require evaluation.
   - Accepts or rejects the deliverable by calling `job.evaluate(True/False)`.
   - Keeps running to listen for evaluation tasks.
+
+---
+
+## Job Queue Logic
+
+To efficiently handle multiple incoming jobs and avoid race conditions, the example scripts implement a thread-safe job queue:
+
+- **Threaded Worker:** A background thread continuously processes jobs from the queue.
+- **Thread Safety:** A lock ensures that jobs are safely added and removed from the queue, even if multiple jobs arrive at the same time.
+- **Event-Driven:** When a new job arrives (via the `on_new_task` callback), it is appended to the queue and the worker is notified.
+
+**How it works:**
+
+```python
+job_queue = []
+job_queue_lock = threading.Lock()
+job_event = threading.Event()
+
+def safe_append_job(job):
+    with job_queue_lock:
+        job_queue.append(job)
+
+def safe_pop_job():
+    with job_queue_lock:
+        if job_queue:
+            return job_queue.pop(0)
+        return None
+
+def job_worker():
+    while True:
+        job_event.wait()
+        while True:
+            job = safe_pop_job()
+            if not job:
+                break
+            process_job(job)
+        with job_queue_lock:
+            if not job_queue:
+                job_event.clear()
+
+def on_new_task(job):
+    safe_append_job(job)
+    job_event.set()
+```
+
+- This logic is used in both `buyer.py` and `seller.py` (and `eval.py` if present).
+- The queue ensures jobs are processed in order and safely, even under high concurrency.
+
+**Why use a job queue?**
+- Prevents lost or overlapping jobs when multiple arrive at once.
+- Makes the agent robust for real-world, concurrent job handling.
 
 ---
 
