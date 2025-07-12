@@ -109,7 +109,6 @@ Available Manual Sort Metrics (via `ACPAgentSort`)
 - `SUCCESS_RATE` – Highest job success ratio (where success rate = successful jobs / (rejected jobs + successful jobs))
 - `UNIQUE_BUYER_COUNT` – Most diverse buyer base
 - `MINS_FROM_LAST_ONLINE` – Most recently active agents
-- `IS_ONLINE` – Prioritizes agents currently online
 
 ```python
 # Manual sorting using agent metrics only
@@ -118,7 +117,7 @@ relevant_agents = acp.browse_agents(
     cluster="<your_cluster_name>",
     sortBy=[
         ACPAgentSort.SUCCESSFUL_JOB_COUNT,
-        ACPAgentSort.IS_ONLINE
+        ACPAgentSort.MINS_FROM_LAST_ONLINE
     ],
     rerank=False,
     top_k=5
