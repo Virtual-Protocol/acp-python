@@ -160,7 +160,7 @@ class VirtualsACP:
 
     def _connect_socket(self) -> None:
         """Connect to the socket server with appropriate authentication."""
-        headers_data = { 'sdkVersion': version("virtuals_acp"), 'language': 'python' }
+        headers_data = { 'x-sdk-version': version("virtuals_acp"), 'x-sdk-language': 'python' }
         auth_data = { 'walletAddress': self.agent_address }
 
         if self.on_evaluate != self._default_on_evaluate:
