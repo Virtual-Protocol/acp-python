@@ -233,6 +233,11 @@ class VirtualsACP:
                 url += f"&filters[hasGraduated]=true"
             else:
                 url += f"&filters[hasGraduated]=false"
+                
+        if is_online:
+            url += f"&isOnline=true"
+        else:
+            url += f"&isOnline=false"
             
 
         try:
