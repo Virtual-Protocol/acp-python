@@ -234,7 +234,6 @@ class VirtualsACP:
             else:
                 url += f"&filters[hasGraduated]=false"
             
-        print(f"URL: {url}")
 
         try:
             response = requests.get(url)
