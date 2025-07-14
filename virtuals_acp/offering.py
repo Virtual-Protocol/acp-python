@@ -12,6 +12,7 @@ class ACPJobOffering(BaseModel):
     provider_address: str
     type: str
     price: float
+    agent_twitter_handle: Optional[str] = None
     requirementSchema: Optional[Dict[str, Any]] = None
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
