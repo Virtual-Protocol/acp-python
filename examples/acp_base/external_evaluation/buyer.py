@@ -45,7 +45,6 @@ def buyer():
         cluster="<your_cluster_name>",
         sort_by=[
             ACPAgentSort.SUCCESSFUL_JOB_COUNT,
-            ACPAgentSort.IS_ONLINE
         ],
         rerank=True,
         top_k=5,
