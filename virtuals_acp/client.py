@@ -208,10 +208,9 @@ class VirtualsACP:
     ) -> List[IACPAgent]:
         rerank = True if rerank is None else rerank
         top_k = 5 if top_k is None else top_k
-        graduated = True if graduated is None else graduated
         is_online = True if is_online is None else is_online
         
-        url = f"{self.acp_api_url}/agents?search={keyword}&isOnline={is_online}&filters[hasGraduated]={graduated}"
+        url = f"{self.acp_api_url}/agents?search={keyword}"
 
         if sort_by:
             url += f"&sort={','.join([s.value for s in sort_by])}"
@@ -227,6 +226,14 @@ class VirtualsACP:
 
         if cluster:
             url += f"&filters[cluster]={cluster}"
+
+        if graduated is not None:
+            if (graduated):
+                url += f"&filters[hasGraduated]=true"
+            else:
+                url += f"&filters[hasGraduated]=false"
+            
+        print(f"URL: {url}")
 
         try:
             response = requests.get(url)
