@@ -33,6 +33,12 @@ class ACPJobPhase(Enum):
     EXPIRED = 6
 
 
+class FeeType(Enum):
+    NO_FEE = 0
+    IMMEDIATE_FEE = 1
+    DEFERRED_FEE = 2
+
+
 class ACPAgentSort(str, Enum):
     SUCCESSFUL_JOB_COUNT = "successfulJobCount"
     SUCCESS_RATE = "successRate"
@@ -69,6 +75,7 @@ class PayloadType(str, Enum):
     CLOSE_POSITION = "close_position"
     POSITION_FULFILLED = "position_fulfilled"
     CLOSE_JOB_AND_WITHDRAW = "close_job_and_withdraw"
+    UNFULFILLED_POSITION = "unfulfilled_position"
 
 
 T = TypeVar("T", bound=BaseModel)
@@ -79,9 +86,10 @@ class GenericPayload(BaseModel, Generic[T]):
     data: T | List[T]
 
 
-class RequestFeePayload(BaseModel):
+class FundRequestFeePayload(BaseModel):
     amount: float
-    reporting_api: str
+    reporting_api_endpoint: str
+    wallet_address: str
 
 
 class TPSLConfig(BaseModel):
@@ -118,10 +126,18 @@ class PositionFulfilledPayload(BaseModel):
     symbol: str
     amount: float
     contract_address: str
-    type: Literal["TP", "SL"]
+    type: Literal["TP", "SL", "CLOSE"]
     pnl: float
     entry_price: float
     exit_price: float
+
+
+class UnfulfilledPositionPayload(BaseModel):
+    symbol: str
+    amount: float
+    contract_address: str
+    type: Literal["ERROR", "PARTIAL"]
+    reason: Optional[str] = None
 
 
 class CloseJobAndWithdrawPayload(BaseModel):

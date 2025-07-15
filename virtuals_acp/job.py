@@ -3,8 +3,9 @@ from typing import TYPE_CHECKING, List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import ACPJobPhase, IACPAgent, GenericPayload, RequestFeePayload, OpenPositionPayload, \
-    PayloadType, MemoType, ClosePositionPayload, PositionFulfilledPayload, CloseJobAndWithdrawPayload
+from virtuals_acp.models import ACPJobPhase, IACPAgent, GenericPayload, OpenPositionPayload, PayloadType, MemoType, \
+    ClosePositionPayload, PositionFulfilledPayload, CloseJobAndWithdrawPayload, FeeType, \
+    UnfulfilledPositionPayload, FundRequestFeePayload
 from virtuals_acp.utils import try_parse_json_model
 
 if TYPE_CHECKING:
@@ -73,6 +74,9 @@ class ACPJob(BaseModel):
         """Get the latest memo in the job"""
         return self.memos[-1] if self.memos else None
 
+    def _get_memo_by_id(self, memo_id):
+        return next((m for m in self.memos if m.id == memo_id), None)
+
     def pay(self, amount: float, reason: Optional[str] = None) -> str:
         if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
             raise ValueError("No transaction memo found")
@@ -95,7 +99,7 @@ class ACPJob(BaseModel):
             self,
             accept: bool,
             reason: Optional[str] = None,
-            payload: Optional[GenericPayload[RequestFeePayload]] = None,
+            payload: Optional[GenericPayload[FundRequestFeePayload]] = None,
     ):
         if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
             raise ValueError("No negotiation memo found")
@@ -122,10 +126,16 @@ class ACPJob(BaseModel):
 
         return self.acp_client.sign_memo(self.latest_memo.id, accept, reason)
 
-    def open_position(self, payload: List[OpenPositionPayload]) -> str:
+    def open_position(
+            self,
+            payload: List[OpenPositionPayload],
+            fee_amount: float,
+            wallet_address: Optional[str] = None,
+    ) -> str:
         if not payload:
             raise ValueError("No positions to open")
 
+        wallet_address = self.w3.toChecksumAddress(wallet_address)
         total_amount = sum(p.amount for p in payload)
 
         open_position_payload = GenericPayload(
@@ -136,33 +146,33 @@ class ACPJob(BaseModel):
         return self.acp_client.transfer_funds(
             self.id,
             total_amount,
-            self.provider_address,
+            wallet_address or self.provider_address,
+            fee_amount,
+            FeeType.IMMEDIATE_FEE,
             open_position_payload,
             ACPJobPhase.TRANSACTION,
         )
 
     def respond_open_position(
             self,
-            amount: float,
+            memo_id: int,
             accept: bool,
             reason: Optional[str] = None,
     ):
-        memo = self.latest_memo
+        memo = self._get_memo_by_id(memo_id)
         if memo is None or memo.next_phase != ACPJobPhase.TRANSACTION or memo.type != MemoType.PAYABLE_TRANSFER:
             raise ValueError("No open position memo found")
 
         open_position_payload = try_parse_json_model(memo.content, GenericPayload[OpenPositionPayload])
-        if open_position_payload is None or open_position_payload.type != PayloadType.OPEN_POSITION or open_position_payload.data.amount != amount:
+        if open_position_payload is None or open_position_payload.type != PayloadType.OPEN_POSITION:
             raise ValueError("Invalid open position memo")
 
         if not reason:
             reason = f"Job {self.id} position opening {'accepted' if accept else 'rejected'}"
 
         return self.acp_client.respond_to_funds_transfer(
-            self.id,
             memo.id,
             accept,
-            amount,
             reason
         )
 
@@ -179,17 +189,20 @@ class ACPJob(BaseModel):
             self.id,
             payload.amount,
             self.provider_address,
+            0,
+            FeeType.NO_FEE,
             close_position_payload,
-            ACPJobPhase.TRANSACTION,
+            ACPJobPhase.TRANSACTION
         )
 
     def respond_close_position(
             self,
+            memo_id: int,
             amount: float,
             accept: bool,
             reason: Optional[str] = None
     ):
-        memo = self.latest_memo
+        memo = self._get_memo_by_id(memo_id)
 
         if memo is None or memo.next_phase != ACPJobPhase.TRANSACTION or memo.type != MemoType.MESSAGE:
             raise ValueError("No close position memo found")
@@ -202,7 +215,6 @@ class ACPJob(BaseModel):
             reason = f"Job {self.id} position closing {'accepted' if accept else 'rejected'}"
 
         return self.acp_client.respond_to_funds_request(
-            self.id,
             memo.id,
             accept,
             amount,
@@ -223,32 +235,71 @@ class ACPJob(BaseModel):
             self.id,
             amount,
             self.provider_address,
+            0,
+            FeeType.NO_FEE,
             position_fulfilled_payload,
             ACPJobPhase.TRANSACTION
         )
 
     def respond_position_fulfilled(
             self,
-            amount: float,
+            memo_id: int,
             accept: bool,
             reason: Optional[str] = None
     ):
-        memo = self.latest_memo
+        memo = self._get_memo_by_id(memo_id)
         if memo is None or memo.next_phase != ACPJobPhase.TRANSACTION or memo.type != MemoType.PAYABLE_TRANSFER:
             raise ValueError("No position fulfilled memo found")
 
         position_fulfilled_payload = try_parse_json_model(memo.content, GenericPayload[PositionFulfilledPayload])
-        if position_fulfilled_payload is None or position_fulfilled_payload.type != PayloadType.POSITION_FULFILLED or position_fulfilled_payload.data.amount != amount:
+        if position_fulfilled_payload is None or position_fulfilled_payload.type != PayloadType.POSITION_FULFILLED:
             raise ValueError("Invalid position fulfilled memo")
 
         if not reason:
             reason = f"Job {self.id} position fulfilled {'accepted' if accept else 'rejected'}"
 
         return self.acp_client.respond_to_funds_transfer(
-            self.id,
             memo.id,
             accept,
-            amount,
+            reason
+        )
+
+    def unfulfilled_position(self, payload: UnfulfilledPositionPayload):
+        unfulfilled_position_payload = GenericPayload(
+            type=PayloadType.UNFULFILLED_POSITION,
+            data=payload
+        )
+
+        return self.acp_client.transfer_funds(
+            self.id,
+            payload.amount,
+            self.provider_address,
+            0,
+            FeeType.NO_FEE,
+            unfulfilled_position_payload,
+            ACPJobPhase.TRANSACTION
+        )
+
+    def respond_unfulfilled_position(
+            self,
+            memo_id: int,
+            accept: bool,
+            reason: Optional[str] = None
+    ):
+        memo = self._get_memo_by_id(memo_id)
+        if memo is None or memo.next_phase != ACPJobPhase.TRANSACTION or memo.type != MemoType.PAYABLE_TRANSFER:
+            raise ValueError("No unfulfilled position memo found")
+
+        unfulfilled_position_payload = try_parse_json_model(memo.content, GenericPayload[UnfulfilledPositionPayload])
+        if unfulfilled_position_payload is None or unfulfilled_position_payload.type != PayloadType.UNFULFILLED_POSITION:
+            raise ValueError("Invalid unfulfilled position memo")
+
+        if not reason:
+            reason = f"Job {self.id} unfulfilled position {'accepted' if accept else 'rejected'}"
+
+        return self.acp_client.respond_to_funds_transfer(
+            memo.id,
+            accept,
             reason
         )
 
@@ -269,11 +320,12 @@ class ACPJob(BaseModel):
 
     def respond_close_job(
             self,
+            memo_id: int,
             accept: bool,
             fulfilled_positions: List[PositionFulfilledPayload],
             reason: Optional[str] = None
     ):
-        memo = self.latest_memo
+        memo = self._get_memo_by_id(memo_id)
         if memo is None or memo.next_phase != ACPJobPhase.TRANSACTION or memo.type != MemoType.MESSAGE:
             raise ValueError("No close job memo found")
 
@@ -296,16 +348,19 @@ class ACPJob(BaseModel):
             self.id,
             total_amount,
             self.provider_address,
+            0,
+            FeeType.NO_FEE,
             close_job_response_payload,
             ACPJobPhase.EVALUATION,
         )
 
     def confirm_job_closure(
             self,
+            memo_id: int,
             accept: bool,
             reason: Optional[str] = None
     ):
-        memo = self.latest_memo
+        memo = self._get_memo_by_id(memo_id)
         if memo is None or memo.next_phase != ACPJobPhase.EVALUATION or memo.type != MemoType.PAYABLE_TRANSFER:
             raise ValueError("No close job and withdraw memo found")
 

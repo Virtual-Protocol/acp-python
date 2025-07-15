@@ -11,7 +11,7 @@ from web3.contract import Contract
 from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs import ACPContractConfig
-from virtuals_acp.models import ACPJobPhase, MemoType
+from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
 
 
 class _ACPContractManager:
@@ -140,14 +140,28 @@ class _ACPContractManager:
             content: str,
             amount: int,
             receiver_address: str,
+            fee_amount: int,
+            fee_type: FeeType,
             next_phase: ACPJobPhase,
-            memo_type: Union[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER],
+            memo_type: Union[MemoType.PAYABLE_REQUEST,MemoType.PAYABLE_TRANSFER],
+            token: Optional[str] = None
     ) -> Dict[str, Any]:
         receiver_address = Web3.to_checksum_address(receiver_address)
+        token = self.config.virtuals_token_address if token is None else token
 
         user_op_hash = self._sign_transaction(
             "createPayableMemo",
-            [job_id, content, self.config.virtuals_token_address, amount, receiver_address, memo_type.value, next_phase.value]
+            [
+                job_id,
+                content,
+                token,
+                amount,
+                receiver_address,
+                fee_amount,
+                fee_type.value,
+                memo_type.value,
+                next_phase.value
+            ]
         )
 
         if user_op_hash is None:

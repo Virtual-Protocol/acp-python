@@ -18,3 +18,7 @@ def try_validate_model(data: dict, model: Type[T]) -> Optional[T]:
         return model.model_validate(data)
     except ValidationError:
         return None
+
+
+def get_tx_hash_from_alchemy_response(response: dict) -> str:
+    return response.get('receipts', [])[0].get('transactionHash')

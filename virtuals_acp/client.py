@@ -21,8 +21,10 @@ from virtuals_acp.contract_manager import _ACPContractManager
 from virtuals_acp.exceptions import ACPApiError, ACPError
 from virtuals_acp.job import ACPJob
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import ACPAgentSort, ACPJobPhase, MemoType, IACPAgent, GenericPayload, RequestFeePayload, T
+from virtuals_acp.models import ACPAgentSort, ACPJobPhase, MemoType, IACPAgent, GenericPayload, FundRequestFeePayload, \
+    T, FeeType
 from virtuals_acp.offering import ACPJobOffering
+from virtuals_acp.utils import get_tx_hash_from_alchemy_response
 
 
 class VirtualsACP:
@@ -64,13 +66,16 @@ class VirtualsACP:
         self._setup_socket_handlers()
         self._connect_socket()
 
+
     def _default_on_evaluate(self, job: ACPJob) -> Tuple[bool, str]:
         """Default handler for job evaluation events."""
         return True, "Succesful"
 
+
     def _on_room_joined(self, data):
         print('Connected to room', data)  # Send acknowledgment back to server
         return True
+
 
     def _on_evaluate(self, data):
         print('--------------------------------')
@@ -85,6 +90,7 @@ class VirtualsACP:
                 print(f"Error in onEvaluate handler: {e}")
                 return False
 
+
     def _on_new_task(self, data):
         if self.on_new_task:
             try:
@@ -93,6 +99,7 @@ class VirtualsACP:
             except Exception as e:
                 print(f"Error in onNewTask handler: {e}")
                 return False
+
 
     def handle_new_task(self, data) -> None:
         memos = [ACPMemo(
@@ -124,6 +131,7 @@ class VirtualsACP:
         if self.on_new_task:
             self.on_new_task(job)
 
+
     def handle_evaluate(self, data) -> None:
         memos = [ACPMemo(
             id=memo["id"],
@@ -153,10 +161,12 @@ class VirtualsACP:
         print(f"Received evaluate: {job}")
         self.on_evaluate(job)
 
+
     def _setup_socket_handlers(self) -> None:
         self.sio.on('roomJoined', self._on_room_joined)
         self.sio.on('onEvaluate', self._on_evaluate)
         self.sio.on('onNewTask', self._on_new_task)
+
 
     def _connect_socket(self) -> None:
         """Connect to the socket server with appropriate authentication."""
@@ -184,18 +194,22 @@ class VirtualsACP:
         except Exception as e:
             print(f"Failed to connect to socket server: {e}")
 
+
     def __del__(self):
         """Cleanup when the object is destroyed."""
         if hasattr(self, 'sio') and self.sio is not None:
             self.sio.disconnect()
 
+
     @property
     def agent_address(self) -> str:
         return self._agent_wallet_address
 
+
     @property
     def signer_address(self) -> str:
         return self.signer_account.address
+
 
     def browse_agents(
             self,
@@ -265,6 +279,7 @@ class VirtualsACP:
         except Exception as e:
             raise ACPError(f"An unexpected error occurred while browsing agents: {e}")
 
+
     def initiate_job(
             self,
             provider_address: str,
@@ -329,6 +344,7 @@ class VirtualsACP:
         )
         return job_id
 
+
     def respond_to_job(
             self,
             job_id: int,
@@ -349,15 +365,17 @@ class VirtualsACP:
                 is_secured=False,
                 next_phase=ACPJobPhase.TRANSACTION
             )
-            tx_hash = data.get('receipts', [])[0].get('transactionHash')
+            tx_hash = get_tx_hash_from_alchemy_response(data)
 
             print(
-                f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}, tx_hash: {tx_hash}")
+                f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}, tx_hash: {tx_hash}"
+            )
             return tx_hash
 
         except Exception as e:
             print(f"Error in respond_to_job_memo: {e}")
             raise
+
 
     def respond_to_job_with_fee_request(
             self,
@@ -365,7 +383,7 @@ class VirtualsACP:
             memo_id: int,
             accept: bool,
             reason: Optional[str] = "",
-            payload: Optional[GenericPayload[RequestFeePayload]] = None
+            payload: Optional[GenericPayload[FundRequestFeePayload]] = None
     ) -> str:
         if accept and not payload:
             raise ValueError("Payload is required when accepting a job with fee request.")
@@ -376,24 +394,23 @@ class VirtualsACP:
             if not accept:
                 exit()
 
-            print(
-                f"Responding to job with fee request {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
+            print(f"Responding to job with fee request {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
 
             data = self.contract_manager.create_payable_fee_memo(
                 job_id,
-                json.dumps(payload),
+                json.dumps(payload.model_dump()),
                 self.w3.to_wei(payload.data.amount, "ether") if payload else 0,
                 MemoType.PAYABLE_FEE_REQUEST,
                 ACPJobPhase.TRANSACTION
             )
-            tx_hash = data.get('receipts', [])[0].get('transactionHash')
-            print(
-                f"Responded to job with fee request {job_id} with memo {memo_id} and accept {accept} and reason {reason}, tx_hash: {tx_hash}")
+            tx_hash = get_tx_hash_from_alchemy_response(data)
+            print(f"Responded to job with fee request {job_id} with memo {memo_id} and accept {accept} and reason {reason}, tx_hash: {tx_hash}")
             return tx_hash
 
         except Exception as e:
             print(f"Error in respond_to_job_memo_with_fee_request: {e}")
             raise
+
 
     def pay_job(
             self,
@@ -402,8 +419,10 @@ class VirtualsACP:
             amount: Union[float, str],
             reason: Optional[str] = ""
     ) -> str:
-        amount_in_wei = self.w3.to_wei(amount, "ether")
-        self.contract_manager.approve_allowance(amount_in_wei)
+        if amount > 0:
+            amount_in_wei = self.w3.to_wei(amount, "ether")
+            self.contract_manager.approve_allowance(amount_in_wei)
+
         self.contract_manager.sign_memo(memo_id, True, reason)
 
         data = self.contract_manager.create_memo(
@@ -413,19 +432,22 @@ class VirtualsACP:
             is_secured=False,
             next_phase=ACPJobPhase.EVALUATION
         )
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        tx_hash = get_tx_hash_from_alchemy_response(data)
 
         reason = f"{reason if reason else f'Job {job_id} paid.'}"
         print(f"Paid for job {job_id} with memo {memo_id} and amount {amount} and reason {reason}, tx_hash: {tx_hash}")
         return tx_hash
+
 
     def request_funds(
             self,
             job_id: int,
             amount: Union[float, str],
             receiver_address: str,
+            fee_amount: Union[float, str],
+            fee_type: FeeType,
             reason: GenericPayload[T],
-            next_phase: ACPJobPhase
+            next_phase: ACPJobPhase,
     ):
         receiver_address = Web3.to_checksum_address(receiver_address)
 
@@ -434,63 +456,62 @@ class VirtualsACP:
             json.dumps(reason.model_dump()),
             self.w3.to_wei(amount, "ether"),
             receiver_address,
+            self.w3.to_wei(fee_amount, "ether"),
+            fee_type,
             next_phase,
             MemoType.PAYABLE_REQUEST
         )
 
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        print(f"Funds requested for job {job_id} with amount {amount} to {receiver_address} and reason {reason}")
-        return tx_hash
+        return get_tx_hash_from_alchemy_response(data)
+
 
     def respond_to_funds_request(
             self,
-            job_id: int,
             memo_id: int,
             accept: bool,
             amount: Union[float, str],
             reason: Optional[str] = ""
     ) -> str:
-        self.contract_manager.sign_memo(memo_id, accept, reason)
+        if not accept:
+            data = self.contract_manager.sign_memo(memo_id, False, reason)
+            return get_tx_hash_from_alchemy_response(data)
 
-        content = f"{f'Transfer of {amount} made' if accept else 'Funds request rejected'}. {reason if reason else ''}"
+        amount_in_wei = self.w3.to_wei(amount, "ether")
+        self.contract_manager.approve_allowance(amount_in_wei)
 
-        data = self.contract_manager.create_memo(
-            job_id,
-            content,
-            MemoType.MESSAGE,
-            False,
-            ACPJobPhase.TRANSACTION
-        )
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        print(
-            f"Responded to funds request for job {job_id} with memo {memo_id} was {'accepted' if accept else 'rejected'} with amount {amount} and reason {reason}, tx_hash: {tx_hash}")
-        return tx_hash
+        data = self.contract_manager.sign_memo(memo_id, True, reason)
+        return get_tx_hash_from_alchemy_response(data)
+
 
     def transfer_funds(
             self,
             job_id: int,
             amount: Union[float, str],
             receiver_address: str,
+            fee_amount: Union[float, str],
+            fee_type: FeeType,
             reason: GenericPayload[T],
-            next_phase: ACPJobPhase
+            next_phase: ACPJobPhase,
     ) -> str:
-        self.contract_manager.approve_allowance(
-            self.w3.to_wei(amount, "ether")
-        )
+        amount_in_wei = self.w3.to_wei(amount, "ether")
+        fee_amount_in_wei = self.w3.to_wei(fee_amount, "ether")
+        total_allowance_in_wei = amount_in_wei + fee_amount_in_wei
+        self.contract_manager.approve_allowance(total_allowance_in_wei)
 
         data = self.contract_manager.create_payable_memo(
             job_id,
             json.dumps(reason.model_dump()),
-            self.w3.to_wei(amount, "ether"),
+            amount_in_wei,
             receiver_address,
+            fee_amount_in_wei,
+            fee_type,
             next_phase,
-            MemoType.PAYABLE_REQUEST
+            MemoType.PAYABLE_TRANSFER
         )
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        print(
-            f"Funds transferred for job {job_id} with amount {amount} to {receiver_address} and reason {reason}, tx_hash: {tx_hash}"
-        )
+        tx_hash = get_tx_hash_from_alchemy_response(data)
+        print(f"Funds transferred for job {job_id} with amount {amount} to {receiver_address} and reason {reason}, tx_hash: {tx_hash}")
         return tx_hash
+
 
     def send_message(
             self,
@@ -505,33 +526,18 @@ class VirtualsACP:
             False,
             next_phase
         )
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        return tx_hash
+        return get_tx_hash_from_alchemy_response(data)
+
 
     def respond_to_funds_transfer(
             self,
-            job_id: int,
             memo_id: int,
             accept: bool,
-            amount: Union[float, str],
             reason: Optional[str] = ""
     ):
-        self.contract_manager.sign_memo(memo_id, accept, reason)
+        data = self.contract_manager.sign_memo(memo_id, accept, reason)
+        return get_tx_hash_from_alchemy_response(data)
 
-        content = f"{f'Transfer of {amount} made' if accept else 'Funds transfer rejected'}. {reason if reason else ''}"
-
-        data = self.contract_manager.create_memo(
-            job_id,
-            content,
-            MemoType.MESSAGE,
-            False,
-            ACPJobPhase.TRANSACTION
-        )
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        print(
-            f"Responded to funds transfer for job {job_id} with memo {memo_id} was {'accepted' if accept else 'rejected'} with amount {amount} and reason {reason}, tx_hash: {tx_hash}"
-        )
-        return tx_hash
 
     def deliver_job(
             self,
@@ -545,9 +551,10 @@ class VirtualsACP:
             is_secured=True,
             next_phase=ACPJobPhase.COMPLETED
         )
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        tx_hash = get_tx_hash_from_alchemy_response(data)
         print(f"Deliverable submission tx: {tx_hash} for job {job_id}")
         return tx_hash
+
 
     def sign_memo(
             self,
@@ -556,9 +563,10 @@ class VirtualsACP:
             reason: Optional[str] = ""
     ) -> str:
         data = self.contract_manager.sign_memo(memo_id, accept, reason)
-        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        tx_hash = get_tx_hash_from_alchemy_response(data)
         print(f"Signed memo for memo ID {memo_id} is {'accepted' if accept else 'rejected'}, tx_hash: {tx_hash}")
         return tx_hash
+
 
     def get_active_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
         url = f"{self.acp_api_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={pageSize}"
@@ -605,6 +613,7 @@ class VirtualsACP:
         except Exception as e:
             raise ACPApiError(f"Failed to get active jobs: {e}")
 
+
     def get_completed_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
         url = f"{self.acp_api_url}/jobs/completed?pagination[page]={page}&pagination[pageSize]={pageSize}"
         headers = {
@@ -648,6 +657,7 @@ class VirtualsACP:
             return jobs
         except Exception as e:
             raise ACPApiError(f"Failed to get completed jobs: {e}")
+
 
     def get_cancelled_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
         url = f"{self.acp_api_url}/jobs/cancelled?pagination[page]=${page}&pagination[pageSize]=${pageSize}"
@@ -693,6 +703,7 @@ class VirtualsACP:
         except Exception as e:
             raise ACPApiError(f"Failed to get cancelled jobs: {e}")
 
+
     def get_job_by_onchain_id(self, onchain_job_id: int) -> "ACPJob":
         url = f"{self.acp_api_url}/jobs/{onchain_job_id}"
         headers = {
@@ -737,6 +748,7 @@ class VirtualsACP:
         except Exception as e:
             raise ACPApiError(f"Failed to get job by onchain ID: {e}")
 
+
     def get_memo_by_id(self, onchain_job_id: int, memo_id: int) -> 'ACPMemo':
         url = f"{self.acp_api_url}/jobs/{onchain_job_id}/memos/{memo_id}"
         headers = {
@@ -760,6 +772,7 @@ class VirtualsACP:
 
         except Exception as e:
             raise ACPApiError(f"Failed to get memo by ID: {e}")
+
 
     def get_agent(self, wallet_address: str) -> Optional[IACPAgent]:
         url = f"{self.acp_api_url}/agents?filters[walletAddress]={wallet_address}"
