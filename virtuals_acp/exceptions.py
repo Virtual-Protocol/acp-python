@@ -1,6 +1,3 @@
-
-
-
 class ACPError(Exception):
     """Base exception for ACP client errors."""
     pass
