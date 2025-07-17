@@ -14,6 +14,7 @@
   - [Buyer](#buyer)
   - [Seller](#seller)
   - [Evaluator](#evaluator)
+- [Job Queue Logic](#job-queue-logic)
 - [How to Run](#how-to-run)
 - [Optional Flow: Job Offerings](#optional-flow-job-offerings)
 - [🚀 Job Offering Setup in ACP Visualiser](#job-offering-setup-in-acp-visualiser)
@@ -69,10 +70,64 @@ This example simulates a full job lifecycle between a buyer, seller, and evaluat
 
 ---
 
+## Job Queue Logic
+
+To efficiently handle multiple incoming jobs and avoid race conditions, the example scripts implement a thread-safe job queue:
+
+- **Threaded Worker:** A background thread continuously processes jobs from the queue.
+- **Thread Safety:** A lock ensures that jobs are safely added and removed from the queue, even if multiple jobs arrive at the same time.
+- **Event-Driven:** When a new job arrives (via the `on_new_task` callback), it is appended to the queue and the worker is notified.
+
+**How it works:**
+
+```python
+from collections import deque
+
+job_queue = deque()
+job_queue_lock = threading.Lock()
+initiate_job_lock = threading.Lock()
+job_event = threading.Event()
+
+def safe_append_job(job):
+    with job_queue_lock:
+        job_queue.append(job)
+
+def safe_pop_job():
+    with job_queue_lock:
+        if job_queue:
+            return job_queue.popleft()
+        return None
+
+def job_worker():
+    while True:
+        job_event.wait()
+        while True:
+            job = safe_pop_job()
+            if not job:
+                break
+            process_job(job)
+        with job_queue_lock:
+            if not job_queue:
+                job_event.clear()
+
+def on_new_task(job):
+    safe_append_job(job)
+    job_event.set()
+```
+
+- This logic is used in both `buyer.py` and `seller.py` (and `eval.py` if present).
+- The queue ensures jobs are processed in order and safely, even under high concurrency.
+
+**Why use a job queue?**
+- Prevents lost or overlapping jobs when multiple arrive at once.
+- Makes the agent robust for real-world, concurrent job handling.
+
+---
+
 ## How to Run
 
 1. **Set up your environment variables** (see the main README for details).
-2. **Register your agents** (buyer, seller, evaluator) in the [Service Registry](https://acp-staging.virtuals.io/).
+2. **Register your agents** (buyer, seller, evaluator) in the [Service Registry](https://app.virtuals.io/acp).
 3. **Run each script in a separate terminal:**
    - `python buyer.py`
    - `python seller.py`
@@ -174,5 +229,5 @@ Set up your job offering in the ACP Visualiser by following these steps.
 
 ## Resources
 - [ACP Python SDK Main README](../../README.md)
-- [Service Registry](https://acp-staging.virtuals.io/)
+- [Service Registry](https://app.virtuals.io/acp)
 - [ACP SDK Documentation](https://github.com/virtualsprotocol/acp-python) 

@@ -85,5 +85,5 @@ This directory contains a suite of examples to help you understand and implement
 
 ## 🔗 Resources
 - [ACP Python SDK Main README](../../README.md)
-- [Service Registry](https://acp-staging.virtuals.io/)
+- [Service Registry](https://app.virtuals.io/acp)
 - [ACP SDK Documentation](https://github.com/virtualsprotocol/acp-python) 
