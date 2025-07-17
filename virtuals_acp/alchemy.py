@@ -1,15 +1,12 @@
-import os
-from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, Any, List, Optional, Union
 
 import requests
-from web3 import Web3
 from eth_account import Account
+from eth_account.messages import encode_defunct
 from eth_account.messages import encode_typed_data
 from eth_utils.conversions import to_hex
-from eth_account.messages import encode_defunct
-
 
 from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
 
@@ -61,10 +58,10 @@ class AlchemyRPCClient:
             result = response.json()
             if (result.get("error")):
                 raise Exception(f"RPC Error: {result['error']}")
-            
+
             if (result.get("result")):
                 return result.get("result")
-            
+
             return result
         except Exception as e:
             print(f"Error on request: {e}")
@@ -90,14 +87,15 @@ class AlchemyRPCClient:
     def wallet_create_session(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """Create a session"""
         return self.request("wallet_createSession", [params])
-    
+
     def wallet_get_calls_status(self, params: str) -> Dict[str, Any]:
         """Get calls status"""
         return self.request("wallet_getCallsStatus", [params])
 
 
 class AlchemyAccountKit:
-    def __init__(self, agent_wallet_address: str, entity_id: int, owner_account: Account, chain_id: Optional[int] = None):
+    def __init__(self, agent_wallet_address: str, entity_id: int, owner_account: Account,
+                 chain_id: Optional[int] = None):
         """
         Initialize the Alchemy Account Kit
         
@@ -126,7 +124,7 @@ class AlchemyAccountKit:
                 return signed_message.signature.hex()
             else:
                 raise ValueError("Personal sign data must be a hex string")
-        
+
         elif request.type == SignatureRequestType.ETH_SIGN_TYPED_DATA_V4:
             # For typed data, the data should be a dictionary with the structured data
             if isinstance(request.data, dict):
@@ -136,7 +134,7 @@ class AlchemyAccountKit:
                 return signed_message.signature.hex()
             else:
                 raise ValueError("Typed data must be a dictionary")
-        
+
         else:
             raise ValueError(f"Unsupported signature request type: {request.type}")
 
@@ -152,26 +150,27 @@ class AlchemyAccountKit:
         # Prepare permissions context
         permissions_context_version = "0x02"  # REMOTE_MODE_PERMISSIONS_CONTEXT
         is_global_validation = "01"  # Should be int, not string
-        
+
         # Concatenate hex values (equivalent to concatHex in viem)
         # Concatenate hex values by removing 0x prefix from subsequent values
         self.permissions_context = (
-            permissions_context_version + 
-            is_global_validation +  # Remove 0x prefix
-            to_hex(self.entity_id)[2:].zfill(8)  # Remove 0x prefix and pad to 8 chars
+                permissions_context_version +
+                is_global_validation +  # Remove 0x prefix
+                to_hex(self.entity_id)[2:].zfill(8)  # Remove 0x prefix and pad to 8 chars
         )
         if not self.permissions_context.startswith("0x"):
             self.permissions_context = "0x" + self.permissions_context
 
-        return 
+        return
 
-    def prepare_calls(self, calls: List[Dict[str, str]], capabilities: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def prepare_calls(self, calls: List[Dict[str, str]], capabilities: Optional[Dict[str, Any]] = None) -> Dict[
+        str, Any]:
         if not self.account_address:
             raise ValueError("Must request account first")
         if not self.permissions_context:
             raise ValueError("Must create session first")
-        
-        #call createAccount -- return the same account address -
+
+        # call createAccount -- return the same account address -
         if capabilities is None:
             capabilities = {
                 "permissions": {
@@ -203,19 +202,19 @@ class AlchemyAccountKit:
             type=SignatureRequestType(prepare_calls_signature_request_data["type"]),
             data=prepare_calls_signature_request_data["data"]
         )
-        
+
         user_op_signature = self.sign_signature_request(prepare_calls_signature_request, self.owner_account)
 
         # Prepare the parameters for sending prepared calls
         send_prepared_calls_params = prepare_calls_result.copy()
         # Remove the signatureRequest from the params
         send_prepared_calls_params.pop("signatureRequest", None)
-        
+
         send_prepared_calls_params["signature"] = {
             "type": "secp256k1",
             "data": "0x" + user_op_signature
         }
-        
+
         send_prepared_calls_params["capabilities"] = {
             "permissions": {
                 "context": self.permissions_context
@@ -226,13 +225,13 @@ class AlchemyAccountKit:
 
         return result
 
-    def execute_calls(self, calls: List[Dict[str, str]], capabilities: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def execute_calls(self, calls: List[Dict[str, str]], capabilities: Optional[Dict[str, Any]] = None) -> Dict[
+        str, Any]:
         prepare_result = self.prepare_calls(calls, capabilities)
         return self.send_prepared_calls(prepare_result)
 
     def get_user_operation_hash(self, send_result: Dict[str, Any]) -> str:
         return send_result["preparedCallIds"][0]
-    
+
     def get_calls_status(self, prepared_call_id: str) -> Dict[str, Any]:
         return self.rpc_client.wallet_get_calls_status(prepared_call_id)
-    
