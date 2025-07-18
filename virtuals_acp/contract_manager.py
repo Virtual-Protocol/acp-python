@@ -79,9 +79,10 @@ class _ACPContractManager:
                 )
                 return user_op_hash
             except Exception as e:
-                if (retries == 1):
-                    print(f"Failed to create job: {e}")
                 retries -= 1
+                if (retries == 0):
+                    print(f"Failed to create job: {e}")
+                    raise
                 time.sleep(2 * (3 - retries))
         raise Exception("Failed to create job")
                 
