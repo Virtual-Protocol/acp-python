@@ -2,7 +2,7 @@ import threading
 import time
 from typing import Optional
 
-from virtuals_acp import VirtualsACP, ACPJob, ACPJobPhase, BASE_SEPOLIA_CONFIG, ACPMemo, MemoType
+from virtuals_acp import VirtualsACP, ACPJob, ACPJobPhase, ACPMemo, MemoType
 from virtuals_acp.env import EnvSettings
 
 from dotenv import load_dotenv
@@ -57,7 +57,7 @@ def seller():
 
                 if position_fulfilled_count == 0:
                     position_fulfilled_count += 1
-                    time.sleep(5)
+                    time.sleep(10)
                     job.position_fulfilled(
                         PositionFulfilledPayload(
                             symbol="VIRTUAL",
@@ -71,7 +71,7 @@ def seller():
                     )
                     print(f"Job {job.id} VIRTUAL TP fulfilled")
 
-                    time.sleep(8)
+                    time.sleep(10)
                     job.unfulfilled_position(
                         UnfulfilledPositionPayload(
                             symbol="ETH",
@@ -134,7 +134,6 @@ def seller():
         agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
         on_new_task=on_new_task,
         entity_id=env.SELLER_ENTITY_ID,
-        config=BASE_SEPOLIA_CONFIG
     )
 
     print("Waiting for new task...")

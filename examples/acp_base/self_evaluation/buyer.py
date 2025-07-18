@@ -47,9 +47,9 @@ def buyer():
 
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp.browse_agents(
-        keyword="Molly",
-        cluster="yang-mainnet-test",
-        graduated=False # False for sandbox agents; True for graduated agents
+        keyword="<your_filter_agent_keyword>",
+        cluster="<your_cluster_name>",
+        graduated=True # False for sandbox agents; True for graduated agents
     )
     print(f"Relevant agents: {relevant_agents}")
 

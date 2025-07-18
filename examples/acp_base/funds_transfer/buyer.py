@@ -3,7 +3,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Optional
 
-from virtuals_acp import BASE_SEPOLIA_CONFIG, ACPMemo, MemoType
+from virtuals_acp import ACPMemo, MemoType
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.job import ACPJob
 from virtuals_acp.models import ACPJobPhase, OpenPositionPayload, TPSLConfig, ClosePositionPayload, PayloadType
@@ -74,7 +74,7 @@ def buyer():
             print(f"Job {job.id} BTC position closed")
 
             # Buyer close job upon all positions return
-            time.sleep(5)
+            time.sleep(10)
             job.close_job()
             print(f"Start closing Job {job.id}")
             return
@@ -139,14 +139,13 @@ def buyer():
         on_new_task=on_new_task,
         on_evaluate=on_evaluate,
         entity_id=env.BUYER_ENTITY_ID,
-        config=BASE_SEPOLIA_CONFIG
     )
 
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp.browse_agents(
-        keyword="Funds TT (Seller)",
-        cluster="",
-        graduated=False # False for sandbox agents; True for graduated agents
+        keyword="<your_filter_agent_keyword>",
+        cluster="<your_cluster_name>",
+        graduated=True # False for sandbox agents; True for graduated agents
     )
     print(f"Relevant agents: {relevant_agents}")
 
@@ -156,7 +155,7 @@ def buyer():
     # Pick one of the service offerings based on your criteria (in this example we just pick the first one)
     chosen_job_offering = chosen_agent.offerings[0]
     job_id = chosen_job_offering.initiate_job(
-        service_requirement="I have 8 $VIRTUAL, ape it for me.",
+        service_requirement="<your_service_requirement>",
         evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
         expired_at=datetime.now() + timedelta(minutes=8)
     )
