@@ -2,7 +2,7 @@
 
 import time
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Union
 
 from eth_account import Account
 from web3 import Web3
@@ -11,7 +11,7 @@ from web3.contract import Contract
 from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs import ACPContractConfig
-from virtuals_acp.models import ACPJobPhase, MemoType
+from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
 
 
 class _ACPContractManager:
@@ -111,6 +111,61 @@ class _ACPContractManager:
 
         if user_op_hash is None:
             raise Exception("Failed to sign transaction - approve_allowance")
+
+        return self._validate_transaction(user_op_hash)
+
+
+    def create_payable_fee_memo(
+            self,
+            job_id: int,
+            content: str,
+            amount: int,
+            memo_type: Union[MemoType.PAYABLE_FEE, MemoType.PAYABLE_FEE_REQUEST],
+            next_phase: ACPJobPhase,
+    ) -> Dict[str, Any]:
+        user_op_hash = self._sign_transaction(
+            "createPayableFeeMemo",
+            [job_id, content, amount, memo_type.value, next_phase.value]
+        )
+
+        if user_op_hash is None:
+            raise Exception("Failed to sign transaction - create_payable_fee_memo")
+
+        return self._validate_transaction(user_op_hash)
+
+
+    def create_payable_memo(
+            self,
+            job_id: int,
+            content: str,
+            amount: int,
+            receiver_address: str,
+            fee_amount: int,
+            fee_type: FeeType,
+            next_phase: ACPJobPhase,
+            memo_type: Union[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER],
+            token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        receiver_address = Web3.to_checksum_address(receiver_address)
+        token = self.config.virtuals_token_address if token is None else token
+
+        user_op_hash = self._sign_transaction(
+            "createPayableMemo",
+            [
+                job_id,
+                content,
+                token,
+                amount,
+                receiver_address,
+                fee_amount,
+                fee_type.value,
+                memo_type.value,
+                next_phase.value
+            ]
+        )
+
+        if user_op_hash is None:
+            raise Exception("Failed to sign transaction - create_payable_memo")
 
         return self._validate_transaction(user_op_hash)
 
