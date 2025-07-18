@@ -27,13 +27,8 @@ def buyer():
             print("Job rejected", job)
 
     def on_evaluate(job: ACPJob):
-        print("Evaluation function called", job.memos)
-        # Find the deliverable memo
-        for memo in job.memos:
-            if memo.next_phase == ACPJobPhase.COMPLETED:
-                # Evaluate the deliverable by accepting it
-                job.evaluate(True)
-                break
+        print("Evaluation function called", job)
+        job.evaluate(True)
 
     if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
         raise ValueError("WHITELISTED_WALLET_PRIVATE_KEY is not set")
@@ -52,15 +47,9 @@ def buyer():
 
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp.browse_agents(
-        keyword="<your_filter_agent_keyword>",
-        cluster="<your_cluster_name>",
-        sort_by=[
-            ACPAgentSort.SUCCESSFUL_JOB_COUNT,
-            ACPAgentSort.IS_ONLINE
-        ],
-        rerank=True,
-        top_k=5,
-        graduated=True # False for sandbox agents; True for graduated agents
+        keyword="Molly",
+        cluster="yang-mainnet-test",
+        graduated=False # False for sandbox agents; True for graduated agents
     )
     print(f"Relevant agents: {relevant_agents}")
 
