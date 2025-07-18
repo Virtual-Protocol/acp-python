@@ -21,18 +21,20 @@ from virtuals_acp.contract_manager import _ACPContractManager
 from virtuals_acp.exceptions import ACPApiError, ACPError
 from virtuals_acp.job import ACPJob
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import ACPAgentSort, ACPJobPhase, MemoType, IACPAgent
+from virtuals_acp.models import ACPAgentSort, ACPJobPhase, MemoType, IACPAgent, FeeType, GenericPayload, T
 from virtuals_acp.offering import ACPJobOffering
 
 
 class VirtualsACP:
-    def __init__(self,
-                 wallet_private_key: str,
-                 entity_id: int,
-                 agent_wallet_address: Optional[str] = None,
-                 config: ACPContractConfig = DEFAULT_CONFIG,
-                 on_new_task: Optional[Callable] = None,
-                 on_evaluate: Optional[Callable] = None):
+    def __init__(
+            self,
+            wallet_private_key: str,
+            entity_id: int,
+            agent_wallet_address: Optional[str] = None,
+            config: ACPContractConfig = DEFAULT_CONFIG,
+            on_new_task: Optional[Callable] = None,
+            on_evaluate: Optional[Callable] = None
+    ):
 
         self.config = config
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
@@ -95,12 +97,19 @@ class VirtualsACP:
                 return False
 
     def handle_new_task(self, data) -> None:
+        memo_to_sign_id = data.get("memoToSign")
+
         memos = [ACPMemo(
             id=memo["id"],
             type=MemoType(int(memo["memoType"])),
             content=memo["content"],
             next_phase=memo["nextPhase"],
         ) for memo in data["memos"]]
+
+        memo_to_sign = next(
+            (m for m in memos if int(m.id) == int(memo_to_sign_id)),
+            None
+        ) if memo_to_sign_id is not None else None
 
         context = data["context"]
         if isinstance(context, str):
@@ -122,7 +131,7 @@ class VirtualsACP:
         )
         print(f"Received new task: {job}")
         if self.on_new_task:
-            self.on_new_task(job)
+            self.on_new_task(job, memo_to_sign)
 
     def handle_evaluate(self, data) -> None:
         memos = [ACPMemo(
@@ -370,16 +379,17 @@ class VirtualsACP:
         )
         return job_id
 
-    def respond_to_job_memo(
+    def respond_to_job(
             self,
             job_id: int,
             memo_id: int,
             accept: bool,
+            content: Optional[str] = "",
             reason: Optional[str] = ""
     ) -> str:
         try:
             data = self.contract_manager.sign_memo(memo_id, accept, reason or "")
-            tx_hash = data.get('receipts', [])[0].get('txHash')
+            tx_hash = data.get('receipts', [])[0].get('transactionHash')
             if (not accept):
                 exit()
 
@@ -388,7 +398,7 @@ class VirtualsACP:
             print(f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             self.contract_manager.create_memo(
                 job_id,
-                f"{reason if reason else f'Job {job_id} accepted.'}",
+                f"{content or f'Job {job_id} accepted. {reason or ''}'}",
                 MemoType.MESSAGE,
                 is_secured=False,
                 next_phase=ACPJobPhase.TRANSACTION
@@ -399,7 +409,7 @@ class VirtualsACP:
             print(f"Error in respond_to_job_memo: {e}")
             raise
 
-    def pay_for_job(
+    def pay_job(
             self,
             job_id: int,
             memo_id: int,
@@ -427,12 +437,116 @@ class VirtualsACP:
             next_phase=ACPJobPhase.EVALUATION
         )
 
-    def submit_job_deliverable(
+    def request_funds(
+            self,
+            job_id: int,
+            amount: Union[float, str],
+            receiver_address: str,
+            fee_amount: Union[float, str],
+            fee_type: FeeType,
+            reason: GenericPayload[T],
+            next_phase: ACPJobPhase,
+    ) -> str:
+        receiver_address = Web3.to_checksum_address(receiver_address)
+
+        data = self.contract_manager.create_payable_memo(
+            job_id,
+            json.dumps(reason.model_dump()),
+            self.w3.to_wei(amount, "ether"),
+            receiver_address,
+            self.w3.to_wei(fee_amount, "ether"),
+            fee_type,
+            next_phase,
+            MemoType.PAYABLE_REQUEST
+        )
+
+        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        return tx_hash
+
+    def respond_to_funds_request(
+            self,
+            memo_id: int,
+            accept: bool,
+            amount: Union[float, str],
+            reason: Optional[str] = ""
+    ) -> str:
+        if not accept:
+            data = self.contract_manager.sign_memo(memo_id, False, reason)
+            tx_hash = data.get('receipts', [])[0].get('transactionHash')
+            return tx_hash
+
+        if amount > 0:
+            amount_in_wei = self.w3.to_wei(amount, "ether")
+            self.contract_manager.approve_allowance(amount_in_wei)
+
+        data = self.contract_manager.sign_memo(memo_id, True, reason)
+        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        return tx_hash
+
+    def transfer_funds(
+            self,
+            job_id: int,
+            amount: Union[float, str],
+            receiver_address: str,
+            fee_amount: Union[float, str],
+            fee_type: FeeType,
+            reason: GenericPayload[T],
+            next_phase: ACPJobPhase,
+    ) -> str:
+        amount_in_wei = self.w3.to_wei(amount, "ether")
+        fee_amount_in_wei = self.w3.to_wei(fee_amount, "ether")
+        total_allowance_in_wei = amount_in_wei + fee_amount_in_wei
+
+        if (amount + fee_amount) > 0:
+            self.contract_manager.approve_allowance(total_allowance_in_wei)
+
+        data = self.contract_manager.create_payable_memo(
+            job_id,
+            json.dumps(reason.model_dump()),
+            amount_in_wei,
+            receiver_address,
+            fee_amount_in_wei,
+            fee_type,
+            next_phase,
+            MemoType.PAYABLE_TRANSFER
+        )
+        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        print(
+            f"Funds transferred for job {job_id} with amount {amount} to {receiver_address} and reason {reason}, tx_hash: {tx_hash}"
+        )
+        return tx_hash
+
+    def send_message(
+            self,
+            job_id: int,
+            message: GenericPayload[T],
+            next_phase: ACPJobPhase
+    ) -> str:
+        data = self.contract_manager.create_memo(
+            job_id,
+            json.dumps(message.model_dump()),
+            MemoType.MESSAGE,
+            False,
+            next_phase
+        )
+        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        return tx_hash
+
+    def respond_to_funds_transfer(
+            self,
+            memo_id: int,
+            accept: bool,
+            reason: Optional[str] = ""
+    ):
+        data = self.contract_manager.sign_memo(memo_id, accept, reason)
+        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        return tx_hash
+
+    def deliver_job(
             self,
             job_id: int,
             deliverable_content: str
     ) -> str:
-
         data = self.contract_manager.create_memo(
             job_id,
             deliverable_content,
@@ -440,21 +554,20 @@ class VirtualsACP:
             is_secured=True,
             next_phase=ACPJobPhase.COMPLETED
         )
-        tx_hash = data.get('receipts', [])[0].get('txHash')
+        tx_hash = data.get('receipts', [])[0].get('transactionHash')
         # print(f"Deliverable submission tx: {tx_hash} for job {job_id}")
         return tx_hash
 
-    def evaluate_job_delivery(
+    def sign_memo(
             self,
-            memo_id_of_deliverable: int,
+            memo_id: int,
             accept: bool,
             reason: Optional[str] = ""
     ) -> str:
-
-        data = self.contract_manager.sign_memo(memo_id_of_deliverable, accept, reason or "")
-        txHash = data.get('receipts', [])[0].get('transactionHash')
-        print(f"Evaluation (signMemo) tx: {txHash} for deliverable memo ID {memo_id_of_deliverable} is {accept}")
-        return txHash
+        data = self.contract_manager.sign_memo(memo_id, accept, reason)
+        tx_hash = data.get('receipts', [])[0].get('transactionHash')
+        print(f"Signed memo for memo ID {memo_id} is {'accepted' if accept else 'rejected'}, tx_hash: {tx_hash}")
+        return tx_hash
 
     def get_active_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
         url = f"{self.acp_api_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={pageSize}"

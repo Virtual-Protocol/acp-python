@@ -3,7 +3,7 @@
 import json
 import time
 from datetime import datetime
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, Union
 import requests
 
 from eth_account import Account
@@ -14,12 +14,18 @@ from web3.contract import Contract
 from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs import ACPContractConfig
-from virtuals_acp.models import ACPJobPhase, MemoType
-
+from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
 
 
 class _ACPContractManager:
-    def __init__(self, web3_client: Web3, agent_wallet_address: str, entity_id: int, config: ACPContractConfig, wallet_private_key: str):
+    def __init__(
+            self,
+            web3_client: Web3,
+            agent_wallet_address: str,
+            entity_id: int,
+            config: ACPContractConfig,
+            wallet_private_key: str
+    ):
         self.w3 = web3_client
         self.account = Account.from_key(wallet_private_key)
         self.config = config
@@ -40,7 +46,11 @@ class _ACPContractManager:
         except Exception as e:
             raise Exception(f"Failed to get job_id {e}")
     
-    def _sign_transaction(self, method_name: str, args: list, contract_address: Optional[str] = None) -> str:
+    def _sign_transaction(
+            self, method_name: str,
+            args: list,
+            contract_address: Optional[str] = None
+    ) -> str:
         if contract_address:
             encoded_data = self.token_contract.encode_abi(method_name, args=args)
         else:
@@ -54,7 +64,6 @@ class _ACPContractManager:
         self.alchemy_kit.create_session()
         send_result = self.alchemy_kit.execute_calls(trx_data)
         user_op_hash = self.alchemy_kit.get_user_operation_hash(send_result)
-        
 
         return user_op_hash
         
@@ -113,35 +122,127 @@ class _ACPContractManager:
                 time.sleep(2 * (3 - retries))
                 
         raise Exception("Failed to approve allowance")
-                
 
-        
-    def create_memo(self, job_id: int, content: str, memo_type: MemoType, is_secured: bool, next_phase: ACPJobPhase) -> Dict[str, Any]:
+
+    def create_payable_fee_memo(
+            self,
+            job_id: int,
+            content: str,
+            amount: int,
+            memo_type: Union[MemoType.PAYABLE_FEE, MemoType.PAYABLE_FEE_REQUEST],
+            next_phase: ACPJobPhase,
+    ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
-            "createMemo", 
-            [job_id, content, memo_type.value, is_secured, next_phase.value]
+            "createPayableFeeMemo",
+            [job_id, content, amount, memo_type.value, next_phase.value]
         )
-        
+
         if user_op_hash is None:
-            raise Exception("Failed to sign transaction - create_memo")
-        
+            raise Exception("Failed to sign transaction - create_payable_fee_memo")
+
         retries = 3
         while retries > 0:
             try:
                 result = self.validate_transaction(user_op_hash)
-                
+
+                if result.get("status") == 200:
+                    return result
+                else:
+                    raise Exception(f"Failed to create payable fee memo")
+            except Exception as e:
+                retries -= 1
+                if retries == 0:
+                    print(f"Error during create_payable_fee_memo: {e}")
+                    raise
+                time.sleep(2 * (3 - retries))
+
+        raise Exception(f"Failed to create payable fee memo")
+
+
+    def create_payable_memo(
+            self,
+            job_id: int,
+            content: str,
+            amount: int,
+            receiver_address: str,
+            fee_amount: int,
+            fee_type: FeeType,
+            next_phase: ACPJobPhase,
+            memo_type: Union[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER],
+            token: Optional[str] = None
+    ) -> Dict[str, Any]:
+        receiver_address = Web3.to_checksum_address(receiver_address)
+        token = self.config.virtuals_token_address if token is None else token
+
+        user_op_hash = self._sign_transaction(
+            "createPayableMemo",
+            [
+                job_id,
+                content,
+                token,
+                amount,
+                receiver_address,
+                fee_amount,
+                fee_type.value,
+                memo_type.value,
+                next_phase.value
+            ]
+        )
+
+        if user_op_hash is None:
+            raise Exception("Failed to sign transaction - create_payable_memo")
+
+        retries = 3
+        while retries > 0:
+            try:
+                result = self.validate_transaction(user_op_hash)
+
+                if result.get("status") == 200:
+                    return result
+                else:
+                    raise Exception(f"Failed to create payable memo")
+            except Exception as e:
+                retries -= 1
+                if retries == 0:
+                    print(f"Error during create_payable_memo: {e}")
+                    raise
+                time.sleep(2 * (3 - retries))
+
+        raise Exception(f"Failed to create payable memo")
+
+
+    def create_memo(
+            self, job_id: int,
+            content: str,
+            memo_type: MemoType,
+            is_secured: bool,
+            next_phase: ACPJobPhase
+    ) -> Dict[str, Any]:
+        user_op_hash = self._sign_transaction(
+            "createMemo",
+            [job_id, content, memo_type.value, is_secured, next_phase.value]
+        )
+
+        if user_op_hash is None:
+            raise Exception("Failed to sign transaction - create_memo")
+
+        retries = 3
+        while retries > 0:
+            try:
+                result = self.validate_transaction(user_op_hash)
+
                 if result.get("status") == 200:
                     return result
                 else:
                     raise Exception(f"Failed to create memo")
-            
+
             except Exception as e:
                 retries -= 1
                 if retries == 0:
                     print(f"Error during create_memo: {e}")
                     raise
                 time.sleep(2 * (3 - retries))
-                
+
         raise Exception("Failed to create memo")
 
 
