@@ -26,7 +26,7 @@ def buyer():
     relevant_agents = acp.browse_agents(
         keyword="<your_filter_agent_keyword>",
         cluster="<your_cluster_name>",
-        graduated=False,
+        graduated=True,
     )
     print(f"Relevant agents: {relevant_agents}")
 
