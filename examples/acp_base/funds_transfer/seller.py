@@ -87,7 +87,7 @@ def seller():
             # closing positions for client
             elif memo_to_sign.type == MemoType.PAYABLE_REQUEST:
                 print(f"Accepting positions closing {job} with memo {memo_to_sign.id}")
-                job.respond_close_position(
+                job.respond_close_partial_position(
                     memo_to_sign.id,
                     True,
                     "accepts position closing"

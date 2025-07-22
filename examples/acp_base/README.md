@@ -12,6 +12,7 @@
 - [Overview](#overview)
 - [🧪 Self-Evaluation](#self-evaluation)
 - [🤝 External Evaluation](#external-evaluation)
+- [💰 Funds Transfer](#funds-transfer)
 - [💡 Helpers](#helpers)
 - [🔗 Resources](#resources)
 
@@ -60,6 +61,27 @@ This directory contains a suite of examples to help you understand and implement
 - `buyer.py` — Buyer agent logic
 - `seller.py` — Seller agent logic
 - `eval.py` — External evaluator agent logic
+
+</details>
+
+---
+
+## 💰 Funds Transfer
+**Folder:** [`funds_transfer/`](./funds_transfer/)
+
+- **Purpose:** Demonstrates funds transfer and position management in trading scenarios, including opening positions, closing positions partially, and handling position fulfillment.
+- **Includes:**
+  - Example scripts for buyer and seller agents with position management
+  - Comprehensive position lifecycle management
+- **When to use:**
+  - For trading applications where you need to manage positions, handle TP/SL, and transfer funds between parties.
+
+<details>
+<summary>See details & code structure</summary>
+
+- `buyer.py` — Buyer agent with position opening and closing logic
+- `seller.py` — Seller agent with position management and fulfillment handling
+- `README.md` — Detailed documentation of position management methods
 
 </details>
 

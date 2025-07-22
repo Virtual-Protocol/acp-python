@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from virtuals_acp.memo import ACPMemo
 from virtuals_acp.models import ACPJobPhase, IACPAgent, GenericPayload, OpenPositionPayload, PayloadType, MemoType, \
     ClosePositionPayload, PositionFulfilledPayload, CloseJobAndWithdrawPayload, FeeType, \
-    UnfulfilledPositionPayload, T
+    UnfulfilledPositionPayload, RequestClosePositionPayload, T
 from virtuals_acp.utils import try_parse_json_model
 
 if TYPE_CHECKING:
@@ -175,12 +175,12 @@ class ACPJob(BaseModel):
             reason
         )
 
-    def close_position(
+    def close_partial_position(
             self,
             payload: ClosePositionPayload,
     ):
         close_position_payload = GenericPayload(
-            type=PayloadType.CLOSE_POSITION,
+            type=PayloadType.CLOSE_PARTIAL_POSITION,
             data=payload
         )
 
@@ -194,7 +194,7 @@ class ACPJob(BaseModel):
             ACPJobPhase.TRANSACTION
         )
 
-    def respond_close_position(
+    def respond_close_partial_position(
             self,
             memo_id: int,
             accept: bool,
@@ -213,7 +213,7 @@ class ACPJob(BaseModel):
         close_position_payload = try_parse_json_model(memo.content, GenericPayload[ClosePositionPayload])
         if (
                 close_position_payload is None or
-                close_position_payload.type != PayloadType.CLOSE_POSITION
+                close_position_payload.type != PayloadType.CLOSE_PARTIAL_POSITION
         ):
             raise ValueError("Invalid close position memo")
 
@@ -226,6 +226,79 @@ class ACPJob(BaseModel):
             close_position_payload.data.amount,
             reason
         )
+
+    def request_close_position(self, payload: RequestClosePositionPayload):
+        return self.acp_client.send_message(
+            self.id,
+            GenericPayload(
+                type=PayloadType.CLOSE_POSITION,
+                data=payload
+            ),
+            ACPJobPhase.TRANSACTION
+        )
+
+    def response_request_close_position(
+            self,
+            memo_id: int,
+            accept: bool,
+            payload: ClosePositionPayload,
+            reason: Optional[str] = None
+    ):
+        memo = self._get_memo_by_id(memo_id)
+        if (
+                memo is None
+                or memo.next_phase != ACPJobPhase.TRANSACTION
+                or memo.type != MemoType.MESSAGE
+        ):
+            raise ValueError("No message memo found")
+
+        message_payload = try_parse_json_model(memo.content, GenericPayload[RequestClosePositionPayload])
+        if message_payload is None or message_payload.type != PayloadType.CLOSE_POSITION:
+            raise ValueError("Invalid close position memo")
+
+        if not reason:
+            reason = f"Job {self.id} close position request {'accepted' if accept else 'rejected'}"
+
+        # Sign the memo
+        self.acp_client.contract_manager.sign_memo(memo_id, accept, reason)
+
+        if accept:
+            return self.acp_client.transfer_funds(
+                self.id,
+                payload.amount,
+                self.client_address,
+                0,
+                FeeType.NO_FEE,
+                GenericPayload(
+                    type=PayloadType.CLOSE_POSITION,
+                    data=payload
+                ),
+                ACPJobPhase.TRANSACTION
+            )
+
+    def confirm_close_position(
+            self,
+            memo_id: int,
+            accept: bool,
+            reason: Optional[str] = None
+    ):
+        memo = self._get_memo_by_id(memo_id)
+        if (
+                memo is None
+                or memo.next_phase != ACPJobPhase.TRANSACTION
+                or memo.type != MemoType.PAYABLE_TRANSFER
+        ):
+            raise ValueError("No payable transfer memo found")
+
+        payload = try_parse_json_model(memo.content, GenericPayload[ClosePositionPayload])
+        if payload is None or payload.type != PayloadType.CLOSE_POSITION:
+            raise ValueError("Invalid close position memo")
+
+        if not reason:
+            reason = f"Job {self.id} close position confirmation {'accepted' if accept else 'rejected'}"
+
+        # Sign the memo
+        self.acp_client.contract_manager.sign_memo(memo_id, accept, reason)
 
     def position_fulfilled(
             self,
@@ -343,21 +416,22 @@ class ACPJob(BaseModel):
 
         self.acp_client.sign_memo(memo.id, accept, reason)
 
-        total_amount = sum(p.amount for p in fulfilled_positions)
-        close_job_response_payload = GenericPayload(
-            type=PayloadType.POSITION_FULFILLED,
-            data=fulfilled_positions,
-        )
+        if accept:
+            total_amount = sum(p.amount for p in fulfilled_positions)
+            close_job_response_payload = GenericPayload(
+                type=PayloadType.POSITION_FULFILLED,
+                data=fulfilled_positions,
+            )
 
-        return self.acp_client.transfer_funds(
-            self.id,
-            total_amount,
-            self.provider_address,
-            0,
-            FeeType.NO_FEE,
-            close_job_response_payload,
-            ACPJobPhase.COMPLETED
-        )
+            return self.acp_client.transfer_funds(
+                self.id,
+                total_amount,
+                self.provider_address,
+                0,
+                FeeType.NO_FEE,
+                close_job_response_payload,
+                ACPJobPhase.COMPLETED
+            )
 
     def confirm_job_closure(
             self,

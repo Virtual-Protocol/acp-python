@@ -65,7 +65,7 @@ def buyer():
 
             # Buyer starts closing positions on initiative, before TP/SL hit
             time.sleep(10)
-            job.close_position(
+            job.close_partial_position(
                 ClosePositionPayload(
                     symbol="BTC",
                     amount=1.01
