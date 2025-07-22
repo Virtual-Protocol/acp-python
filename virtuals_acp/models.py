@@ -73,6 +73,7 @@ class PayloadType(str, Enum):
     FUND_RESPONSE = "fund_response"
     OPEN_POSITION = "open_position"
     CLOSE_POSITION = "close_position"
+    CLOSE_PARTIAL_POSITION = "close_partial_position"
     POSITION_FULFILLED = "position_fulfilled"
     CLOSE_JOB_AND_WITHDRAW = "close_job_and_withdraw"
     UNFULFILLED_POSITION = "unfulfilled_position"
@@ -141,3 +142,8 @@ class UnfulfilledPositionPayload(BaseModel):
 
 class CloseJobAndWithdrawPayload(BaseModel):
     message: str
+
+
+class RequestClosePositionPayload(BaseModel):
+    symbol: str
+    contract_address: Optional[str] = None
