@@ -1,11 +1,12 @@
 # virtuals_acp/models.py
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, TYPE_CHECKING, Dict
 from enum import Enum
+from typing import Any, List, Optional, TYPE_CHECKING, Dict
 
 if TYPE_CHECKING:
     from virtuals_acp.offering import ACPJobOffering
+
 
 class MemoType(Enum):
     MESSAGE = 0
@@ -15,6 +16,7 @@ class MemoType(Enum):
     OBJECT_URL = 4
     TXHASH = 5
 
+
 class ACPJobPhase(Enum):
     REQUEST = 0
     NEGOTIATION = 1
@@ -23,10 +25,11 @@ class ACPJobPhase(Enum):
     COMPLETED = 4
     REJECTED = 5
     EXPIRED = 6
-    
+
+
 class ACPAgentSort(Enum):
     SUCCESSFUL_JOB_COUNT = "successfulJobCount"
-    SUCCESS_RATE = "successRate" 
+    SUCCESS_RATE = "successRate"
     UNIQUE_BUYER_COUNT = "uniqueBuyerCount"
     MINS_FROM_LAST_ONLINE = "minsFromLastOnlineTime"
     IS_ONLINE = "isOnline"
@@ -37,7 +40,7 @@ class IACPAgent:
     id: int
     name: str
     description: str
-    wallet_address: str # Checksummed address
+    wallet_address: str  # Checksummed address
     offerings: List["ACPJobOffering"] = field(default_factory=list)
     twitter_handle: Optional[str] = None
     # Full fields from TS for completeness, though browse_agent returns a subset
@@ -52,5 +55,3 @@ class IACPAgent:
     virtual_agent_id: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
     processing_time: Optional[str] = None
-
-
