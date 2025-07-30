@@ -100,6 +100,7 @@ class TPSLConfig(BaseModel):
 class OpenPositionPayload(BaseModel):
     symbol: str
     amount: float
+    chain: Optional[str] = None
     contract_address: Optional[str] = None
     tp: TPSLConfig
     sl: TPSLConfig

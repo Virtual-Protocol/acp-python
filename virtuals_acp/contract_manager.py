@@ -1,6 +1,7 @@
 # virtuals_acp/contract_manager.py
 
 import json
+import math
 import time
 from datetime import datetime
 from typing import Optional, Tuple, Dict, Any, Union
@@ -72,14 +73,14 @@ class _ACPContractManager:
         agent_wallet_address: str,
         provider_address: str,
         evaluator_address: str,
-        expire_at: datetime
+        expired_at: datetime
     ) -> str:
         retries = 3
         while retries > 0:
             try:
                 provider_address = Web3.to_checksum_address(provider_address)
                 evaluator_address = Web3.to_checksum_address(evaluator_address)
-                expire_timestamp = int(expire_at.timestamp())
+                expire_timestamp = int(expired_at.timestamp())
         
                 # Sign the transaction
                 user_op_hash = self._sign_transaction(
@@ -169,6 +170,7 @@ class _ACPContractManager:
             fee_type: FeeType,
             next_phase: ACPJobPhase,
             memo_type: Union[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER],
+            expired_at: Optional[datetime] = None,
             token: Optional[str] = None
     ) -> Dict[str, Any]:
         receiver_address = Web3.to_checksum_address(receiver_address)
@@ -185,7 +187,8 @@ class _ACPContractManager:
                 fee_amount,
                 fee_type.value,
                 memo_type.value,
-                next_phase.value
+                next_phase.value,
+                math.floor(expired_at.timestamp()) if expired_at else 0
             ]
         )
 

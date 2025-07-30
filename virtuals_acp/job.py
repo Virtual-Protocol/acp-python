@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, List, Optional, Dict, Any
 
 from pydantic import BaseModel, Field, ConfigDict
@@ -77,7 +78,7 @@ class ACPJob(BaseModel):
     def _get_memo_by_id(self, memo_id):
         return next((m for m in self.memos if m.id == memo_id), None)
 
-    def pay(self, amount: float, reason: Optional[str] = None) -> str:
+    def pay(self, amount: float, reason: Optional[str] = None) -> dict[str, Any]:
         if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
             raise ValueError("No transaction memo found")
 
@@ -130,6 +131,7 @@ class ACPJob(BaseModel):
             self,
             payload: List[OpenPositionPayload],
             fee_amount: float,
+            expired_at: Optional[datetime] = None,
             wallet_address: Optional[str] = None,
     ) -> str:
         if not payload:
@@ -150,7 +152,8 @@ class ACPJob(BaseModel):
             FeeType.IMMEDIATE_FEE,
             open_position_payload,
             ACPJobPhase.TRANSACTION,
-            )
+            expired_at
+        )
 
     def respond_open_position(
             self,
@@ -440,8 +443,8 @@ class ACPJob(BaseModel):
             reason: Optional[str] = None
     ):
         memo = self._get_memo_by_id(memo_id)
-        if memo is None or memo.next_phase != ACPJobPhase.EVALUATION or memo.type != MemoType.PAYABLE_TRANSFER:
-            raise ValueError("No payable transfer memo found")
+        if memo is None:
+            raise ValueError("Memo not found")
 
         job_closure_payload = try_parse_json_model(memo.content, GenericPayload[CloseJobAndWithdrawPayload])
         if job_closure_payload is None or job_closure_payload.type != PayloadType.CLOSE_JOB_AND_WITHDRAW:

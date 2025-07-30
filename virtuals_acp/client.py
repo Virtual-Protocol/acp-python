@@ -104,6 +104,7 @@ class VirtualsACP:
             type=MemoType(int(memo["memoType"])),
             content=memo["content"],
             next_phase=memo["nextPhase"],
+            expiry=datetime.fromtimestamp(int(memo["expiry"]) / 1000) if memo.get("expiry") else None
         ) for memo in data["memos"]]
 
         memo_to_sign = next(
@@ -139,6 +140,7 @@ class VirtualsACP:
             type=MemoType(int(memo["memoType"])),
             content=memo["content"],
             next_phase=memo["nextPhase"],
+            expiry=datetime.fromtimestamp(int(memo["expiry"]) / 1000) if memo.get("expiry") else None
         ) for memo in data["memos"]]
 
         context = data["context"]
@@ -492,6 +494,7 @@ class VirtualsACP:
             fee_type: FeeType,
             reason: GenericPayload[T],
             next_phase: ACPJobPhase,
+            expired_at: Optional[datetime] = None,
     ) -> str:
         amount_in_wei = self.w3.to_wei(amount, "ether")
         fee_amount_in_wei = self.w3.to_wei(fee_amount, "ether")
@@ -508,7 +511,8 @@ class VirtualsACP:
             fee_amount_in_wei,
             fee_type,
             next_phase,
-            MemoType.PAYABLE_TRANSFER
+            MemoType.PAYABLE_TRANSFER,
+            expired_at
         )
         tx_hash = data.get('receipts', [])[0].get('transactionHash')
         print(
@@ -590,6 +594,7 @@ class VirtualsACP:
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
                         next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                        expiry=datetime.fromtimestamp(int(memo["expiry"]) / 1000) if memo.get("expiry") else None
                     ))
 
                 context = job.get("context")
@@ -633,7 +638,8 @@ class VirtualsACP:
                         id=memo.get("id"),
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
-                        next_phase=ACPJobPhase(int(memo.get("nextPhase")))
+                        next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                        expiry=datetime.fromtimestamp(int(memo["expiry"]) / 1000) if memo.get("expiry") else None
                     ))
 
                 context = job.get("context")
@@ -677,7 +683,8 @@ class VirtualsACP:
                         id=memo.get("id"),
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
-                        next_phase=ACPJobPhase(int(memo.get("nextPhase")))
+                        next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                        expiry=datetime.fromtimestamp(int(memo["expiry"]) / 1000) if memo.get("expiry") else None
                     ))
 
                 context = job.get("context")
@@ -722,7 +729,8 @@ class VirtualsACP:
                     id=memo.get("id"),
                     type=MemoType(int(memo.get("memoType"))),
                     content=memo.get("content"),
-                    next_phase=ACPJobPhase(int(memo.get("nextPhase")))
+                    next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                    expiry=datetime.fromtimestamp(int(memo["expiry"]) / 1000) if memo.get("expiry") else None
                 ))
 
             context = data.get("data", {}).get("context")
@@ -760,11 +768,14 @@ class VirtualsACP:
             if data.get("error"):
                 raise ACPApiError(data["error"]["message"])
 
+            memo = data.get("data", {})
+
             return ACPMemo(
-                id=data.get("data", {}).get("id"),
-                type=MemoType(int(data.get("data", {}).get("memoType"))),
-                content=data.get("data", {}).get("content"),
-                next_phase=ACPJobPhase(int(data.get("data", {}).get("nextPhase")))
+                id=memo.get("id"),
+                type=MemoType(int(memo.get("memoType"))),
+                content=memo.get("content"),
+                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                expiry=datetime.fromtimestamp(int(memo["expiry"]) / 1000) if memo.get("expiry") else None
             )
 
         except Exception as e:

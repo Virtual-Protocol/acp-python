@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional, Type, TypeVar
 
 from pydantic import BaseModel, ConfigDict
@@ -12,6 +13,7 @@ class ACPMemo(BaseModel):
     type: MemoType
     content: str
     next_phase: ACPJobPhase
+    expiry: Optional[datetime] = None
     structured_content: Optional[GenericPayload] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -21,7 +23,7 @@ class ACPMemo(BaseModel):
         self.structured_content = try_parse_json_model(self.content, GenericPayload)
 
     def __str__(self):
-        return f"AcpMemo(id={self.id}, type={self.type}, content={self.content}, next_phase={self.next_phase})"
+        return f"AcpMemo(id={self.id}, type={self.type}, content={self.content}, next_phase={self.next_phase}, expiry={self.expiry})"
 
     @property
     def payload_type(self) -> Optional[PayloadType]:
