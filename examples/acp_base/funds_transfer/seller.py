@@ -61,7 +61,7 @@ def seller():
                     job.position_fulfilled(
                         PositionFulfilledPayload(
                             symbol="VIRTUAL",
-                            amount=99,
+                            amount=0.099,
                             contract_address="0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b",
                             type="TP",
                             pnl=96,
@@ -75,7 +75,7 @@ def seller():
                     job.unfulfilled_position(
                         UnfulfilledPositionPayload(
                             symbol="ETH",
-                            amount=1.5,
+                            amount=0.0015,
                             contract_address="0xd449119E89773693D573ED217981659028C7662E",
                             type="PARTIAL"
                         )
@@ -111,7 +111,7 @@ def seller():
                     [
                         PositionFulfilledPayload(
                             symbol="ETH",
-                            amount=0.5,
+                            amount=0.0005,
                             contract_address="0xd449119E89773693D573ED217981659028C7662E",
                             type="CLOSE",
                             pnl=0,

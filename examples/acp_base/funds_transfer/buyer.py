@@ -33,18 +33,18 @@ def buyer():
                 [
                     OpenPositionPayload(
                         symbol="BTC",
-                        amount=1, # amount in $VIRTUAL
+                        amount=0.001, # amount in $VIRTUAL
                         tp=TPSLConfig(percentage=5),
                         sl=TPSLConfig(percentage=2),
                     ),
                     OpenPositionPayload(
                         symbol="ETH",
-                        amount=2, # amount in $VIRTUAL
+                        amount=0.002, # amount in $VIRTUAL
                         tp=TPSLConfig(percentage=5),
                         sl=TPSLConfig(percentage=2),
                     ),
                 ],
-                0.005 # fee amount in $VIRTUAL
+                0.001 # fee amount in $VIRTUAL
             )
             print(f"Job {job.id} 2 positions opened")
 
@@ -54,12 +54,12 @@ def buyer():
                 [
                     OpenPositionPayload(
                         symbol="VIRTUAL",
-                        amount=3, # amount in $VIRTUAL
+                        amount=0.003, # amount in $VIRTUAL
                         tp=TPSLConfig(percentage=33000),
                         sl=TPSLConfig(percentage=2),
                     )
                 ],
-                0.005
+                0.0001
             )
             print(f"Job {job.id} 1 more position opened")
 
@@ -67,7 +67,7 @@ def buyer():
             time.sleep(10)
             job.close_partial_position(
                 ClosePositionPayload(
-                    symbol="BTC",
+                    position_id=0,
                     amount=1.01
                 )
             )
