@@ -2,6 +2,7 @@
 
 import math
 import time
+import threading
 from datetime import datetime
 from typing import Optional, Dict, Any, Union
 
@@ -13,6 +14,8 @@ from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs import ACPContractConfig
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
+
+alchemy_lock = threading.Lock()
 
 
 class _ACPContractManager:
@@ -39,31 +42,33 @@ class _ACPContractManager:
         )
         
     def validate_transaction(self, hash_value: str) -> Dict[str, Any]:
-        try:
-            return self.alchemy_kit.get_calls_status(hash_value)
-        except Exception as e:
-            raise Exception(f"Failed to get job_id {e}")
+        with alchemy_lock:
+            try:
+                return self.alchemy_kit.get_calls_status(hash_value)
+            except Exception as e:
+                raise Exception(f"Failed to get job_id {e}")
     
     def _sign_transaction(
             self, method_name: str,
             args: list,
             contract_address: Optional[str] = None
     ) -> str:
-        if contract_address:
-            encoded_data = self.token_contract.encode_abi(method_name, args=args)
-        else:
-            encoded_data = self.contract.encode_abi(method_name, args=args)
-        
-        trx_data = [{
-            "to": contract_address if contract_address else self.config.contract_address,
-            "data": encoded_data
-        }]
+        with alchemy_lock:
+            if contract_address:
+                encoded_data = self.token_contract.encode_abi(method_name, args=args)
+            else:
+                encoded_data = self.contract.encode_abi(method_name, args=args)
+            
+            trx_data = [{
+                "to": contract_address if contract_address else self.config.contract_address,
+                "data": encoded_data
+            }]
 
-        self.alchemy_kit.create_session()
-        send_result = self.alchemy_kit.execute_calls(trx_data)
-        user_op_hash = self.alchemy_kit.get_user_operation_hash(send_result)
+            self.alchemy_kit.create_session()
+            send_result = self.alchemy_kit.execute_calls(trx_data)
+            user_op_hash = self.alchemy_kit.get_user_operation_hash(send_result)
 
-        return user_op_hash
+            return user_op_hash
         
     def create_job(
         self,
