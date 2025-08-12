@@ -2,6 +2,7 @@
 
 import math
 import time
+import threading
 from datetime import datetime
 from typing import Optional, Dict, Any, Union
 
@@ -13,6 +14,8 @@ from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs import ACPContractConfig
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
+
+alchemy_lock = threading.Lock()
 
 
 class _ACPContractManager:
@@ -72,54 +75,56 @@ class _ACPContractManager:
         evaluator_address: str,
         expired_at: datetime
     ) -> str:
-        retries = 3
-        while retries > 0:
-            try:
-                provider_address = Web3.to_checksum_address(provider_address)
-                evaluator_address = Web3.to_checksum_address(evaluator_address)
-                expire_timestamp = int(expired_at.timestamp())
-        
-                # Sign the transaction
-                user_op_hash = self._sign_transaction(
-                    "createJob", 
-                    [provider_address, evaluator_address, expire_timestamp]
-                )
-                return user_op_hash
-            except Exception as e:
-                if (retries == 1):
-                    print(f"Failed to create job: {e}")
-                retries -= 1
-                time.sleep(2 * (3 - retries))
-        raise Exception("Failed to create job")
+        with alchemy_lock:
+            retries = 3
+            while retries > 0:
+                try:
+                    provider_address = Web3.to_checksum_address(provider_address)
+                    evaluator_address = Web3.to_checksum_address(evaluator_address)
+                    expire_timestamp = int(expired_at.timestamp())
+            
+                    # Sign the transaction
+                    user_op_hash = self._sign_transaction(
+                        "createJob", 
+                        [provider_address, evaluator_address, expire_timestamp]
+                    )
+                    return user_op_hash
+                except Exception as e:
+                    if (retries == 1):
+                        print(f"Failed to create job: {e}")
+                    retries -= 1
+                    time.sleep(2 * (3 - retries))
+            raise Exception("Failed to create job")
                 
 
     def approve_allowance(self, price_in_wei: int) -> Dict[str, Any]:
-        user_op_hash = self._sign_transaction(
-            "approve", 
-            [self.config.contract_address, price_in_wei],
-            self.config.virtuals_token_address
-        )
-        
-        if user_op_hash is None:
-            raise Exception("Failed to sign transaction - approve_allowance")
-        
-        retries = 3
-        while retries > 0:
-            try:
-                result = self.validate_transaction(user_op_hash)
-                
-                if result.get("status") == 200:
-                    return result
-                else:
-                    raise Exception(f"Failed to approve allowance")
-            except Exception as e:
-                retries -= 1
-                if retries == 0:
-                    print(f"Error during approve_allowance: {e}")
-                    raise
-                time.sleep(2 * (3 - retries))
-                
-        raise Exception("Failed to approve allowance")
+        with alchemy_lock:
+            user_op_hash = self._sign_transaction(
+                "approve", 
+                [self.config.contract_address, price_in_wei],
+                self.config.virtuals_token_address
+            )
+            
+            if user_op_hash is None:
+                raise Exception("Failed to sign transaction - approve_allowance")
+            
+            retries = 3
+            while retries > 0:
+                try:
+                    result = self.validate_transaction(user_op_hash)
+                    
+                    if result.get("status") == 200:
+                        return result
+                    else:
+                        raise Exception(f"Failed to approve allowance")
+                except Exception as e:
+                    retries -= 1
+                    if retries == 0:
+                        print(f"Error during approve_allowance: {e}")
+                        raise
+                    time.sleep(2 * (3 - retries))
+                    
+            raise Exception("Failed to approve allowance")
 
 
     def create_payable_memo(
@@ -135,45 +140,46 @@ class _ACPContractManager:
             expired_at: datetime,
             token: Optional[str] = None
     ) -> Dict[str, Any]:
-        receiver_address = Web3.to_checksum_address(receiver_address)
-        token = self.config.virtuals_token_address if token is None else token
+        with alchemy_lock:
+            receiver_address = Web3.to_checksum_address(receiver_address)
+            token = self.config.virtuals_token_address if token is None else token
 
-        user_op_hash = self._sign_transaction(
-            "createPayableMemo",
-            [
-                job_id,
-                content,
-                token,
-                amount,
-                receiver_address,
-                fee_amount,
-                fee_type.value,
-                memo_type.value,
-                next_phase.value,
-                math.floor(expired_at.timestamp())
-            ]
-        )
+            user_op_hash = self._sign_transaction(
+                "createPayableMemo",
+                [
+                    job_id,
+                    content,
+                    token,
+                    amount,
+                    receiver_address,
+                    fee_amount,
+                    fee_type.value,
+                    memo_type.value,
+                    next_phase.value,
+                    math.floor(expired_at.timestamp())
+                ]
+            )
 
-        if user_op_hash is None:
-            raise Exception("Failed to sign transaction - create_payable_memo")
+            if user_op_hash is None:
+                raise Exception("Failed to sign transaction - create_payable_memo")
 
-        retries = 3
-        while retries > 0:
-            try:
-                result = self.validate_transaction(user_op_hash)
+            retries = 3
+            while retries > 0:
+                try:
+                    result = self.validate_transaction(user_op_hash)
 
-                if result.get("status") == 200:
-                    return result
-                else:
-                    raise Exception(f"Failed to create payable memo")
-            except Exception as e:
-                retries -= 1
-                if retries == 0:
-                    print(f"Error during create_payable_memo: {e}")
-                    raise
-                time.sleep(2 * (3 - retries))
+                    if result.get("status") == 200:
+                        return result
+                    else:
+                        raise Exception(f"Failed to create payable memo")
+                except Exception as e:
+                    retries -= 1
+                    if retries == 0:
+                        print(f"Error during create_payable_memo: {e}")
+                        raise
+                    time.sleep(2 * (3 - retries))
 
-        raise Exception(f"Failed to create payable memo")
+            raise Exception(f"Failed to create payable memo")
 
 
     def create_memo(
@@ -183,32 +189,33 @@ class _ACPContractManager:
             is_secured: bool,
             next_phase: ACPJobPhase
     ) -> Dict[str, Any]:
-        user_op_hash = self._sign_transaction(
-            "createMemo",
-            [job_id, content, memo_type.value, is_secured, next_phase.value]
-        )
+        with alchemy_lock:
+            user_op_hash = self._sign_transaction(
+                "createMemo",
+                [job_id, content, memo_type.value, is_secured, next_phase.value]
+            )
 
-        if user_op_hash is None:
-            raise Exception("Failed to sign transaction - create_memo")
+            if user_op_hash is None:
+                raise Exception("Failed to sign transaction - create_memo")
 
-        retries = 3
-        while retries > 0:
-            try:
-                result = self.validate_transaction(user_op_hash)
+            retries = 3
+            while retries > 0:
+                try:
+                    result = self.validate_transaction(user_op_hash)
 
-                if result.get("status") == 200:
-                    return result
-                else:
-                    raise Exception(f"Failed to create memo")
+                    if result.get("status") == 200:
+                        return result
+                    else:
+                        raise Exception(f"Failed to create memo")
 
-            except Exception as e:
-                retries -= 1
-                if retries == 0:
-                    print(f"Error during create_memo: {e}")
-                    raise
-                time.sleep(2 * (3 - retries))
+                except Exception as e:
+                    retries -= 1
+                    if retries == 0:
+                        print(f"Error during create_memo: {e}")
+                        raise
+                    time.sleep(2 * (3 - retries))
 
-        raise Exception("Failed to create memo")
+            raise Exception("Failed to create memo")
 
 
     def sign_memo(
@@ -217,56 +224,58 @@ class _ACPContractManager:
         is_approved: bool,
         reason: Optional[str] = ""
     ) -> Dict[str, Any]:
-        user_op_hash = self._sign_transaction(
-            "signMemo", 
-            [memo_id, is_approved, reason]
-        )
-        
-        if user_op_hash is None:
-            raise Exception("Failed to sign transaction - sign_memo")
-        
-        retries = 3
-        while retries > 0:
-            try:
-                result = self.validate_transaction(user_op_hash)
-                
-                if result.get("status") == 200:
-                    return result
-                else:
-                    raise Exception(f"Failed to sign memo")
-            except Exception as e:
-                retries -= 1
-                if retries == 0:
-                    print(f"Error during sign_memo: {e}")
-                    raise
-                time.sleep(2 * (3 - retries))
-                
-        raise Exception(f"Failed to sign memo")
+        with alchemy_lock:
+            user_op_hash = self._sign_transaction(
+                "signMemo", 
+                [memo_id, is_approved, reason]
+            )
+            
+            if user_op_hash is None:
+                raise Exception("Failed to sign transaction - sign_memo")
+            
+            retries = 3
+            while retries > 0:
+                try:
+                    result = self.validate_transaction(user_op_hash)
+                    
+                    if result.get("status") == 200:
+                        return result
+                    else:
+                        raise Exception(f"Failed to sign memo")
+                except Exception as e:
+                    retries -= 1
+                    if retries == 0:
+                        print(f"Error during sign_memo: {e}")
+                        raise
+                    time.sleep(2 * (3 - retries))
+                    
+            raise Exception(f"Failed to sign memo")
     
     def set_budget(self, job_id: int, budget: int) -> Dict[str, Any]:
-        user_op_hash = self._sign_transaction(
-            "setBudget", 
-            [job_id, budget]
-        )
-        
-        if user_op_hash is None:
-            raise Exception("Failed to sign transaction - set_budget")
-        
-        retries = 3
-        while retries > 0:
-            try:
-                result = self.validate_transaction(user_op_hash)
-                
-                if result.get("status") == 200:
-                    return result
-                else:
-                    raise Exception(f"Failed to set budget {result}")
-                
-            except Exception as e:
-                retries -= 1
-                if retries == 0:
-                    print(f"Error during set_budget: {e}")
-                    raise
-                time.sleep(2 * (3 - retries))
-                
-        raise Exception("Failed to set budget")
+        with alchemy_lock:
+            user_op_hash = self._sign_transaction(
+                "setBudget", 
+                [job_id, budget]
+            )
+            
+            if user_op_hash is None:
+                raise Exception("Failed to sign transaction - set_budget")
+            
+            retries = 3
+            while retries > 0:
+                try:
+                    result = self.validate_transaction(user_op_hash)
+                    
+                    if result.get("status") == 200:
+                        return result
+                    else:
+                        raise Exception(f"Failed to set budget {result}")
+                    
+                except Exception as e:
+                    retries -= 1
+                    if retries == 0:
+                        print(f"Error during set_budget: {e}")
+                        raise
+                    time.sleep(2 * (3 - retries))
+                    
+            raise Exception("Failed to set budget")
