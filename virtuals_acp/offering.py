@@ -12,6 +12,7 @@ class ACPJobOffering(BaseModel):
     provider_address: str
     name: str
     price: float
+    price_usd: float
     requirement_schema: Optional[Dict[str, Any]] = None
     
     model_config = ConfigDict(arbitrary_types_allowed=True)

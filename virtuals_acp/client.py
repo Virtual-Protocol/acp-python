@@ -261,6 +261,7 @@ class VirtualsACP:
                         provider_address=agent_data["walletAddress"],
                         name=offering["name"],
                         price=offering["price"],
+                        price_usd=offering["priceUsd"],
                         requirement_schema=offering.get("requirementSchema", None)
                     )
                     for offering in agent_data.get("offerings", [])
@@ -299,9 +300,7 @@ class VirtualsACP:
         retry_count = 3
         retry_delay = 3
 
-        user_op_hash = self.contract_manager.create_job(
-            self.agent_address, provider_address, eval_addr, expired_at
-        )
+        user_op_hash = self.contract_manager.create_job(provider_address, eval_addr, expired_at)
 
         time.sleep(retry_delay)
         for attempt in range(retry_count):
@@ -352,8 +351,7 @@ class VirtualsACP:
         if job_id is None or job_id == "":
             raise Exception("Failed to create job")
 
-        amount_in_wei = self.w3.to_wei(amount, "ether")
-        self.contract_manager.set_budget(job_id, amount_in_wei)
+        self.contract_manager.set_budget_with_payment_token(job_id, amount)
         time.sleep(10)
 
         self.contract_manager.create_memo(
@@ -425,10 +423,7 @@ class VirtualsACP:
             reason: Optional[str] = ""
     ) -> Dict[str, Any]:
 
-        amount_in_wei = self.w3.to_wei(amount, "ether")
-        time.sleep(10)
-
-        self.contract_manager.approve_allowance(amount_in_wei)
+        self.contract_manager.approve_allowance(amount)
         time.sleep(10)
 
         self.contract_manager.sign_memo(memo_id, True, reason or "")
@@ -461,9 +456,9 @@ class VirtualsACP:
         data = self.contract_manager.create_payable_memo(
             job_id,
             json.dumps(reason.model_dump()),
-            self.w3.to_wei(amount, "ether"),
+            amount,
             receiver_address,
-            self.w3.to_wei(fee_amount, "ether"),
+            fee_amount,
             fee_type,
             next_phase,
             MemoType.PAYABLE_REQUEST,
@@ -486,8 +481,7 @@ class VirtualsACP:
             return tx_hash
 
         if amount > 0:
-            amount_in_wei = self.w3.to_wei(amount, "ether")
-            self.contract_manager.approve_allowance(amount_in_wei)
+            self.contract_manager.approve_allowance(amount)
 
         data = self.contract_manager.sign_memo(memo_id, True, reason)
         tx_hash = data.get('receipts', [])[0].get('transactionHash')
@@ -504,19 +498,17 @@ class VirtualsACP:
             next_phase: ACPJobPhase,
             expired_at: datetime,
     ) -> str:
-        amount_in_wei = self.w3.to_wei(amount, "ether")
-        fee_amount_in_wei = self.w3.to_wei(fee_amount, "ether")
-        total_allowance_in_wei = amount_in_wei + fee_amount_in_wei
+        total_amount = amount + fee_amount
 
-        if (amount + fee_amount) > 0:
-            self.contract_manager.approve_allowance(total_allowance_in_wei)
+        if total_amount > 0:
+            self.contract_manager.approve_allowance(total_amount)
 
         data = self.contract_manager.create_payable_memo(
             job_id,
             json.dumps(reason.model_dump()),
-            amount_in_wei,
+            amount,
             receiver_address,
-            fee_amount_in_wei,
+            fee_amount,
             fee_type,
             next_phase,
             MemoType.PAYABLE_TRANSFER_ESCROW,
@@ -819,6 +811,7 @@ class VirtualsACP:
                     provider_address=agent_data["walletAddress"],
                     name=offering["name"],
                     price=offering["price"],
+                    price_usd=offering["priceUsd"],
                     requirement_schema=offering.get("requirementSchema", None)
                 )
                 for offering in agent_data.get("offerings", [])

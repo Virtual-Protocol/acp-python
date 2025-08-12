@@ -10,7 +10,8 @@ class ACPContractConfig:
     rpc_url: str
     chain_id: int
     contract_address: str
-    virtuals_token_address: str
+    payment_token_address: str
+    payment_token_decimals: int
     acp_api_url: str
     alchemy_policy_id: str
     alchemy_base_url: str
@@ -21,7 +22,8 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
     rpc_url="https://sepolia.base.org",
     chain_id=84532,
     contract_address="0x8Db6B1c839Fc8f6bd35777E194677B67b4D51928",
-    virtuals_token_address="0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
+    payment_token_address="0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    payment_token_decimals=6,
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.gg/api",
@@ -33,7 +35,8 @@ BASE_MAINNET_CONFIG = ACPContractConfig(
     rpc_url="https://mainnet.base.org", 
     chain_id=8453,
     contract_address="0x6a1FE26D54ab0d3E1e3168f2e0c0cDa5cC0A0A4A",
-    virtuals_token_address="0x0b3e328455c4059EEb9e3f84b5543F74E24e7E1b",
+    payment_token_address="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    payment_token_decimals=6,
     alchemy_base_url="https://alchemy-proxy-prod.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.io/api", # PROD
