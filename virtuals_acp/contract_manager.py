@@ -46,6 +46,14 @@ class _ACPContractManager:
             return self.alchemy_kit.get_calls_status(hash_value)
         except Exception as e:
             raise Exception(f"Failed to get job_id {e}")
+        
+    def validate_transaction_with_lock(self, hash_value: str) -> Dict[str, Any]:
+        with alchemy_lock:
+            print(f"Acquired lock: {hash_value}")
+            try:
+                return self.alchemy_kit.get_calls_status(hash_value)
+            except Exception as e:
+                raise Exception(f"Failed to get job_id {e}")
     
     def _sign_transaction(
             self, method_name: str,

@@ -304,7 +304,7 @@ class VirtualsACP:
         time.sleep(retry_delay)
         for attempt in range(retry_count):
             try:
-                response = self.contract_manager.validate_transaction(user_op_hash)
+                response = self.contract_manager.validate_transaction_with_lock(user_op_hash)
 
                 if response.get("status") == 200:
                     logs = response.get("receipts", [])[0].get("logs", [])
