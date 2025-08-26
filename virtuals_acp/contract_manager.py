@@ -12,11 +12,12 @@ from web3.contract import Contract
 
 from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
+from virtuals_acp.base_contract_manager import BaseACPContractManager
 from virtuals_acp.configs import ACPContractConfig
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
 
 
-class _ACPContractManager:
+class ACPContractManager(BaseACPContractManager):
     def __init__(
             self,
             web3_client: Web3,
@@ -25,12 +26,10 @@ class _ACPContractManager:
             config: ACPContractConfig,
             wallet_private_key: str
     ):
-        self.w3 = web3_client
+        super().__init__(web3_client, agent_wallet_address, entity_id, config)
         self.account = Account.from_key(wallet_private_key)
-        self.config = config
         self.alchemy_kit = AlchemyAccountKit(agent_wallet_address, entity_id, self.account, config.chain_id)
         self.alchemy_account = None
-        self.agent_wallet_address = agent_wallet_address
 
         self.contract: Contract = self.w3.eth.contract(
             address=Web3.to_checksum_address(config.contract_address), abi=ACP_ABI
