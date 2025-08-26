@@ -38,7 +38,7 @@ class ACPJob(BaseModel):
         )
 
     @property
-    def service_requirement(self) -> Optional[str]:
+    def service_requirement(self) -> Optional[Dict[str,Any]]:
         """Get the service requirement from the negotiation memo"""
         memo = next(
             (m for m in self.memos if ACPJobPhase(m.next_phase) == ACPJobPhase.NEGOTIATION),
