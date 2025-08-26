@@ -35,12 +35,19 @@ class VirtualsACP:
             agent_wallet_address: Optional[str] = None,
             config: ACPContractConfig = DEFAULT_CONFIG,
             on_new_task: Optional[Callable] = None,
-            on_evaluate: Optional[Callable] = None
+            on_evaluate: Optional[Callable] = None,
+            # V2 (Privy) optional parameters
+            wallet_id: Optional[str] = None,
+            private_key_base64: Optional[str] = None
     ):
 
         self.config = config
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
         self.entity_id = entity_id
+        
+        # Store V2 parameters for factory method
+        self.wallet_id = wallet_id
+        self.private_key_base64 = private_key_base64
 
         if config.chain_env == "base-sepolia":
             self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
@@ -60,7 +67,8 @@ class VirtualsACP:
 
         # Initialize the contract manager based on configuration
         self.contract_manager = self._create_contract_manager(
-            self.w3, self._agent_wallet_address, entity_id, config, wallet_private_key
+            self.w3, self._agent_wallet_address, entity_id, config, wallet_private_key,
+            wallet_id, private_key_base64
         )
         self.acp_api_url = config.acp_api_url
 
@@ -77,27 +85,33 @@ class VirtualsACP:
         agent_wallet_address: str,
         entity_id: int,
         config: ACPContractConfig,
-        wallet_private_key: str
+        wallet_private_key: str,
+        wallet_id: Optional[str] = None,
+        private_key_base64: Optional[str] = None
     ) -> BaseACPContractManager:
         """
-        Factory method to create the appropriate contract manager based on configuration.
+        Factory method to create the appropriate contract manager based on configuration and parameters.
         
-        Returns:
-            Either ACPContractManager (Alchemy) or ACPContractManagerV2 (Privy) based on config
+        Returns V2 (Privy) if:
+        - config has privy_app_id configured AND
+        - wallet_id and private_key_base64 are provided
+        
+        Otherwise returns V1 (Alchemy).
         """
-        # Check if Privy is configured
-        if hasattr(config, 'privy_app_id') and config.privy_app_id:
-            # Use Privy implementation (V2) - Pure transaction preparation
+        # Check if V2 (Privy) should be used
+        if (hasattr(config, 'privy_app_id') and config.privy_app_id and 
+            wallet_id and private_key_base64):
+            # Use V2 (Privy) implementation
             from virtuals_acp.contract_managerV2 import ACPContractManagerV2
             
             return ACPContractManagerV2(
                 web3_client=web3_client,
-                agent_wallet_address=agent_wallet_address,
-                entity_id=entity_id,
-                config=config
+                config=config,
+                wallet_id=wallet_id,
+                private_key_base64=private_key_base64
             )
         else:
-            # Use Alchemy implementation (default)
+            # Use V1 (Alchemy) implementation
             from virtuals_acp.contract_manager import ACPContractManager
             
             return ACPContractManager(
