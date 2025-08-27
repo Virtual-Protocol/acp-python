@@ -6,7 +6,8 @@ from typing import Optional
 from virtuals_acp import ACPMemo, MemoType, ACPGraduationStatus, ACPOnlineStatus
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.job import ACPJob
-from virtuals_acp.models import ACPJobPhase, OpenPositionPayload, TPSLConfig, ClosePositionPayload, PayloadType
+from virtuals_acp.models import ACPJobPhase, OpenPositionPayload, TPSLConfig, ClosePositionPayload, PayloadType, \
+    PositionDirection
 from virtuals_acp.env import EnvSettings
 
 from dotenv import load_dotenv
@@ -41,12 +42,14 @@ def buyer():
                     OpenPositionPayload(
                         symbol="BTC",
                         amount=0.001, # amount in $USDC
+                        direction=PositionDirection.LONG,
                         tp=TPSLConfig(percentage=5),
                         sl=TPSLConfig(percentage=2),
                     ),
                     OpenPositionPayload(
                         symbol="ETH",
                         amount=0.002, # amount in $USDC
+                        direction=PositionDirection.SHORT,
                         tp=TPSLConfig(percentage=5),
                         sl=TPSLConfig(percentage=2),
                     ),
