@@ -1,7 +1,7 @@
 import threading
 import time
 from collections import deque
-from typing import Optional
+from typing import Optional, Deque, Tuple
 
 from dotenv import load_dotenv
 
@@ -21,7 +21,7 @@ def seller(use_thread_lock: bool = True):
     if env.SELLER_ENTITY_ID is None:
         raise ValueError("SELLER_ENTITY_ID is not set")
 
-    job_queue = deque()
+    job_queue: Deque[Tuple[ACPJob, Optional[ACPMemo]]] = deque()
     job_queue_lock = threading.Lock()
     job_event = threading.Event()
 
@@ -44,6 +44,7 @@ def seller(use_thread_lock: bool = True):
                     return job, memo_to_sign
                 else:
                     print("[safe_pop_job] Queue is empty after acquiring lock")
+                    return None, None
         else:
             if job_queue:
                 job, memo_to_sign = job_queue.popleft()
@@ -51,7 +52,7 @@ def seller(use_thread_lock: bool = True):
                 return job, memo_to_sign
             else:
                 print("[safe_pop_job] Queue is empty (no lock)")
-        return None, None
+                return None, None
 
     def job_worker():
         while True:

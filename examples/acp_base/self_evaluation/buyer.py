@@ -1,7 +1,7 @@
 import threading
 from collections import deque
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Deque, Tuple
 
 from dotenv import load_dotenv
 
@@ -24,7 +24,7 @@ def buyer(use_thread_lock: bool = True):
     if env.BUYER_ENTITY_ID is None:
         raise ValueError("BUYER_ENTITY_ID is not set")
 
-    job_queue = deque()
+    job_queue: Deque[Tuple[ACPJob, Optional[ACPMemo]]] = deque()
     job_queue_lock = threading.Lock()
     initiate_job_lock = threading.Lock()
     job_event = threading.Event()
@@ -49,6 +49,7 @@ def buyer(use_thread_lock: bool = True):
                     return job, memo_to_sign
                 else:
                     print("[safe_pop_job] Queue is empty after acquiring lock")
+                    return None, None
         else:
             if job_queue:
                 job, memo_to_sign = job_queue.popleft()
@@ -56,7 +57,7 @@ def buyer(use_thread_lock: bool = True):
                 return job, memo_to_sign
             else:
                 print("[safe_pop_job] Queue is empty (no lock)")
-        return None, None
+                return None, None
 
     def job_worker():
         while True:
@@ -83,19 +84,21 @@ def buyer(use_thread_lock: bool = True):
         job_event.set()
 
     def on_evaluate(job: ACPJob):
-        print("Evaluation function called", job.memos)
-        for memo in job.memos:
-            if memo.next_phase == ACPJobPhase.COMPLETED:
-                job.evaluate(True)
-                break
+        print(f"[on_evaluate] Received job {job.id}")
+        safe_append_job(job)
+        job_event.set()
 
     def process_job(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
-        if job.phase == ACPJobPhase.NEGOTIATION:
-            for memo in job.memos:
-                if memo.next_phase == ACPJobPhase.TRANSACTION:
-                    print("Paying job", job.id)
-                    job.pay(job.price)
-                    break
+        if (
+            job.phase == ACPJobPhase.NEGOTIATION and
+            memo_to_sign is not None and
+                memo_to_sign.next_phase == ACPJobPhase.TRANSACTION
+        ):
+            print("Paying job", job.id)
+            job.pay(job.price)
+        elif job.phase == ACPJobPhase.EVALUATION:
+            print("Evaluation function called", job.memos)
+            job.evaluate(True)
         elif job.phase == ACPJobPhase.COMPLETED:
             print("Job completed", job)
         elif job.phase == ACPJobPhase.REJECTED:
