@@ -1,6 +1,5 @@
-# virtuals_acp/configs.py
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Optional
 
 ChainEnv = Literal["base-sepolia", "base"]
 
@@ -13,6 +12,8 @@ class ACPContractConfig:
     payment_token_address: str
     payment_token_decimals: int
     acp_api_url: str
+    privy_relay_url: str
+    privy_app_id: str
     alchemy_policy_id: str
     alchemy_base_url: str
 
@@ -24,9 +25,11 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
     contract_address="0x8Db6B1c839Fc8f6bd35777E194677B67b4D51928",
     payment_token_address="0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     payment_token_decimals=6,
+    acp_api_url="https://acpx.virtuals.gg/api",
+    privy_relay_url="https://acpx.virtuals.gg/api/privy/proxy/relay-transaction",
+    privy_app_id="clsakj3e205soyepnl23x2itv",
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
-    acp_api_url="https://acpx.virtuals.gg/api",
 )
 
 # Configuration for Base Mainnet
@@ -37,9 +40,11 @@ BASE_MAINNET_CONFIG = ACPContractConfig(
     contract_address="0x6a1FE26D54ab0d3E1e3168f2e0c0cDa5cC0A0A4A",
     payment_token_address="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     payment_token_decimals=6,
+    acp_api_url="https://acpx.virtuals.io/api",
+    privy_relay_url="https://acpx.virtuals.gg/api/privy/proxy/relay-transaction",
+    privy_app_id="clsakj3e205soyepnl23x2itv",
     alchemy_base_url="https://alchemy-proxy-prod.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
-    acp_api_url="https://acpx.virtuals.io/api", # PROD
 )
 
 # Define the default configuration for the SDK
