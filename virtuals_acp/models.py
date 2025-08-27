@@ -45,20 +45,20 @@ class FeeType(Enum):
     DEFERRED_FEE = 2
 
 
-class ACPAgentSort(Enum):
+class ACPAgentSort(str, Enum):
     SUCCESSFUL_JOB_COUNT = "successfulJobCount"
     SUCCESS_RATE = "successRate"
     UNIQUE_BUYER_COUNT = "uniqueBuyerCount"
     MINS_FROM_LAST_ONLINE = "minsFromLastOnlineTime"
 
 
-class ACPGraduationStatus(Enum):
+class ACPGraduationStatus(str, Enum):
     GRADUATED = "graduated"
     NOT_GRADUATED = "not_graduated"
     ALL = "all"
 
 
-class ACPOnlineStatus(Enum):
+class ACPOnlineStatus(str, Enum):
     ONLINE = "online"
     OFFLINE = "offline"
     ALL = "all"
@@ -147,11 +147,17 @@ class TPSLConfig(PayloadModel):
     percentage: Optional[float] = None
 
 
+class PositionDirection(str, Enum):
+    LONG = "long"
+    SHORT = "short"
+
+
 class OpenPositionPayload(PayloadModel):
     symbol: str
     amount: float
     chain: Optional[str] = None
     contract_address: Optional[str] = None
+    direction: Optional[PositionDirection] = None
     tp: TPSLConfig
     sl: TPSLConfig
 
