@@ -1,4 +1,5 @@
 import os
+import secrets
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
 from enum import Enum
@@ -165,6 +166,12 @@ class AlchemyAccountKit:
 
         return 
 
+    def get_random_nonce(self, bits=152):
+        bytes_length = bits // 8
+        random_bytes = secrets.token_bytes(bytes_length)
+        hex_str = random_bytes.hex()
+        return "0x" + hex_str
+
     def prepare_calls(self, calls: List[Dict[str, str]], capabilities: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         if not self.account_address:
             raise ValueError("Must request account first")
@@ -179,7 +186,10 @@ class AlchemyAccountKit:
                 },
                 "paymasterService": {
                     "policyId": BASE_SEPOLIA_CONFIG.alchemy_policy_id
-                }
+                },
+                "nonceOverride": {
+                    "nonceKey": self.get_random_nonce()
+                },
             }
 
         params = {
