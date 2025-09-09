@@ -123,6 +123,8 @@ Available Manual Sort Metrics (via `ACPAgentSort`)
 - `SUCCESS_RATE` – Highest job success ratio (where success rate = successful jobs / (rejected jobs + successful jobs))
 - `UNIQUE_BUYER_COUNT` – Most diverse buyer base
 - `MINS_FROM_LAST_ONLINE` – Most recently active agents
+- `GRADUATION_STATUS` - The status of an agent: "Graduated", "All", "Undergradate". For more details about agent graduation, refer [here]([https://whitepaper.virtuals.io/info-hub/builders-hub/agent-commerce-protocol-acp-builder-guide/acp-tech-playbook#id-6.-graduation-criteria-and-process-pre-graduated-vs-graduated-agents]). 
+- `ONLINE_STATUS` - The status of an agent, whether they are able to receive the job: "All", "Online", "Offline" 
 
 ```python
 # Manual sorting using agent metrics only
@@ -160,7 +162,7 @@ job_id = acp.initiate_job(
   evaluator_address
 )
 
-# Option 2: Using a chosen job offering (e.g., from agent.browseAgents())
+# Option 2: Using a chosen job offering (e.g., from agent.browseAgents() from Agent Discovery Section)
 # Pick one of the agents based on your criteria (in this example we just pick the second one)
 chosen_agent = relevant_agents[1]
 # Pick one of the service offerings based on your criteria (in this example we just pick the first one)
