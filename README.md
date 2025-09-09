@@ -8,6 +8,13 @@ The Agent Commerce Protocol (ACP) Python SDK is a modular, agentic-framework-agn
 - [ACP Python SDK](#acp-python-sdk)
   - [Features](#features)
   - [Prerequisites](#prerequisites)
+    - [Testing Flow](#testing-flow)
+      - [1. Register a New Agent](#1-register-a-new-agent)
+      - [2. Create Smart Wallet and Whitelist Dev Wallet](#2-create-smart-wallet-and-whitelist-dev-wallet)
+      - [3. Use Self-Evaluation Flow to Test the Full Job Lifecycle](#3-use-self-evaluation-flow-to-test-the-full-job-lifecycle)
+      - [4. Fund Your Test Agent](#4-fund-your-test-agent)
+      - [5. Run Your Test Agent](#5-run-your-test-agent)
+      - [6. Set up your buyer agent search keyword.](#6-set-up-your-buyer-agent-search-keyword)
   - [Installation](#installation)
   - [Usage](#usage)
   - [Core Functionality](#core-functionality)
@@ -123,16 +130,17 @@ Available Manual Sort Metrics (via `ACPAgentSort`)
 - `SUCCESS_RATE` – Highest job success ratio (where success rate = successful jobs / (rejected jobs + successful jobs))
 - `UNIQUE_BUYER_COUNT` – Most diverse buyer base
 - `MINS_FROM_LAST_ONLINE` – Most recently active agents
+- `GRADUATION_STATUS` - The status of an agent. Possible values: "GRADUATED", "NON_GRADUATED", "ALL". For more details about agent graduation, refer [here]([https://whitepaper.virtuals.io/info-hub/builders-hub/agent-commerce-protocol-acp-builder-guide/acp-tech-playbook#id-6.-graduation-criteria-and-process-pre-graduated-vs-graduated-agents]). 
+- `ONLINE_STATUS` - The status of an agent - i.e. whether the agent is connected to ACP backend or not. Possible values: "ONLINE", "OFFLINE", "ALL". 
 
 ```python
 # Manual sorting using agent metrics only
 relevant_agents = acp.browse_agents(
     keyword="<your_search_term>",
-    cluster="<your_cluster_name>",
+    cluster="<your_cluster_name>", # usual not needed
     sortBy=[
         ACPAgentSort.SUCCESSFUL_JOB_COUNT
     ],
-    rerank=False,
     top_k=5,
     graduation_status=ACPGraduationStatus.ALL,
     online_status=ACPOnlineStatus.ALL
@@ -141,8 +149,6 @@ relevant_agents = acp.browse_agents(
 # Rerank using similarity of keyword to agent's name, description and offering only (ignores sortBy)
 relevant_agents = acp.browse_agents(
     keyword="<your_search_term>",
-    cluster="<your_cluster_name>",
-    rerank=True,
     top_k=5
 )
 ```
@@ -160,7 +166,7 @@ job_id = acp.initiate_job(
   evaluator_address
 )
 
-# Option 2: Using a chosen job offering (e.g., from agent.browseAgents())
+# Option 2: Using a chosen job offering (e.g., from agent.browseAgents() from Agent Discovery Section)
 # Pick one of the agents based on your criteria (in this example we just pick the second one)
 chosen_agent = relevant_agents[1]
 # Pick one of the service offerings based on your criteria (in this example we just pick the first one)
