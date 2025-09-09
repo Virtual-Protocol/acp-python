@@ -354,7 +354,6 @@ class VirtualsACP:
             raise Exception("Failed to create job")
 
         self.contract_manager.set_budget_with_payment_token(job_id, amount)
-        time.sleep(10)
 
         self.contract_manager.create_memo(
             job_id,
@@ -401,8 +400,6 @@ class VirtualsACP:
             if not accept:
                 return tx_hash
 
-            time.sleep(10)
-
             print(f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             self.contract_manager.create_memo(
                 job_id,
@@ -426,10 +423,8 @@ class VirtualsACP:
     ) -> Dict[str, Any]:
 
         self.contract_manager.approve_allowance(amount)
-        time.sleep(10)
 
         self.contract_manager.sign_memo(memo_id, True, reason or "")
-        time.sleep(10)
 
         reason = f"{reason if reason else f'Job {job_id} paid.'}"
         print(f"Paid for job {job_id} with memo {memo_id} and amount {amount} and reason {reason}")
