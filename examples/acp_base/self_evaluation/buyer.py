@@ -24,13 +24,14 @@ def buyer():
         ):
             print("Paying job", job.id)
             job.pay(job.price)
-        elif job.phase == ACPJobPhase.EVALUATION:
-            print("Evaluation function called", job.memos)
-            job.evaluate(True)
         elif job.phase == ACPJobPhase.COMPLETED:
             print("Job completed", job)
         elif job.phase == ACPJobPhase.REJECTED:
             print("Job rejected", job)
+    
+    def on_evaluate(job: ACPJob):
+        print(f"Evaluation function called for job {job.id}")
+        job.evaluate(True)
             
     if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
         raise Exception("WHITELISTED_WALLET_PRIVATE_KEY is not set")
@@ -43,6 +44,7 @@ def buyer():
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         on_new_task=on_new_task,
+        on_evaluate=on_evaluate,
         entity_id=env.BUYER_ENTITY_ID
     )
     
