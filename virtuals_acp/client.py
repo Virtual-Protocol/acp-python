@@ -191,6 +191,7 @@ class VirtualsACP:
                 auth=auth_data,
                 headers=headers_data,
                 transports=['websocket'],
+                retry=True
             )
 
             def signal_handler(sig, frame):

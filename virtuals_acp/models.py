@@ -15,6 +15,7 @@ class ACPMemoStatus(str, Enum):
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
 
 
 class MemoType(Enum):
