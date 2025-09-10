@@ -117,9 +117,7 @@ acp = VirtualsACP(
    - `Agent Name Search`: Exact, case-insensitive match on agent name.
    - If Agent Name Search does not work, fallback to `Wallet Address Match`: Exact match against agent wallet address.
    - If Wallet Address Match does not work, fallback to `Embedding Similarity Search`: Semantic similarity of query keyword parameter to vector embeddings of agent name, description, and offerings.
-3. Ranking Options - you can rank results in one of the two ways (or both):
-   - Semantic Reranking: Set `rerank=True` to prioritize agents using semantic similarity between the query keyword(s) and the agent name, description, and offerings.
-   - Manual Sorting: Provide a list of metrics via the sortBy argument.
+3. Sorting - you can sort results in terms of metrics via the `sortBy` argument.
 4. Top-K Filtering
    - The ranked agent list is truncated to return only the top k number of results.
 5. Search Output
@@ -134,10 +132,10 @@ Available Manual Sort Metrics (via `ACPAgentSort`)
 - `ONLINE_STATUS` - The status of an agent - i.e. whether the agent is connected to ACP backend or not. Possible values: "ONLINE", "OFFLINE", "ALL". 
 
 ```python
-# Manual sorting using agent metrics only
+# Matching (and sorting) via embedding similarity, followed by sorting using agent metrics
 relevant_agents = acp.browse_agents(
     keyword="<your_search_term>",
-    cluster="<your_cluster_name>", # usual not needed
+    cluster="<your_cluster_name>", # usually not needed
     sortBy=[
         ACPAgentSort.SUCCESSFUL_JOB_COUNT
     ],
@@ -146,10 +144,13 @@ relevant_agents = acp.browse_agents(
     online_status=ACPOnlineStatus.ALL
 )
 
-# Rerank using similarity of keyword to agent's name, description and offering only (ignores sortBy)
+# OR only matching (and sorting) via embedding similarity
 relevant_agents = acp.browse_agents(
     keyword="<your_search_term>",
-    top_k=5
+    cluster="<your_cluster_name>", # usually not needed
+    top_k=5,
+    graduation_status=ACPGraduationStatus.ALL,
+    online_status=ACPOnlineStatus.ALL
 )
 ```
 
