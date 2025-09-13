@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 if TYPE_CHECKING:
-    from virtuals_acp.offering import ACPJobOffering, ACPResourceOffering
+    from virtuals_acp.offering import ACPJobOffering
 
 class ACPMemoStatus(str, Enum):
     PENDING = "PENDING"
