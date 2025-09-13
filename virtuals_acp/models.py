@@ -4,12 +4,11 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional, TYPE_CHECKING, Dict, Union, TypeVar, Generic, Literal
 from enum import Enum
 
-from pydantic import Field, BaseModel, ConfigDict
-from pydantic.aliases import AliasChoices
+from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 if TYPE_CHECKING:
-    from virtuals_acp.offering import ACPJobOffering
+    from virtuals_acp.offering import ACPJobOffering, ACPResourceOffering
 
 class ACPMemoStatus(str, Enum):
     PENDING = "PENDING"
@@ -76,7 +75,8 @@ class IACPAgent:
     name: str
     description: str
     wallet_address: str # Checksummed address
-    offerings: List["ACPJobOffering"] = field(default_factory=list)
+    jobs: List["ACPJobOffering"] = field(default_factory=list)
+    resources: List["ACPJobResource"] = field(default_factory=list)
     twitter_handle: Optional[str] = None
     # Full fields from TS for completeness, though browse_agent returns a subset
     document_id: Optional[str] = None
@@ -131,10 +131,17 @@ class GenericPayload(PayloadModel, Generic[T]):
 
 class NegotiationPayload(PayloadModel):
     name: Optional[str] = None
-    service_requirement: Optional[Union[str, Dict[str, Any]]] = Field(
-        default=None,
-        validation_alias=AliasChoices("serviceRequirement", "service_requirement", "message"),
-    )
+    requirement: Optional[Union[str, Dict[str, Any]]] = None
+    service_name: Optional[str] = None
+    service_requirement: Optional[Dict[str, Any]] = None
+    # name: Optional[str] = Field(
+    #     default=None,
+    #     validation_alias=AliasChoices("name"),
+    # )
+    # service_requirement: Optional[Union[str, Dict[str, Any]]] = Field(
+    #     default=None,
+    #     validation_alias=AliasChoices("serviceRequirement", "service_requirement", "message"),
+    # )
     model_config = ConfigDict(extra="allow")
 
 

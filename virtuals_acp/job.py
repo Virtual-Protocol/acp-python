@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -8,6 +8,10 @@ from virtuals_acp.models import ACPJobPhase, IACPAgent, IDeliverable, GenericPay
     ClosePositionPayload, PositionFulfilledPayload, CloseJobAndWithdrawPayload, FeeType, MemoType, \
     UnfulfilledPositionPayload, RequestClosePositionPayload, NegotiationPayload, T
 from virtuals_acp.utils import try_parse_json_model
+from virtuals_acp.fare import Fare
+from virtuals_acp.models import ACPAgentSort, ACPJobPhase, ACPGraduationStatus, ACPOnlineStatus, MemoType, IACPAgent, \
+    IDeliverable, FeeType, GenericPayload, T, ACPMemoStatus
+from virtuals_acp.fare import Fare, FareAmountBase, FareAmount
 
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
@@ -19,6 +23,7 @@ class ACPJob(BaseModel):
     client_address: str
     evaluator_address: str
     price: float
+    price_token_address: str
     acp_client: "VirtualsACP"
     memos: List[ACPMemo] = Field(default_factory=list)
     phase: ACPJobPhase
@@ -26,61 +31,53 @@ class ACPJob(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    _base_fare: Optional[Fare] = None
+    _name: Optional[str] = None
+    _requirement: Optional[Union[str, Dict[str, Any]]] = None
+
+    def model_post_init(self, __context: Any) -> None:
+        """Pydantic hook: runs after model is created (cleaner than overriding __init__)."""
+        if self.acp_client:
+            self._base_fare = self.acp_client.acp_contract_client.config.base_fare
+
+        memo = next(
+            (m for m in self.memos if ACPJobPhase(m.next_phase) == ACPJobPhase.NEGOTIATION),
+            None
+        )
+
+        if not memo:
+            return None
+        
+        if not memo.content:
+            return None
+        
+        content_obj = try_parse_json_model(memo.content, NegotiationPayload)
+        if content_obj:
+            self._requirement = content_obj.service_requirement or content_obj.requirement
+            self._name = content_obj.service_name or content_obj.name
+    
+    @property
+    def requirement(self) -> Optional[Union[str, Dict[str, Any]]]:
+        return self._requirement
+
+    @property
+    def name(self) -> Optional[str]:
+        return self._name
+
     def __str__(self):
         return (
             f"AcpJob(\n"
             f"  id={self.id},\n"
             f"  provider_address='{self.provider_address}',\n"
+            f"  client_address='{self.client_address}',\n"
+            f"  evaluator_address='{self.evaluator_address}',\n"
+            f"  price={self.price},\n"
+            f"  price_token_address='{self.price_token_address}',\n"    
             f"  memos=[{', '.join(str(memo) for memo in self.memos)}],\n"
             f"  phase={self.phase}\n"
             f"  context={self.context}\n"
             f")"
         )
-
-    @property
-    def service_requirement(self) -> Optional[str]:
-        """Get the service requirement from the negotiation memo"""
-        memo = next(
-            (m for m in self.memos if ACPJobPhase(m.next_phase) == ACPJobPhase.NEGOTIATION),
-            None
-        )
-
-        if not memo:
-            return None
-        
-        if not memo.content:
-            return None
-        
-        content_obj = try_parse_json_model(memo.content, NegotiationPayload)
-
-        if not content_obj:
-            return None
-        
-        if content_obj.service_requirement:
-            return content_obj.service_requirement
-        
-        return content_obj
-    
-    @property
-    def service_name(self) -> Optional[str]:
-        """Get the service name from the negotiation memo"""
-        memo = next(
-            (m for m in self.memos if ACPJobPhase(m.next_phase) == ACPJobPhase.NEGOTIATION),
-            None
-        )
-
-        if not memo:
-            return None
-        
-        if not memo.content:
-            return None
-        
-        content_obj = try_parse_json_model(memo.content, NegotiationPayload)
-
-        if not content_obj:
-            return memo.content
-        
-        return content_obj.name
 
     @property
     def deliverable(self) -> Optional[str]:
@@ -90,6 +87,77 @@ class ACPJob(BaseModel):
             None
         )
         return memo.content if memo else None
+    
+    def create_requirement_memo(self, content: str) -> ACPMemo:
+        return self.acp_client.create_memo(
+            self.id,
+            content,
+            ACPJobPhase.TRANSACTION,
+        )
+
+    def create_requirement_payable_memo(
+        self,
+        content: str,
+        memo_type: MemoType,
+        amount: FareAmountBase,
+        recipient: str,
+        expired_at: datetime = datetime.utcnow() + timedelta(minutes=5),
+    ) -> ACPMemo:
+        return self.acp_client.create_payable_memo(
+            self.id,
+            content,
+            amount,
+            recipient,
+            ACPJobPhase.TRANSACTION,
+            memo_type,
+            expired_at,
+        )
+
+    def pay_and_accept_requirement(self, reason: Optional[str] = None) -> ACPMemo:
+        """Pay requirement (with allowance approvals) and accept it."""
+        memo = next((m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None)
+
+        if not memo:
+            raise Exception("No transaction memo found")
+
+        base_fare_amount = FareAmount(self.price, self._base_fare)
+
+        if memo.payable_details:
+            transfer_amount = FareAmountBase.from_contract_address(
+                memo.payable_details.amount,
+                memo.payable_details.token,
+                self.acp_client.acp_contract_client.config,
+            )
+        else:
+            transfer_amount = FareAmount(0, self._base_fare)
+
+        # merge amounts if same token
+        if base_fare_amount.fare.contract_address == transfer_amount.fare.contract_address:
+            total_amount = base_fare_amount.add(transfer_amount)
+        else:
+            total_amount = base_fare_amount
+
+        # approve base fare
+        self.acp_client.acp_contract_client.approve_allowance(
+            total_amount.amount,
+            self._base_fare.contract_address,
+        )
+
+        # approve transfer if token differs
+        if base_fare_amount.fare.contract_address != transfer_amount.fare.contract_address:
+            self.acp_client.acp_contract_client.approve_allowance(
+                transfer_amount.amount,
+                transfer_amount.fare.contract_address,
+            )
+
+        # sign memo
+        memo.sign(True, reason)
+
+        return self.acp_client.create_memo(
+            self.id,
+            f"Payment made. {reason or ''}".strip(),
+            ACPJobPhase.EVALUATION,
+        )
 
     @property
     def provider_agent(self) -> Optional["IACPAgent"]:
