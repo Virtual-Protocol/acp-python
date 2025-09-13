@@ -9,15 +9,14 @@ if TYPE_CHECKING:
 
 class ACPJobOffering(BaseModel):
     acp_client: "VirtualsACP"
-    provider_address: str
     name: str
     price: float
-    price_usd: float
-    requirement_schema: Optional[Dict[str, Any]] = None
+    requirement: Optional[Union[Dict[str, Any], str]] = None
+    deliverable: Optional[Union[Dict[str, Any], str]] = None
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    @field_validator('requirement_schema', mode='before')
+    @field_validator('requirement', mode='before')
     def parse_requirement_schema(cls, v):
         if isinstance(v, str):
             try:
@@ -39,14 +38,14 @@ class ACPJobOffering(BaseModel):
         expired_at: Optional[datetime] = None
     ) -> int:
         # Validate against requirement schema if present
-        if self.requirement_schema:
+        if self.requirement:
             try:
                 service_requirement = json.loads(json.dumps(service_requirement))
             except json.JSONDecodeError:
-                raise ValueError(f"Invalid JSON in service requirement. Required format: {json.dumps(self.requirement_schema, indent=2)}")
+                raise ValueError(f"Invalid JSON in service requirement. Required format: {json.dumps(self.requirement, indent=2)}")
 
             try:
-                validate(instance=service_requirement, schema=self.requirement_schema)
+                validate(instance=service_requirement, schema=self.requirement)
             except ValidationError as e:
                 raise ValueError(f"Invalid service requirement: {str(e)}")
 
@@ -55,9 +54,9 @@ class ACPJobOffering(BaseModel):
         }
 
         if isinstance(service_requirement, str):
-            final_service_requirement["message"] = service_requirement
+            final_service_requirement["requirement"] = service_requirement
         else:
-            final_service_requirement["serviceRequirement"] = service_requirement
+            final_service_requirement["requirement"] = service_requirement
 
         return self.acp_client.initiate_job(
             provider_address=self.provider_address,
@@ -66,3 +65,11 @@ class ACPJobOffering(BaseModel):
             amount=self.price,
             expired_at=expired_at,
         )
+
+class ACPResourceOffering(BaseModel):
+    acp_client: "VirtualsACP"
+    name: str
+    description: str
+    url: str
+    parameters: Optional[Dict[str, Any]]
+    id: int

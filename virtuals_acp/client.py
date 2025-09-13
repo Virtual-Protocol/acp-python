@@ -11,7 +11,6 @@ from typing import List, Optional, Tuple, Union, Dict, Any, Callable
 
 import requests
 import socketio
-import socketio.client
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
@@ -25,6 +24,7 @@ from virtuals_acp.memo import ACPMemo
 from virtuals_acp.models import ACPAgentSort, ACPJobPhase, ACPGraduationStatus, ACPOnlineStatus, MemoType, IACPAgent, \
     IDeliverable, FeeType, GenericPayload, T, ACPMemoStatus
 from virtuals_acp.offering import ACPJobOffering
+from virtuals_acp.fare import ETH_FARE, WETH_FARE, FareAmount, FareBigInt, FareAmountBase
 
 
 class VirtualsACP:
@@ -56,7 +56,6 @@ class VirtualsACP:
             self._agent_wallet_address = Web3.to_checksum_address(agent_wallet_address)
         else:
             self._agent_wallet_address = self.signer_account.address
-            # print(f"Warning: agent_wallet_address not provided, defaulting to signer EOA: {self._agent_wallet_address}")
 
         # Initialize the contract manager here
         self.contract_manager = _ACPContractManager(self.w3, self._agent_wallet_address, entity_id, config,
@@ -226,7 +225,7 @@ class VirtualsACP:
             graduation_status: Optional[ACPGraduationStatus] = None,
             online_status: Optional[ACPOnlineStatus] = None
     ) -> List[IACPAgent]:
-        url = f"{self.acp_api_url}/agents/v2/search?search={keyword}"
+        url = f"{self.acp_api_url}/agents/v3/search?search={keyword}"
         top_k = 5 if top_k is None else top_k
 
         if sort_by:
@@ -255,16 +254,15 @@ class VirtualsACP:
             agents_data = data.get("data", [])
             agents = []
             for agent_data in agents_data:
-                offerings = [
+                job_offerings = [
                     ACPJobOffering(
                         acp_client=self,
                         provider_address=agent_data["walletAddress"],
-                        name=offering["name"],
-                        price=offering["price"],
-                        price_usd=offering["priceUsd"],
-                        requirement_schema=offering.get("requirementSchema", None)
+                        name=job["name"],
+                        price=job["price"],
+                        requirement_schema=job.get("requirement", None)
                     )
-                    for offering in agent_data.get("offerings", [])
+                    for job in agent_data.get("jobs", [])
                 ]
 
                 agents.append(IACPAgent(
@@ -272,7 +270,7 @@ class VirtualsACP:
                     name=agent_data.get("name"),
                     description=agent_data.get("description"),
                     wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
-                    offerings=offerings,
+                    job_offerings=job_offerings,
                     twitter_handle=agent_data.get("twitterHandle"),
                     metrics=agent_data.get("metrics"),
                     processing_time=agent_data.get("processingTime", "")
@@ -287,7 +285,7 @@ class VirtualsACP:
             self,
             provider_address: str,
             service_requirement: Union[Dict[str, Any], str],
-            amount: float,
+            fare_amount: FareAmountBase,
             evaluator_address: Optional[str] = None,
             expired_at: Optional[datetime] = None
     ) -> int:
@@ -327,22 +325,6 @@ class VirtualsACP:
                     except (ValueError, TypeError, AttributeError):
                         raise Exception("Failed to parse job ID from contract logs")
 
-                # data = response.get("data", {})
-                # if not data:
-                #     raise Exception("Invalid tx_hash!")
-
-                # if data.get("status") == "retry":
-                #     raise Exception("Transaction failed, retrying...")
-
-                # if data.get("status") == "failed":
-                #     break
-
-                # if data.get("status") == "success":
-                #     job_id = int(data.get("result").get("jobId"))
-
-                # if job_id is not None and job_id != "":
-                #     break
-
             except Exception as e:
                 if (attempt == retry_count - 1):
                     print(f"Error in create_job function: {e}")
@@ -354,7 +336,11 @@ class VirtualsACP:
         if job_id is None or job_id == "":
             raise Exception("Failed to create job")
 
-        self.contract_manager.set_budget_with_payment_token(job_id, amount)
+        self.contract_manager.set_budget_with_payment_token(
+            job_id, 
+            fare_amount.amount, 
+            fare_amount.fare.contract_address
+        )
 
         self.contract_manager.create_memo(
             job_id,
@@ -363,7 +349,6 @@ class VirtualsACP:
             is_secured=True,
             next_phase=ACPJobPhase.NEGOTIATION
         )
-        print(f"Initial memo for job {job_id} created.")
 
         payload = {
             "jobId": job_id,
@@ -374,8 +359,8 @@ class VirtualsACP:
             "evaluatorAddress": evaluator_address
         }
 
-        if amount:
-            payload["price"] = amount
+        if fare_amount.amount:
+            payload["price"] = fare_amount.amount
 
         requests.post(
             self.acp_api_url,
@@ -416,47 +401,42 @@ class VirtualsACP:
             raise
 
     def pay_job(
-            self,
-            job_id: int,
-            memo_id: int,
-            amount: Union[float, str],
-            reason: Optional[str] = ""
+        self,
+        job_id: int,
+        memo_id: int,
+        amount_base_unit: int,
+        reason: Optional[str] = ""
     ) -> Dict[str, Any]:
 
-        self.contract_manager.approve_allowance(amount)
-
+        self.contract_manager.approve_allowance(amount_base_unit.amount)
         self.contract_manager.sign_memo(memo_id, True, reason or "")
-
-        reason = f"{reason if reason else f'Job {job_id} paid.'}"
-        print(f"Paid for job {job_id} with memo {memo_id} and amount {amount} and reason {reason}")
-
         return self.contract_manager.create_memo(
             job_id,
-            reason,
+             f"{reason if reason else f'Job {job_id} paid.'}",
             MemoType.MESSAGE,
             is_secured=False,
             next_phase=ACPJobPhase.EVALUATION
         )
 
     def request_funds(
-            self,
-            job_id: int,
-            amount: Union[float, str],
-            receiver_address: str,
-            fee_amount: Union[float, str],
-            fee_type: FeeType,
-            reason: GenericPayload[T],
-            next_phase: ACPJobPhase,
-            expired_at: datetime
+        self,
+        job_id: int,
+        transfer_fare_amount: FareAmountBase,
+        recipient: str,
+        fee_fare_amount: FareAmountBase,
+        fee_type: FeeType,
+        reason: GenericPayload[T],
+        next_phase: ACPJobPhase,
+        expired_at: datetime
     ) -> str:
-        receiver_address = Web3.to_checksum_address(receiver_address)
+        recipient = Web3.to_checksum_address(recipient)
 
         data = self.contract_manager.create_payable_memo(
             job_id,
             json.dumps(reason.model_dump()),
-            amount,
-            receiver_address,
-            fee_amount,
+            transfer_fare_amount.amount,
+            recipient,
+            fee_fare_amount.amount,
             fee_type,
             next_phase,
             MemoType.PAYABLE_REQUEST,
@@ -486,43 +466,74 @@ class VirtualsACP:
         return tx_hash
 
     def transfer_funds(
-            self,
-            job_id: int,
-            amount: Union[float, str],
-            receiver_address: str,
-            fee_amount: Union[float, str],
-            fee_type: FeeType,
-            reason: GenericPayload[T],
-            next_phase: ACPJobPhase,
-            expired_at: datetime,
+        self,
+        job_id: int,
+        transfer_fare_amount: FareAmountBase,
+        recipient: str,
+        fee_fare_amount: FareAmountBase,
+        fee_type: FeeType,
+        reason: GenericPayload[T],
+        next_phase: ACPJobPhase,
+        expired_at: datetime,
     ) -> str:
-        total_amount = amount + fee_amount
+        # Wrap ETH → WETH if transfer token is ETH
+        if transfer_fare_amount.fare.contract_address == ETH_FARE.contract_address:
+            self.acp_contract_client.wrap_eth(transfer_fare_amount.amount)
+            transfer_fare_amount = FareBigInt(transfer_fare_amount.amount, WETH_FARE)
 
-        if total_amount > 0:
-            self.contract_manager.approve_allowance(total_amount)
+        # Fee token must match base fare
+        if (
+            fee_fare_amount.amount > 0
+            and fee_fare_amount.fare.contract_address
+            != self.acp_contract_client.config.base_fare.contract_address
+        ):
+            raise AcpError("Fee token address is not the same as the base fare")
+
+        # Check if fee token differs from transfer token
+        is_fee_token_different = (
+            fee_fare_amount.fare.contract_address
+            != transfer_fare_amount.fare.contract_address
+        )
+
+        if is_fee_token_different:
+            self.acp_contract_client.approve_allowance(
+                fee_fare_amount.amount,
+                fee_fare_amount.fare.contract_address,
+            )
+
+        # Final amount depends on whether tokens match
+        final_amount = (
+            transfer_fare_amount
+            if is_fee_token_different
+            else transfer_fare_amount.add(fee_fare_amount)
+        )
+
+        # Approve final amount
+        self.contract_manager.approve_allowance(
+            final_amount.amount,
+            transfer_fare_amount.fare.contract_address,
+        )
 
         data = self.contract_manager.create_payable_memo(
             job_id,
             json.dumps(reason.model_dump()),
-            amount,
-            receiver_address,
-            fee_amount,
+            transfer_fare_amount.amount,
+            recipient,
+            fee_fare_amount.amount,
             fee_type,
             next_phase,
             MemoType.PAYABLE_TRANSFER_ESCROW,
-            expired_at
+            expired_at,
+            transfer_fare_amount.fare.contract_address
         )
         tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        print(
-            f"Funds transferred for job {job_id} with amount {amount} to {receiver_address} and reason {reason}, tx_hash: {tx_hash}"
-        )
         return tx_hash
 
     def send_message(
-            self,
-            job_id: int,
-            message: GenericPayload[T],
-            next_phase: ACPJobPhase
+        self,
+        job_id: int,
+        message: GenericPayload[T],
+        next_phase: ACPJobPhase
     ) -> str:
         data = self.contract_manager.create_memo(
             job_id,
@@ -557,18 +568,16 @@ class VirtualsACP:
             next_phase=ACPJobPhase.COMPLETED
         )
         tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        # print(f"Deliverable submission tx: {tx_hash} for job {job_id}")
         return tx_hash
 
     def sign_memo(
-            self,
-            memo_id: int,
-            accept: bool,
-            reason: Optional[str] = ""
+        self,
+        memo_id: int,
+        accept: bool,
+        reason: Optional[str] = ""
     ) -> str:
         data = self.contract_manager.sign_memo(memo_id, accept, reason)
         tx_hash = data.get('receipts', [])[0].get('transactionHash')
-        print(f"Signed memo for memo ID {memo_id} is {'accepted' if accept else 'rejected'}, tx_hash: {tx_hash}")
         return tx_hash
 
     def get_active_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
