@@ -349,27 +349,7 @@ class VirtualsACP:
             is_secured=True,
             next_phase=ACPJobPhase.NEGOTIATION
         )
-
-        payload = {
-            "jobId": job_id,
-            "clientAddress": self.agent_address,
-            "providerAddress": provider_address,
-            "description": service_requirement,
-            "expiredAt": expired_at.astimezone(timezone.utc).isoformat(),
-            "evaluatorAddress": evaluator_address
-        }
-
-        if fare_amount.amount:
-            payload["price"] = fare_amount.amount
-
-        requests.post(
-            self.acp_api_url,
-            json=payload,
-            headers={
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            }
-        )
+        
         return job_id
 
     def respond_to_job(
