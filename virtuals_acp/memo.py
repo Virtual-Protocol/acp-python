@@ -11,7 +11,7 @@ class ACPMemo(BaseModel):
     id: int
     type: MemoType
     content: str
-    next_phase: ACPJobPhase
+    next_phase: Optional[ACPJobPhase] = None
     status: ACPMemoStatus
     signed_reason: Optional[str] = None
     expiry: Optional[datetime] = None
