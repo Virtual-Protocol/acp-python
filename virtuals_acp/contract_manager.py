@@ -9,39 +9,51 @@ from typing import Optional, Dict, Any
 from eth_account import Account
 from web3 import Web3
 from web3.contract import Contract
+from web3.middleware import ExtraDataToPOAMiddleware
 
 from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs import ACPContractConfig
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
+from eth_account.signers.local import LocalAccount
 
 
-class _ACPContractManager:
+class ACPContractManager:
     def __init__(
-            self,
-            web3_client: Web3,
-            agent_wallet_address: str,
-            entity_id: int,
-            config: ACPContractConfig,
-            wallet_private_key: str
+        self,
+        wallet_private_key: str,
+        agent_wallet_address: str,
+        entity_id: int,
+        config: ACPContractConfig,
     ):
-        self.w3 = web3_client
-        self.account = Account.from_key(wallet_private_key)
+        self.wallet_private_key = wallet_private_key
         self.config = config
+        self.w3 = Web3(Web3.HTTPProvider(self.config.rpc_url))
+        if self.config.chain == "base-sepolia":
+            self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+
+        wallet_private_key = self.wallet_private_key.removeprefix("0x")
+
+        self.account = Account.from_key(wallet_private_key)
         self.alchemy_kit = AlchemyAccountKit(agent_wallet_address, entity_id, self.account, config.chain_id)
         self.alchemy_account = None
         self.agent_wallet_address = agent_wallet_address
+
+        self.signer_account: LocalAccount = Account.from_key(wallet_private_key)
 
         self.contract: Contract = self.w3.eth.contract(
             address=Web3.to_checksum_address(config.contract_address), abi=ACP_ABI
         )
         self.token_contract: Contract = self.w3.eth.contract(
-            address=Web3.to_checksum_address(config.payment_token_address), abi=ERC20_ABI
+            address=Web3.to_checksum_address(config.base_fare.contract_address), abi=ERC20_ABI
         )
+
+        if not self.w3.is_connected():
+            raise ConnectionError(f"Failed to connect to RPC URL: {self.config.rpc_url}")
 
     def _format_amount(self, amount: float) -> int:
         amount_decimal = Decimal(str(amount))
-        return int(amount_decimal * (10 ** self.config.payment_token_decimals))
+        return int(amount_decimal * (10 ** self.config.base_fare.decimals))
 
     def _sign_transaction(
             self, method_name: str,

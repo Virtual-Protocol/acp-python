@@ -3,12 +3,14 @@ import json
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 from pydantic import BaseModel, field_validator, ConfigDict
 from jsonschema import ValidationError, validate
+from virtuals_acp.fare import FareAmount
 
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
 
 class ACPJobOffering(BaseModel):
     acp_client: "VirtualsACP"
+    provider_address: str
     name: str
     price: float
     requirement: Optional[Union[Dict[str, Any], str]] = None
@@ -62,7 +64,10 @@ class ACPJobOffering(BaseModel):
             provider_address=self.provider_address,
             service_requirement=final_service_requirement,
             evaluator_address=evaluator_address,
-            amount=self.price,
+            fare_amount=FareAmount(
+                self.price,
+                self.acp_client.config.base_fare,
+            ),
             expired_at=expired_at,
         )
 

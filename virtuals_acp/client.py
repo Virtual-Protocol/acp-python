@@ -11,13 +11,13 @@ from typing import List, Optional, Tuple, Union, Dict, Any, Callable
 
 import requests
 import socketio
-from eth_account import Account
-from eth_account.signers.local import LocalAccount
+# from eth_account import Account
+# from eth_account.signers.local import LocalAccount
 from web3 import Web3
-from web3.middleware import ExtraDataToPOAMiddleware
+# from web3.middleware import ExtraDataToPOAMiddleware
 
 from virtuals_acp.configs import ACPContractConfig, DEFAULT_CONFIG
-from virtuals_acp.contract_manager import _ACPContractManager
+from virtuals_acp.contract_manager import ACPContractManager
 from virtuals_acp.exceptions import ACPApiError, ACPError
 from virtuals_acp.job import ACPJob
 from virtuals_acp.memo import ACPMemo
@@ -29,38 +29,20 @@ from virtuals_acp.fare import ETH_FARE, WETH_FARE, FareAmount, FareBigInt, FareA
 
 class VirtualsACP:
     def __init__(
-            self,
-            wallet_private_key: str,
-            entity_id: int,
-            agent_wallet_address: Optional[str] = None,
-            config: ACPContractConfig = DEFAULT_CONFIG,
-            on_new_task: Optional[Callable] = None,
-            on_evaluate: Optional[Callable] = None
+        self,
+        acp_contract_client: "ACPContractManager",
+        on_new_task: Optional[Callable] = None,
+        on_evaluate: Optional[Callable] = None
     ):
+        self.contract_manager = acp_contract_client
+        self.agent_wallet_address = acp_contract_client.agent_wallet_address
+        self.config = acp_contract_client.config
+        self.acp_api_url = self.contract_manager.config.acp_api_url
 
-        self.config = config
-        self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
-        self.entity_id = entity_id
-
-        if config.chain_env == "base-sepolia":
-            self.w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
-
-        if not self.w3.is_connected():
-            raise ConnectionError(f"Failed to connect to RPC URL: {config.rpc_url}")
-
-        wallet_private_key = wallet_private_key.removeprefix("0x")
-
-        self.signer_account: LocalAccount = Account.from_key(wallet_private_key)
-
-        if agent_wallet_address:
-            self._agent_wallet_address = Web3.to_checksum_address(agent_wallet_address)
+        if self.agent_wallet_address:
+            self._agent_wallet_address = Web3.to_checksum_address(self.agent_wallet_address)
         else:
             self._agent_wallet_address = self.signer_account.address
-
-        # Initialize the contract manager here
-        self.contract_manager = _ACPContractManager(self.w3, self._agent_wallet_address, entity_id, config,
-                                                    wallet_private_key)
-        self.acp_api_url = config.acp_api_url
 
         # Socket.IO setup
         self.on_new_task = on_new_task
@@ -133,6 +115,7 @@ class VirtualsACP:
             memos=memos,
             phase=data["phase"],
             price=data["price"],
+            price_token_address=data["priceTokenAddress"],
             context=context
         )
         print(f"Received new task: {job}")
@@ -166,6 +149,7 @@ class VirtualsACP:
             memos=memos,
             phase=data["phase"],
             price=data["price"],
+            price_token_address=data["priceTokenAddress"],
             context=context
         )
         print(f"Received evaluate: {job}")
@@ -217,13 +201,13 @@ class VirtualsACP:
         return self.signer_account.address
 
     def browse_agents(
-            self,
-            keyword: str,
-            cluster: Optional[str] = None,
-            sort_by: Optional[List[ACPAgentSort]] = None,
-            top_k: Optional[int] = None,
-            graduation_status: Optional[ACPGraduationStatus] = None,
-            online_status: Optional[ACPOnlineStatus] = None
+        self,
+        keyword: str,
+        cluster: Optional[str] = None,
+        sort_by: Optional[List[ACPAgentSort]] = None,
+        top_k: Optional[int] = None,
+        graduation_status: Optional[ACPGraduationStatus] = None,
+        online_status: Optional[ACPOnlineStatus] = None
     ) -> List[IACPAgent]:
         url = f"{self.acp_api_url}/agents/v3/search?search={keyword}"
         top_k = 5 if top_k is None else top_k
@@ -270,7 +254,7 @@ class VirtualsACP:
                     name=agent_data.get("name"),
                     description=agent_data.get("description"),
                     wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
-                    job_offerings=job_offerings,
+                    jobs=job_offerings,
                     twitter_handle=agent_data.get("twitterHandle"),
                     metrics=agent_data.get("metrics"),
                     processing_time=agent_data.get("processingTime", "")
@@ -282,12 +266,12 @@ class VirtualsACP:
             raise ACPError(f"An unexpected error occurred while browsing agents: {e}")
 
     def initiate_job(
-            self,
-            provider_address: str,
-            service_requirement: Union[Dict[str, Any], str],
-            fare_amount: FareAmountBase,
-            evaluator_address: Optional[str] = None,
-            expired_at: Optional[datetime] = None
+        self,
+        provider_address: str,
+        service_requirement: Union[Dict[str, Any], str],
+        fare_amount: FareAmountBase,
+        evaluator_address: Optional[str] = None,
+        expired_at: Optional[datetime] = None
     ) -> int:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(days=1)
@@ -373,12 +357,12 @@ class VirtualsACP:
         return job_id
 
     def respond_to_job(
-            self,
-            job_id: int,
-            memo_id: int,
-            accept: bool,
-            content: Optional[str],
-            reason: Optional[str] = ""
+        self,
+        job_id: int,
+        memo_id: int,
+        accept: bool,
+        content: Optional[str],
+        reason: Optional[str] = ""
     ) -> str:
         try:
             data = self.contract_manager.sign_memo(memo_id, accept, reason or "")

@@ -18,13 +18,13 @@ if TYPE_CHECKING:
 
 
 class ACPJob(BaseModel):
+    acp_client: "VirtualsACP"
     id: int
     provider_address: str
     client_address: str
     evaluator_address: str
     price: float
     price_token_address: str
-    acp_client: "VirtualsACP"
     memos: List[ACPMemo] = Field(default_factory=list)
     phase: ACPJobPhase
     context: Dict[str, Any] | None
@@ -36,9 +36,8 @@ class ACPJob(BaseModel):
     _requirement: Optional[Union[str, Dict[str, Any]]] = None
 
     def model_post_init(self, __context: Any) -> None:
-        """Pydantic hook: runs after model is created (cleaner than overriding __init__)."""
         if self.acp_client:
-            self._base_fare = self.acp_client.acp_contract_client.config.base_fare
+            self._base_fare = self.acp_client.config.base_fare
 
         memo = next(
             (m for m in self.memos if ACPJobPhase(m.next_phase) == ACPJobPhase.NEGOTIATION),
