@@ -105,9 +105,9 @@ class VirtualsACP:
 
         memos = [ACPMemo(
             id=memo.get("id"),
-            type=MemoType(int(memo.get("memoType"))),
+            type=MemoType(memo.get("memoType")),
             content=memo.get("content"),
-            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
             status=ACPMemoStatus(memo.get("status")),
             signed_reason=memo.get("signedReason"),
             expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
@@ -143,9 +143,9 @@ class VirtualsACP:
     def handle_evaluate(self, data) -> None:
         memos = [ACPMemo(
             id=memo.get("id"),
-            type=MemoType(int(memo.get("memoType"))),
+            type=MemoType(memo.get("memoType")),
             content=memo.get("content"),
-            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
             status=ACPMemoStatus(memo.get("status")),
             signed_reason=memo.get("signedReason"),
             expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
@@ -569,9 +569,9 @@ class VirtualsACP:
                 for memo in job.get("memos", []):
                     memos.append(ACPMemo(
                         id=memo.get("id"),
-                        type=MemoType(int(memo.get("memoType"))),
+                        type=MemoType(memo.get("memoType")),
                         content=memo.get("content"),
-                        next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                         status=ACPMemoStatus(memo.get("status")),
                         signed_reason=memo.get("signedReason"),
                         expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
@@ -616,9 +616,9 @@ class VirtualsACP:
                 for memo in job.get("memos", []):
                     memos.append(ACPMemo(
                         id=memo.get("id"),
-                        type=MemoType(int(memo.get("memoType"))),
+                        type=MemoType(memo.get("memoType")),
                         content=memo.get("content"),
-                        next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                         status=ACPMemoStatus(memo.get("status")),
                         signed_reason=memo.get("signedReason"),
                         expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
@@ -663,9 +663,9 @@ class VirtualsACP:
                 for memo in job.get("memos", []):
                     memos.append(ACPMemo(
                         id=memo.get("id"),
-                        type=MemoType(int(memo.get("memoType"))),
+                        type=MemoType(memo.get("memoType")),
                         content=memo.get("content"),
-                        next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                         status=ACPMemoStatus(memo.get("status")),
                         signed_reason=memo.get("signedReason"),
                         expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
@@ -711,9 +711,9 @@ class VirtualsACP:
             for memo in data.get("data", {}).get("memos", []):
                 memos.append(ACPMemo(
                     id=memo.get("id"),
-                    type=MemoType(int(memo.get("memoType"))),
+                    type=MemoType(memo.get("memoType")),
                     content=memo.get("content"),
-                    next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                    next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                     status=ACPMemoStatus(memo.get("status")),
                     signed_reason=memo.get("signedReason"),
                     expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
@@ -758,9 +758,9 @@ class VirtualsACP:
 
             return ACPMemo(
                 id=memo.get("id"),
-                type=MemoType(int(memo.get("memoType"))),
+                type=MemoType(memo.get("memoType")),
                 content=memo.get("content"),
-                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                 status=ACPMemoStatus(memo.get("status")),
                 signed_reason=memo.get("signedReason"),
                 expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None

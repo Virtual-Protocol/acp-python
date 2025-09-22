@@ -39,6 +39,15 @@ class ACPJobPhase(Enum):
     REJECTED = 5
     EXPIRED = 6
 
+    @classmethod
+    def from_value(cls, value: str | None):
+        if value is None:
+            return None
+        try:
+            return cls(value)
+        except ValueError:
+            return None
+
 
 class FeeType(Enum):
     NO_FEE = 0
