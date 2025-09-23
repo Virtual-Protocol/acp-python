@@ -120,7 +120,7 @@ class VirtualsACP:
                 id=memo.get("id"),
                 type=MemoType(int(memo.get("memoType"))),
                 content=memo.get("content"),
-                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                 status=ACPMemoStatus(memo.get("status")),
                 signed_reason=memo.get("signedReason"),
                 expiry=(
@@ -166,7 +166,7 @@ class VirtualsACP:
                 id=memo.get("id"),
                 type=MemoType(int(memo.get("memoType"))),
                 content=memo.get("content"),
-                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                 status=ACPMemoStatus(memo.get("status")),
                 signed_reason=memo.get("signedReason"),
                 expiry=(
@@ -611,7 +611,7 @@ class VirtualsACP:
                             id=memo.get("id"),
                             type=MemoType(int(memo.get("memoType"))),
                             content=memo.get("content"),
-                            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                             status=ACPMemoStatus(memo.get("status")),
                             signed_reason=memo.get("signedReason"),
                             expiry=(
@@ -664,7 +664,7 @@ class VirtualsACP:
                             id=memo.get("id"),
                             type=MemoType(int(memo.get("memoType"))),
                             content=memo.get("content"),
-                            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                             status=ACPMemoStatus(memo.get("status")),
                             signed_reason=memo.get("signedReason"),
                             expiry=(
@@ -717,7 +717,7 @@ class VirtualsACP:
                             id=memo.get("id"),
                             type=MemoType(int(memo.get("memoType"))),
                             content=memo.get("content"),
-                            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                             status=ACPMemoStatus(memo.get("status")),
                             signed_reason=memo.get("signedReason"),
                             expiry=(
@@ -771,7 +771,7 @@ class VirtualsACP:
                         id=memo.get("id"),
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
-                        next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                         status=ACPMemoStatus(memo.get("status")),
                         signed_reason=memo.get("signedReason"),
                         expiry=(
@@ -819,9 +819,9 @@ class VirtualsACP:
 
             return ACPMemo(
                 id=memo.get("id"),
-                type=MemoType(int(memo.get("memoType"))),
+                type=MemoType(memo.get("memoType")),
                 content=memo.get("content"),
-                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                 status=ACPMemoStatus(memo.get("status")),
                 signed_reason=memo.get("signedReason"),
                 expiry=(
