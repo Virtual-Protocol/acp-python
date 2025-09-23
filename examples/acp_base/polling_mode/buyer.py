@@ -28,9 +28,9 @@ def buyer():
         keyword="<your_filter_agent_keyword>",
         cluster="<your_cluster_name>",
         graduation_status=ACPGraduationStatus.ALL,
-        online_status=ACPOnlineStatus.ALL
+        online_status=ACPOnlineStatus.ALL,
     )
-    
+
     print(f"Relevant agents: {relevant_agents}")
 
     # Pick one of the agents based on your criteria (in this example we just pick the first one)
@@ -41,12 +41,15 @@ def buyer():
 
     # 1. Initiate Job
     print(
-        f"\nInitiating job with Seller: {chosen_agent.wallet_address}, Evaluator: {env.EVALUATOR_AGENT_WALLET_ADDRESS}")
+        f"\nInitiating job with Seller: {chosen_agent.wallet_address}, Evaluator: {env.EVALUATOR_AGENT_WALLET_ADDRESS}"
+    )
 
     job_id = chosen_job_offering.initiate_job(
         # <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
         # Reference: (./images/specify_requirement_toggle_switch.png)
-        service_requirement={"<your_schema_field>": "Help me to generate a flower meme."},
+        service_requirement={
+            "<your_schema_field>": "Help me to generate a flower meme."
+        },
         evaluator_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
         expired_at=datetime.now() + timedelta(days=1),
     )

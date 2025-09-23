@@ -65,10 +65,16 @@ class ACPContractManager:
         else:
             encoded_data = self.contract.encode_abi(method_name, args=args)
 
-        trx_data = [{
-            "to": contract_address if contract_address else self.config.contract_address,
-            "data": encoded_data
-        }]
+        trx_data = [
+            {
+                "to": (
+                    contract_address
+                    if contract_address
+                    else self.config.contract_address
+                ),
+                "data": encoded_data,
+            }
+        ]
 
         self.alchemy_kit.create_session()
         send_result = self.alchemy_kit.execute_calls(trx_data)
@@ -97,8 +103,7 @@ class ACPContractManager:
 
                 # Sign the transaction
                 user_op_hash = self._sign_transaction(
-                    "createJob",
-                    [provider_address, evaluator_address, expire_timestamp]
+                    "createJob", [provider_address, evaluator_address, expire_timestamp]
                 )
                 return user_op_hash
             except Exception as e:
@@ -171,8 +176,8 @@ class ACPContractManager:
                 fee_type.value,
                 type.value,
                 next_phase.value,
-                math.floor(expired_at.timestamp())
-            ]
+                math.floor(expired_at.timestamp()),
+            ],
         )
 
         if user_op_hash is None:
@@ -206,7 +211,7 @@ class ACPContractManager:
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
             "createMemo",
-            [job_id, content, memo_type.value, is_secured, next_phase.value]
+            [job_id, content, memo_type.value, is_secured, next_phase.value],
         )
 
         if user_op_hash is None:
@@ -238,8 +243,7 @@ class ACPContractManager:
         reason: Optional[str] = ""
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
-            "signMemo",
-            [memo_id, is_approved, reason]
+            "signMemo", [memo_id, is_approved, reason]
         )
 
         if user_op_hash is None:

@@ -8,6 +8,7 @@ from virtuals_acp.fare import FareAmount
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
 
+
 class ACPJobOffering(BaseModel):
     acp_client: "VirtualsACP"
     provider_address: str
@@ -37,7 +38,7 @@ class ACPJobOffering(BaseModel):
         self,
         service_requirement: Union[Dict[str, Any], str],
         evaluator_address: Optional[str] = None,
-        expired_at: Optional[datetime] = None
+        expired_at: Optional[datetime] = None,
     ) -> int:
         # Validate against requirement schema if present
         if self.requirement:
@@ -51,9 +52,7 @@ class ACPJobOffering(BaseModel):
             except ValidationError as e:
                 raise ValueError(f"Invalid service requirement: {str(e)}")
 
-        final_service_requirement = {
-            "name": self.name
-        }
+        final_service_requirement = {"name": self.name}
 
         if isinstance(service_requirement, str):
             final_service_requirement["requirement"] = service_requirement

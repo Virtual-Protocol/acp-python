@@ -5,6 +5,7 @@ from virtuals_acp.fare import Fare
 
 ChainEnv = Literal["base-sepolia", "base"]
 
+
 class ACPContractConfig:
     def __init__(
         self,

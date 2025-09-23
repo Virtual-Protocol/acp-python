@@ -1,7 +1,17 @@
 # virtuals_acp/models.py
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, TYPE_CHECKING, Dict, Union, TypeVar, Generic, Literal
+from typing import (
+    Any,
+    List,
+    Optional,
+    TYPE_CHECKING,
+    Dict,
+    Union,
+    TypeVar,
+    Generic,
+    Literal,
+)
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict
@@ -9,6 +19,7 @@ from pydantic.alias_generators import to_camel
 
 if TYPE_CHECKING:
     from virtuals_acp.offering import ACPJobOffering, ACPResourceOffering
+
 
 class ACPMemoStatus(str, Enum):
     PENDING = "PENDING"
@@ -37,6 +48,15 @@ class ACPJobPhase(Enum):
     COMPLETED = 4
     REJECTED = 5
     EXPIRED = 6
+
+    @classmethod
+    def from_value(cls, value: str | None):
+        if value is None:
+            return None
+        try:
+            return cls(value)
+        except ValueError:
+            return None
 
 
 class FeeType(Enum):
@@ -106,10 +126,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class PayloadModel(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        validate_by_name=True
-    )
+    model_config = ConfigDict(alias_generator=to_camel, validate_by_name=True)
 
     # JSON-friendly payload fields when using model_dump and model_dump_json
     def model_dump(self, *args, **kwargs):

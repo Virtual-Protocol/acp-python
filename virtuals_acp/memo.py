@@ -3,7 +3,14 @@ from typing import TYPE_CHECKING, Optional, Type, Dict, List, Any
 
 from pydantic import BaseModel, ConfigDict
 
-from virtuals_acp.models import ACPJobPhase, MemoType, PayloadType, GenericPayload, T, ACPMemoStatus
+from virtuals_acp.models import (
+    ACPJobPhase,
+    MemoType,
+    PayloadType,
+    GenericPayload,
+    T,
+    ACPMemoStatus,
+)
 from virtuals_acp.utils import try_parse_json_model, try_validate_model
 
 if TYPE_CHECKING:
@@ -15,7 +22,7 @@ class ACPMemo(BaseModel):
     id: int
     type: MemoType
     content: str
-    next_phase: ACPJobPhase
+    next_phase: Optional[ACPJobPhase] = None
     status: ACPMemoStatus
     signed_reason: Optional[str] = None
     expiry: Optional[datetime] = None
