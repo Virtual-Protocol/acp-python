@@ -3,7 +3,14 @@ from typing import Optional, Type, Dict, List
 
 from pydantic import BaseModel, ConfigDict
 
-from virtuals_acp.models import ACPJobPhase, MemoType, PayloadType, GenericPayload, T, ACPMemoStatus
+from virtuals_acp.models import (
+    ACPJobPhase,
+    MemoType,
+    PayloadType,
+    GenericPayload,
+    T,
+    ACPMemoStatus,
+)
 from virtuals_acp.utils import try_parse_json_model, try_validate_model
 
 
@@ -21,7 +28,9 @@ class ACPMemo(BaseModel):
 
     def __init__(self, **data):
         super().__init__(**data)
-        self.structured_content = try_parse_json_model(self.content, GenericPayload[Dict])
+        self.structured_content = try_parse_json_model(
+            self.content, GenericPayload[Dict]
+        )
 
     def __str__(self):
         return f"AcpMemo({self.model_dump(exclude={'structured_content'})})"

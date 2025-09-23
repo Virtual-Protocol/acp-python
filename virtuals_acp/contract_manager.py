@@ -18,17 +18,19 @@ from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
 
 class _ACPContractManager:
     def __init__(
-            self,
-            web3_client: Web3,
-            agent_wallet_address: str,
-            entity_id: int,
-            config: ACPContractConfig,
-            wallet_private_key: str
+        self,
+        web3_client: Web3,
+        agent_wallet_address: str,
+        entity_id: int,
+        config: ACPContractConfig,
+        wallet_private_key: str,
     ):
         self.w3 = web3_client
         self.account = Account.from_key(wallet_private_key)
         self.config = config
-        self.alchemy_kit = AlchemyAccountKit(agent_wallet_address, entity_id, self.account, config.chain_id)
+        self.alchemy_kit = AlchemyAccountKit(
+            agent_wallet_address, entity_id, self.account, config.chain_id
+        )
         self.alchemy_account = None
         self.agent_wallet_address = agent_wallet_address
 
@@ -36,27 +38,32 @@ class _ACPContractManager:
             address=Web3.to_checksum_address(config.contract_address), abi=ACP_ABI
         )
         self.token_contract: Contract = self.w3.eth.contract(
-            address=Web3.to_checksum_address(config.payment_token_address), abi=ERC20_ABI
+            address=Web3.to_checksum_address(config.payment_token_address),
+            abi=ERC20_ABI,
         )
 
     def _format_amount(self, amount: float) -> int:
         amount_decimal = Decimal(str(amount))
-        return int(amount_decimal * (10 ** self.config.payment_token_decimals))
+        return int(amount_decimal * (10**self.config.payment_token_decimals))
 
     def _sign_transaction(
-            self, method_name: str,
-            args: list,
-            contract_address: Optional[str] = None
+        self, method_name: str, args: list, contract_address: Optional[str] = None
     ) -> str:
         if contract_address:
             encoded_data = self.token_contract.encode_abi(method_name, args=args)
         else:
             encoded_data = self.contract.encode_abi(method_name, args=args)
 
-        trx_data = [{
-            "to": contract_address if contract_address else self.config.contract_address,
-            "data": encoded_data
-        }]
+        trx_data = [
+            {
+                "to": (
+                    contract_address
+                    if contract_address
+                    else self.config.contract_address
+                ),
+                "data": encoded_data,
+            }
+        ]
 
         self.alchemy_kit.create_session()
         send_result = self.alchemy_kit.execute_calls(trx_data)
@@ -71,10 +78,7 @@ class _ACPContractManager:
             raise Exception(f"Failed to get job_id {e}")
 
     def create_job(
-            self,
-            provider_address: str,
-            evaluator_address: str,
-            expired_at: datetime
+        self, provider_address: str, evaluator_address: str, expired_at: datetime
     ) -> str:
         retries = 3
         while retries > 0:
@@ -85,8 +89,7 @@ class _ACPContractManager:
 
                 # Sign the transaction
                 user_op_hash = self._sign_transaction(
-                    "createJob",
-                    [provider_address, evaluator_address, expire_timestamp]
+                    "createJob", [provider_address, evaluator_address, expire_timestamp]
                 )
                 return user_op_hash
             except Exception as e:
@@ -100,7 +103,7 @@ class _ACPContractManager:
         user_op_hash = self._sign_transaction(
             "approve",
             [self.config.contract_address, self._format_amount(amount)],
-            self.config.payment_token_address
+            self.config.payment_token_address,
         )
 
         if user_op_hash is None:
@@ -125,17 +128,17 @@ class _ACPContractManager:
         raise Exception("Failed to approve allowance")
 
     def create_payable_memo(
-            self,
-            job_id: int,
-            content: str,
-            amount: float,
-            receiver_address: str,
-            fee_amount: float,
-            fee_type: FeeType,
-            next_phase: ACPJobPhase,
-            memo_type: MemoType,
-            expired_at: datetime,
-            token: Optional[str] = None
+        self,
+        job_id: int,
+        content: str,
+        amount: float,
+        receiver_address: str,
+        fee_amount: float,
+        fee_type: FeeType,
+        next_phase: ACPJobPhase,
+        memo_type: MemoType,
+        expired_at: datetime,
+        token: Optional[str] = None,
     ) -> Dict[str, Any]:
         receiver_address = Web3.to_checksum_address(receiver_address)
         token = self.config.payment_token_address if token is None else token
@@ -152,8 +155,8 @@ class _ACPContractManager:
                 fee_type.value,
                 memo_type.value,
                 next_phase.value,
-                math.floor(expired_at.timestamp())
-            ]
+                math.floor(expired_at.timestamp()),
+            ],
         )
 
         if user_op_hash is None:
@@ -178,15 +181,16 @@ class _ACPContractManager:
         raise Exception(f"Failed to create payable memo")
 
     def create_memo(
-            self, job_id: int,
-            content: str,
-            memo_type: MemoType,
-            is_secured: bool,
-            next_phase: ACPJobPhase
+        self,
+        job_id: int,
+        content: str,
+        memo_type: MemoType,
+        is_secured: bool,
+        next_phase: ACPJobPhase,
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
             "createMemo",
-            [job_id, content, memo_type.value, is_secured, next_phase.value]
+            [job_id, content, memo_type.value, is_secured, next_phase.value],
         )
 
         if user_op_hash is None:
@@ -212,14 +216,10 @@ class _ACPContractManager:
         raise Exception("Failed to create memo")
 
     def sign_memo(
-            self,
-            memo_id: int,
-            is_approved: bool,
-            reason: Optional[str] = ""
+        self, memo_id: int, is_approved: bool, reason: Optional[str] = ""
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
-            "signMemo",
-            [memo_id, is_approved, reason]
+            "signMemo", [memo_id, is_approved, reason]
         )
 
         if user_op_hash is None:
@@ -245,8 +245,7 @@ class _ACPContractManager:
 
     def set_budget(self, job_id: int, budget: float) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
-            "setBudget",
-            [job_id, self._format_amount(budget)]
+            "setBudget", [job_id, self._format_amount(budget)]
         )
 
         if user_op_hash is None:
@@ -272,9 +271,10 @@ class _ACPContractManager:
         raise Exception("Failed to set budget")
 
     def set_budget_with_payment_token(
-            self, job_id: int,
-            budget: float,
-            payment_token_address: str = None,
+        self,
+        job_id: int,
+        budget: float,
+        payment_token_address: str = None,
     ) -> Dict[str, Any]:
 
         if payment_token_address is None:
@@ -282,7 +282,7 @@ class _ACPContractManager:
 
         user_op_hash = self._sign_transaction(
             "setBudgetWithPaymentToken",
-            [job_id, self._format_amount(budget), payment_token_address]
+            [job_id, self._format_amount(budget), payment_token_address],
         )
 
         if user_op_hash is None:

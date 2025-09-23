@@ -1,7 +1,17 @@
 # virtuals_acp/models.py
 
 from dataclasses import dataclass, field
-from typing import Any, List, Optional, TYPE_CHECKING, Dict, Union, TypeVar, Generic, Literal
+from typing import (
+    Any,
+    List,
+    Optional,
+    TYPE_CHECKING,
+    Dict,
+    Union,
+    TypeVar,
+    Generic,
+    Literal,
+)
 from enum import Enum
 
 from pydantic import Field, BaseModel, ConfigDict
@@ -10,6 +20,7 @@ from pydantic.alias_generators import to_camel
 
 if TYPE_CHECKING:
     from virtuals_acp.offering import ACPJobOffering
+
 
 class ACPMemoStatus(str, Enum):
     PENDING = "PENDING"
@@ -75,7 +86,7 @@ class IACPAgent:
     id: int
     name: str
     description: str
-    wallet_address: str # Checksummed address
+    wallet_address: str  # Checksummed address
     offerings: List["ACPJobOffering"] = field(default_factory=list)
     twitter_handle: Optional[str] = None
     # Full fields from TS for completeness, though browse_agent returns a subset
@@ -106,10 +117,7 @@ T = TypeVar("T", bound=BaseModel)
 
 
 class PayloadModel(BaseModel):
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        validate_by_name=True
-    )
+    model_config = ConfigDict(alias_generator=to_camel, validate_by_name=True)
 
     # JSON-friendly payload fields when using model_dump and model_dump_json
     def model_dump(self, *args, **kwargs):
@@ -133,7 +141,9 @@ class NegotiationPayload(PayloadModel):
     name: Optional[str] = None
     service_requirement: Optional[Union[str, Dict[str, Any]]] = Field(
         default=None,
-        validation_alias=AliasChoices("serviceRequirement", "service_requirement", "message"),
+        validation_alias=AliasChoices(
+            "serviceRequirement", "service_requirement", "message"
+        ),
     )
     model_config = ConfigDict(extra="allow")
 

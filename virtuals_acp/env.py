@@ -2,6 +2,7 @@ from typing import Optional
 from pydantic_settings import BaseSettings
 from pydantic import field_validator
 
+
 class EnvSettings(BaseSettings):
     WHITELISTED_WALLET_PRIVATE_KEY: Optional[str] = None
     BUYER_AGENT_WALLET_ADDRESS: Optional[str] = None
@@ -14,10 +15,16 @@ class EnvSettings(BaseSettings):
     SELLER_ENTITY_ID: Optional[int] = None
     EVALUATOR_ENTITY_ID: Optional[int] = None
 
-    @field_validator("BUYER_AGENT_WALLET_ADDRESS", "SELLER_AGENT_WALLET_ADDRESS", "EVALUATOR_AGENT_WALLET_ADDRESS")
+    @field_validator(
+        "BUYER_AGENT_WALLET_ADDRESS",
+        "SELLER_AGENT_WALLET_ADDRESS",
+        "EVALUATOR_AGENT_WALLET_ADDRESS",
+    )
     def validate_wallet_address(cls, v: str) -> str:
         if v is None:
             return None
         if not v.startswith("0x") or len(v) != 42:
-            raise ValueError("Wallet address must start with '0x' and be 42 characters long.")
+            raise ValueError(
+                "Wallet address must start with '0x' and be 42 characters long."
+            )
         return v

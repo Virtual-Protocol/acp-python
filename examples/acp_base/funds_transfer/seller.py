@@ -7,10 +7,16 @@ from virtuals_acp.env import EnvSettings
 
 from dotenv import load_dotenv
 
-from virtuals_acp.models import FundResponsePayload, GenericPayload, PayloadType, PositionFulfilledPayload, \
-    UnfulfilledPositionPayload
+from virtuals_acp.models import (
+    FundResponsePayload,
+    GenericPayload,
+    PayloadType,
+    PositionFulfilledPayload,
+    UnfulfilledPositionPayload,
+)
 
 load_dotenv(override=True)
+
 
 def seller():
     # for simulation only
@@ -40,8 +46,8 @@ def seller():
                     type=PayloadType.FUND_RESPONSE,
                     data=FundResponsePayload(
                         reporting_api_endpoint="https://example-reporting-api-endpoint/positions"
-                    )
-                )
+                    ),
+                ),
             )
             print(f"Job {job.id} responded")
             return
@@ -56,9 +62,7 @@ def seller():
             if memo_to_sign.type == MemoType.PAYABLE_TRANSFER_ESCROW:
                 print(f"Accepting positions opening {job} with memo {memo_to_sign.id}")
                 job.respond_open_position(
-                    memo_to_sign.id,
-                    True,
-                    "accepts position opening"
+                    memo_to_sign.id, True, "accepts position opening"
                 )
                 print(f"Job {job.id} position opening accepted")
 
@@ -84,10 +88,12 @@ def seller():
                             symbol="ETH",
                             amount=0.0015,
                             contract_address="0xd449119E89773693D573ED217981659028C7662E",
-                            type="PARTIAL"
+                            type="PARTIAL",
                         )
                     )
-                    print(f"Job {job.id} ETH position partially fulfilled, returning the remainders")
+                    print(
+                        f"Job {job.id} ETH position partially fulfilled, returning the remainders"
+                    )
 
                 return
 
@@ -95,9 +101,7 @@ def seller():
             elif memo_to_sign.type == MemoType.PAYABLE_REQUEST:
                 print(f"Accepting positions closing {job} with memo {memo_to_sign.id}")
                 job.respond_close_partial_position(
-                    memo_to_sign.id,
-                    True,
-                    "accepts position closing"
+                    memo_to_sign.id, True, "accepts position closing"
                 )
                 print(f"Job {job.id} position closing accepted")
                 return
@@ -123,9 +127,9 @@ def seller():
                             type="CLOSE",
                             pnl=0,
                             entry_price=3000,
-                            exit_price=3000
+                            exit_price=3000,
                         )
-                    ]
+                    ],
                 )
                 print(f"Job {job.id} closed")
                 return
@@ -140,7 +144,7 @@ def seller():
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
         on_new_task=on_new_task,
-        entity_id=env.SELLER_ENTITY_ID
+        entity_id=env.SELLER_ENTITY_ID,
     )
 
     print("Waiting for new task...")

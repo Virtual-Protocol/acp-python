@@ -12,6 +12,7 @@ load_dotenv(override=True)
 POLL_INTERVAL_SECONDS = 20
 # --------------------------------------------------
 
+
 def evaluator():
     env = EnvSettings()
 
@@ -23,7 +24,9 @@ def evaluator():
     print(f"Evaluator ACP Initialized. Agent: {acp.agent_address}")
 
     while True:
-        print(f"\nEvaluator: Polling for jobs assigned to {acp.agent_address} requiring evaluation...")
+        print(
+            f"\nEvaluator: Polling for jobs assigned to {acp.agent_address} requiring evaluation..."
+        )
         active_jobs_list: List[ACPJob] = acp.get_active_jobs()
 
         if not active_jobs_list:
@@ -49,19 +52,23 @@ def evaluator():
                     accept_the_delivery = True
                     evaluation_reason = "Deliverable looks great, approved!"
 
-                    print(f"  Job {onchain_job_id}: Evaluating... Accepting: {accept_the_delivery}")
+                    print(
+                        f"  Job {onchain_job_id}: Evaluating... Accepting: {accept_the_delivery}"
+                    )
                     job.evaluate(
                         accept=accept_the_delivery,
                         reason=evaluation_reason,
                     )
-                    print(
-                        f"  Job {onchain_job_id}: Evaluation submitted.")
+                    print(f"  Job {onchain_job_id}: Evaluation submitted.")
                 elif current_phase in [ACPJobPhase.REQUEST, ACPJobPhase.NEGOTIATION]:
                     print(
-                        f"Evaluator: Job {onchain_job_id} is in {current_phase.name} phase. Waiting for job to be delivered.")
+                        f"Evaluator: Job {onchain_job_id} is in {current_phase.name} phase. Waiting for job to be delivered."
+                    )
                     continue
                 elif current_phase in [ACPJobPhase.COMPLETED, ACPJobPhase.REJECTED]:
-                    print(f"Evaluator: Job {onchain_job_id} is already in {current_phase.name}. No action.")
+                    print(
+                        f"Evaluator: Job {onchain_job_id} is already in {current_phase.name}. No action."
+                    )
 
             except Exception as e:
                 print(f"Evaluator: Error processing job {onchain_job_id}: {e}")
