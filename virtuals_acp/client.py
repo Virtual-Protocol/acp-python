@@ -4,7 +4,6 @@ import json
 import signal
 import sys
 import threading
-import time
 from datetime import datetime, timezone, timedelta
 from importlib.metadata import version
 from typing import List, Optional, Tuple, Union, Dict, Any, Callable
@@ -337,66 +336,25 @@ class VirtualsACP:
         if provider_address == self.agent_address:
             raise Exception("You cannot initiate a job with yourself as the provider")
 
-        job_id = None
-        retry_count = 3
-        retry_delay = 3
-
-        user_op_hash = self.contract_manager.create_job(
+        response = self.contract_manager.create_job(
             provider_address, eval_addr, expired_at
         )
 
-        time.sleep(retry_delay)
-        for attempt in range(retry_count):
-            try:
-                response = self.contract_manager.validate_transaction(user_op_hash)
+        logs = response.get("receipts", [])[0].get("logs", [])
+        contract_logs = next(
+            (
+                log
+                for log in logs
+                if log.get("address", "").lower()
+                == self.contract_manager.config.contract_address.lower()
+            ),
+            None,
+        )
 
-                if response.get("status") == 200:
-                    logs = response.get("receipts", [])[0].get("logs", [])
-                    contract_logs = next(
-                        (
-                            log
-                            for log in logs
-                            if log.get("address", "").lower()
-                            == self.contract_manager.config.contract_address.lower()
-                        ),
-                        None,
-                    )
+        if not contract_logs:
+            raise Exception("Failed to get contract logs")
 
-                    if not contract_logs:
-                        raise Exception("Failed to get contract logs")
-
-                    try:
-                        job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
-                        break
-                    except (ValueError, TypeError, AttributeError):
-                        raise Exception("Failed to parse job ID from contract logs")
-
-                # data = response.get("data", {})
-                # if not data:
-                #     raise Exception("Invalid tx_hash!")
-
-                # if data.get("status") == "retry":
-                #     raise Exception("Transaction failed, retrying...")
-
-                # if data.get("status") == "failed":
-                #     break
-
-                # if data.get("status") == "success":
-                #     job_id = int(data.get("result").get("jobId"))
-
-                # if job_id is not None and job_id != "":
-                #     break
-
-            except Exception as e:
-                if attempt == retry_count - 1:
-                    print(f"Error in create_job function: {e}")
-                if attempt < retry_count - 1:
-                    time.sleep(retry_delay)
-                else:
-                    raise
-
-        if job_id is None or job_id == "":
-            raise Exception("Failed to create job")
+        job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
 
         self.contract_manager.set_budget_with_payment_token(job_id, amount)
 
@@ -451,7 +409,7 @@ class VirtualsACP:
         self,
         job_id: int,
         memo_id: int,
-        amount: Union[float, str],
+        amount: float,
         reason: Optional[str] = "",
     ) -> Dict[str, Any]:
 
@@ -475,9 +433,9 @@ class VirtualsACP:
     def request_funds(
         self,
         job_id: int,
-        amount: Union[float, str],
+        amount: float,
         receiver_address: str,
-        fee_amount: Union[float, str],
+        fee_amount: float,
         fee_type: FeeType,
         reason: GenericPayload[T],
         next_phase: ACPJobPhase,
@@ -504,7 +462,7 @@ class VirtualsACP:
         self,
         memo_id: int,
         accept: bool,
-        amount: Union[float, str],
+        amount: float,
         reason: Optional[str] = "",
     ) -> str:
         if not accept:
@@ -522,9 +480,9 @@ class VirtualsACP:
     def transfer_funds(
         self,
         job_id: int,
-        amount: Union[float, str],
+        amount: float,
         receiver_address: str,
-        fee_amount: Union[float, str],
+        fee_amount: float,
         fee_type: FeeType,
         reason: GenericPayload[T],
         next_phase: ACPJobPhase,
@@ -581,7 +539,6 @@ class VirtualsACP:
             next_phase=ACPJobPhase.COMPLETED,
         )
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        # print(f"Deliverable submission tx: {tx_hash} for job {job_id}")
         return tx_hash
 
     def sign_memo(self, memo_id: int, accept: bool, reason: Optional[str] = "") -> str:
