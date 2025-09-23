@@ -134,14 +134,6 @@ class NegotiationPayload(PayloadModel):
     requirement: Optional[Union[str, Dict[str, Any]]] = None
     service_name: Optional[str] = None
     service_requirement: Optional[Dict[str, Any]] = None
-    # name: Optional[str] = Field(
-    #     default=None,
-    #     validation_alias=AliasChoices("name"),
-    # )
-    # service_requirement: Optional[Union[str, Dict[str, Any]]] = Field(
-    #     default=None,
-    #     validation_alias=AliasChoices("serviceRequirement", "service_requirement", "message"),
-    # )
     model_config = ConfigDict(extra="allow")
 
 
