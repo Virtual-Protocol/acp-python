@@ -8,20 +8,15 @@ from .models import (
     MemoType,
     ACPAgentSort,
     ACPGraduationStatus,
-    ACPOnlineStatus
+    ACPOnlineStatus,
 )
 from .configs import (
     ACPContractConfig,
     BASE_SEPOLIA_CONFIG,
     BASE_MAINNET_CONFIG,
-    DEFAULT_CONFIG
+    DEFAULT_CONFIG,
 )
-from .exceptions import (
-    ACPError,
-    ACPApiError,
-    ACPContractError,
-    TransactionFailedError
-)
+from .exceptions import ACPError, ACPApiError, ACPContractError, TransactionFailedError
 from .client import VirtualsACP
 from .job import ACPJob
 from .offering import ACPJobOffering

@@ -13,6 +13,7 @@ load_dotenv(override=True)
 POLL_INTERVAL_SECONDS = 20
 # --------------------------------------------------
 
+
 def seller():
     env = EnvSettings()
 
@@ -28,7 +29,9 @@ def seller():
     processed_job_stages = {}
 
     while True:
-        print(f"\nSeller: Polling for active jobs for {env.SELLER_AGENT_WALLET_ADDRESS}...")
+        print(
+            f"\nSeller: Polling for active jobs for {env.SELLER_AGENT_WALLET_ADDRESS}..."
+        )
         active_jobs_list: List[ACPJob] = acp.get_active_jobs()
 
         if not active_jobs_list:
@@ -49,32 +52,48 @@ def seller():
                 # Fetch full details to get current phase and memos
                 job_details = acp.get_job_by_onchain_id(onchain_job_id)
                 current_phase = job_details.phase
-                print(f"Seller: Checking job {onchain_job_id}. Current Phase: {current_phase.name}")
+                print(
+                    f"Seller: Checking job {onchain_job_id}. Current Phase: {current_phase.name}"
+                )
 
                 # 1. Respond to Job Request (if not already responded)
-                if current_phase == ACPJobPhase.REQUEST and not job_stages.get("responded_to_request"):
+                if current_phase == ACPJobPhase.REQUEST and not job_stages.get(
+                    "responded_to_request"
+                ):
                     print(
-                        f"Seller: Job {onchain_job_id} is in REQUEST. Responding to buyer's request...")
+                        f"Seller: Job {onchain_job_id} is in REQUEST. Responding to buyer's request..."
+                    )
                     job.respond(
                         accept=True,
                         reason=f"Seller accepts the job offer.",
                     )
-                    print(f"Seller: Accepted job {onchain_job_id}. Job phase should move to NEGOTIATION.")
+                    print(
+                        f"Seller: Accepted job {onchain_job_id}. Job phase should move to NEGOTIATION."
+                    )
                     job_stages["responded_to_request"] = True
                 # 2. Submit Deliverable (if job is paid and not yet delivered)
-                elif current_phase == ACPJobPhase.TRANSACTION and not job_stages.get("delivered_work"):
+                elif current_phase == ACPJobPhase.TRANSACTION and not job_stages.get(
+                    "delivered_work"
+                ):
                     # Buyer has paid, job is in TRANSACTION. Seller needs to deliver.
-                    print(f"Seller: Job {onchain_job_id} is PAID (TRANSACTION phase). Submitting deliverable...")
-                    deliverable = IDeliverable(
-                        type="url",
-                        value="https://example.com"
+                    print(
+                        f"Seller: Job {onchain_job_id} is PAID (TRANSACTION phase). Submitting deliverable..."
                     )
+                    deliverable = IDeliverable(type="url", value="https://example.com")
                     job.deliver(deliverable)
-                    print(f"Seller: Deliverable submitted for job {onchain_job_id}. Job should move to EVALUATION.")
+                    print(
+                        f"Seller: Deliverable submitted for job {onchain_job_id}. Job should move to EVALUATION."
+                    )
                     job_stages["delivered_work"] = True
 
-                elif current_phase in [ACPJobPhase.EVALUATION, ACPJobPhase.COMPLETED, ACPJobPhase.REJECTED]:
-                    print(f"Seller: Job {onchain_job_id} is in {current_phase.name}. No further action for seller.")
+                elif current_phase in [
+                    ACPJobPhase.EVALUATION,
+                    ACPJobPhase.COMPLETED,
+                    ACPJobPhase.REJECTED,
+                ]:
+                    print(
+                        f"Seller: Job {onchain_job_id} is in {current_phase.name}. No further action for seller."
+                    )
                     # Mark as fully handled for this script
                     job_stages["responded_to_request"] = True
                     job_stages["delivered_work"] = True

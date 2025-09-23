@@ -6,8 +6,14 @@ from typing import Optional
 from virtuals_acp import ACPMemo, MemoType, ACPGraduationStatus, ACPOnlineStatus
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.job import ACPJob
-from virtuals_acp.models import ACPJobPhase, OpenPositionPayload, TPSLConfig, ClosePositionPayload, PayloadType, \
-    PositionDirection
+from virtuals_acp.models import (
+    ACPJobPhase,
+    OpenPositionPayload,
+    TPSLConfig,
+    ClosePositionPayload,
+    PayloadType,
+    PositionDirection,
+)
 from virtuals_acp.env import EnvSettings
 
 from dotenv import load_dotenv
@@ -41,20 +47,20 @@ def buyer():
                 [
                     OpenPositionPayload(
                         symbol="BTC",
-                        amount=0.001, # amount in $USDC
+                        amount=0.001,  # amount in $USDC
                         direction=PositionDirection.LONG,
                         tp=TPSLConfig(percentage=5),
                         sl=TPSLConfig(percentage=2),
                     ),
                     OpenPositionPayload(
                         symbol="ETH",
-                        amount=0.002, # amount in $USDC
+                        amount=0.002,  # amount in $USDC
                         direction=PositionDirection.SHORT,
                         tp=TPSLConfig(percentage=5),
                         sl=TPSLConfig(percentage=2),
                     ),
                 ],
-                0.001 # fee amount in $USDC
+                0.001,  # fee amount in $USDC
             )
             print(f"Job {job.id} 2 positions opened")
 
@@ -65,12 +71,12 @@ def buyer():
                 [
                     OpenPositionPayload(
                         symbol="VIRTUAL",
-                        amount=0.003, # amount in $USDC
+                        amount=0.003,  # amount in $USDC
                         tp=TPSLConfig(percentage=33000),
                         sl=TPSLConfig(percentage=2),
                     )
                 ],
-                0.0001
+                0.0001,
             )
             print(f"Job {job.id} 1 more position opened")
 
@@ -78,10 +84,7 @@ def buyer():
             time.sleep(20)
             print(f"Job {job.id} closing BTC position")
             job.close_partial_position(
-                ClosePositionPayload(
-                    position_id=0,
-                    amount=0.00101
-                )
+                ClosePositionPayload(position_id=0, amount=0.00101)
             )
             print(f"Job {job.id} BTC position closed")
 
@@ -104,23 +107,28 @@ def buyer():
                 job.respond_unfulfilled_position(
                     memo_to_sign.id,
                     True,
-                    "Accepting funds transfer for the unfulfilled positions"
+                    "Accepting funds transfer for the unfulfilled positions",
                 )
-                print(f"Job {job.id} funds transfer for the unfulfilled position accepted")
+                print(
+                    f"Job {job.id} funds transfer for the unfulfilled position accepted"
+                )
                 return
             else:
                 job.respond_position_fulfilled(
                     memo_to_sign.id,
                     True,
-                    "Accepting funds transfer for the fulfilled positions"
+                    "Accepting funds transfer for the fulfilled positions",
                 )
-                print(f"Job {job.id} funds transfer for the fulfilled position accepted")
+                print(
+                    f"Job {job.id} funds transfer for the fulfilled position accepted"
+                )
 
         # receiving funds transfer from provider at closing of the job
         elif (
             job.phase == ACPJobPhase.TRANSACTION
             and memo_to_sign is not None
-            and memo_to_sign.next_phase == ACPJobPhase.EVALUATION # if phase is evaluation, it means the job is closing
+            and memo_to_sign.next_phase
+            == ACPJobPhase.EVALUATION  # if phase is evaluation, it means the job is closing
             and memo_to_sign.type == MemoType.PAYABLE_TRANSFER_ESCROW
         ):
             print(f"Accepting funds transfer {job} with memo {memo_to_sign.id}")
@@ -151,7 +159,7 @@ def buyer():
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
         on_new_task=on_new_task,
         on_evaluate=on_evaluate,
-        entity_id=env.BUYER_ENTITY_ID
+        entity_id=env.BUYER_ENTITY_ID,
     )
 
     # Browse available agents based on a keyword and cluster name
@@ -171,7 +179,7 @@ def buyer():
     job_id = chosen_job_offering.initiate_job(
         service_requirement="<your_service_requirement>",
         evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
-        expired_at=datetime.now() + timedelta(minutes=8)
+        expired_at=datetime.now() + timedelta(minutes=8),
     )
 
     print(f"Job {job_id} initiated")
