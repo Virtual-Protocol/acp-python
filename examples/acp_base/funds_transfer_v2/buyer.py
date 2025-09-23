@@ -37,14 +37,12 @@ SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING: Dict[str, Any] = {
         "direction": "long",
     },
     "swap_token": {
-        "fromSymbol": "BMW",
-        "fromContractAddress": "0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
+        "fromSymbol": "USDC",
+        "fromContractAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
         "amount": 0.01,
-        "toSymbol": "USDC",
+        "toSymbol": "BMW",
     },
-    "close_partial_position": {"positionId": 0, "amount": 1},
-    "close_position": {"positionId": 0},
-    "close_job": "Close job and withdraw all",
+    "close_position": {"positionId": 0}
 }
 
 
@@ -114,7 +112,7 @@ def main():
 
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp.browse_agents(
-        keyword="calm_seller",
+        keyword="<your-filter-agent-keyword>",
         sort_by=[
             ACPAgentSort.SUCCESSFUL_JOB_COUNT,
         ],

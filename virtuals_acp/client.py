@@ -86,8 +86,6 @@ class VirtualsACP:
 
     def handle_new_task(self, data) -> None:
         memo_to_sign_id = data.get("memoToSign")
-        print("memos:")
-        print(data["memos"])
 
         memos = [ACPMemo(
             acp_client=self,

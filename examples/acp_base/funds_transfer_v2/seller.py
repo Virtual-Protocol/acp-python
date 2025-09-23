@@ -31,7 +31,6 @@ class JobName(str, Enum):
     OPEN_POSITION = "open_position"
     CLOSE_POSITION = "close_position"
     SWAP_TOKEN = "swap_token"
-    WITHDRAW = "withdraw"
 
 @dataclass
 class Position:
@@ -72,7 +71,7 @@ def seller():
             return job.create_requirement_payable_memo(
                 "Send me 1 USDC to open position",
                 MemoType.PAYABLE_REQUEST,
-                FareAmount(1, config.base_fare),
+                FareAmount(job.requirement["amount"], config.base_fare),
                 job.provider_address,
                 expired_at=expiry,
             )
@@ -86,17 +85,7 @@ def seller():
             return job.create_requirement_payable_memo(
                 "Send me 1 USDC to swap to 1 VIRTUAL",
                 MemoType.PAYABLE_REQUEST,
-                FareAmount(1, config.base_fare),
-                job.provider_address,
-                expired_at=expiry,
-            )
-
-        if job_name == JobName.WITHDRAW.value:
-            memo.sign(True, "accepts withdraw")
-            return job.create_requirement_payable_memo(
-                "Withdrawing a random amount",
-                MemoType.PAYABLE_TRANSFER_ESCROW,
-                FareAmount(1, config.base_fare),
+                FareAmount(job.requirement["amount"], config.base_fare),
                 job.provider_address,
                 expired_at=expiry,
             )
@@ -126,13 +115,12 @@ def seller():
             pos = next((p for p in wallet.positions if p.symbol == "USDC"), None)
             wallet.positions = [p for p in wallet.positions if p.symbol != "USDC"]
 
-            # credit assets in base token
             asset = next((a for a in wallet.assets if a.fare.contract_address == config.base_fare.contract_address), None)
             credited = (pos.amount if pos else 0)
             if not asset:
                 wallet.assets.append(FareAmount(credited, config.base_fare))
             else:
-                asset.amount += FareAmount(credited, config.base_fare).amount  # FareAmount.amount is int (scaled)
+                asset.amount += FareAmount(credited, config.base_fare).amount
 
             return job.deliver(IDeliverable(
                 type="message", 
@@ -149,12 +137,6 @@ def seller():
             return job.deliver(IDeliverable(
                 type="message", 
                 value="Swapped token with hash 0x1234567890"
-            ))
-
-        if job_name == JobName.WITHDRAW.value:
-            return job.deliver(IDeliverable(
-                type="message",
-                value="Withdrawn amount with hash 0x1234567890"
             ))
 
         logger.warning("Unhandled job name %s in transaction", job_name)

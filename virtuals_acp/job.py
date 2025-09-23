@@ -327,7 +327,6 @@ class ACPJob(BaseModel):
                 or memo.next_phase != ACPJobPhase.TRANSACTION
                 or memo.type != MemoType.PAYABLE_REQUEST
         ):
-            print(memo)
             raise ValueError("No close position memo found")
 
         close_position_payload = try_parse_json_model(memo.content, GenericPayload[ClosePositionPayload])
