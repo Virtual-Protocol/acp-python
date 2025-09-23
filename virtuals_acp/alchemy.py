@@ -1,11 +1,10 @@
-import os
 import secrets
+import time
 from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
 from enum import Enum
 
 import requests
-from web3 import Web3
 from eth_account import Account
 from eth_account.messages import encode_typed_data
 from eth_utils.conversions import to_hex
@@ -13,6 +12,8 @@ from eth_account.messages import encode_defunct
 
 
 from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
+
+MAX_RETRIES = 10
 
 
 class PermissionType(str, Enum):
@@ -110,12 +111,10 @@ class AlchemyAccountKit:
         """
         self.chain_id = chain_id or BASE_SEPOLIA_CONFIG.chain_id
         self.rpc_client = AlchemyRPCClient(BASE_SEPOLIA_CONFIG.alchemy_base_url)
-        self.entity_id = entity_id
         self.account_address = agent_wallet_address
         self.owner_account = owner_account
 
-        self.session_data: Optional[Dict[str, Any]] = None
-        self.permissions_context: Optional[str] = None
+        self.permissions_context = self.create_session(entity_id)
 
     def sign_signature_request(
         self, request: SignatureRequest, account: Account
@@ -151,25 +150,18 @@ class AlchemyAccountKit:
 
         return result
 
-    def create_session(self) -> None:
-        if not self.account_address:
-            raise ValueError("Must request account first")
-
+    def create_session(self, entity_id: int) -> str:
         # Prepare permissions context
         permissions_context_version = "0x02"  # REMOTE_MODE_PERMISSIONS_CONTEXT
         is_global_validation = "01"  # Should be int, not string
 
         # Concatenate hex values (equivalent to concatHex in viem)
         # Concatenate hex values by removing 0x prefix from subsequent values
-        self.permissions_context = (
+        return (
             permissions_context_version
             + is_global_validation  # Remove 0x prefix
-            + to_hex(self.entity_id)[2:].zfill(8)  # Remove 0x prefix and pad to 8 chars
+            + to_hex(entity_id)[2:].zfill(8)  # Remove 0x prefix and pad to 8 chars
         )
-        if not self.permissions_context.startswith("0x"):
-            self.permissions_context = "0x" + self.permissions_context
-
-        return
 
     def get_random_nonce(self, bits=152):
         bytes_length = bits // 8
@@ -185,24 +177,23 @@ class AlchemyAccountKit:
         if not self.permissions_context:
             raise ValueError("Must create session first")
 
-        # call createAccount -- return the same account address -
-        if capabilities is None:
-            capabilities = {
-                "permissions": {"context": self.permissions_context},
-                "paymasterService": {"policyId": BASE_SEPOLIA_CONFIG.alchemy_policy_id},
-                "nonceOverride": {"nonceKey": self.get_random_nonce()},
-            }
+        final_capabilities = {
+            "permissions": {"context": self.permissions_context},
+            "paymasterService": {"policyId": BASE_SEPOLIA_CONFIG.alchemy_policy_id},
+            "nonceOverride": {"nonceKey": self.get_random_nonce()},
+        }
+
+        if capabilities:
+            final_capabilities.update(capabilities)
 
         params = {
             "from": self.account_address,
             "chainId": to_hex(self.chain_id),
             "calls": calls,
-            "capabilities": capabilities,
+            "capabilities": final_capabilities,
         }
 
-        result = self.rpc_client.wallet_prepare_calls(params)
-
-        return result
+        return self.rpc_client.wallet_prepare_calls(params)
 
     def send_prepared_calls(
         self, prepare_calls_result: Dict[str, Any]
@@ -235,18 +226,47 @@ class AlchemyAccountKit:
             "permissions": {"context": self.permissions_context}
         }
 
-        result = self.rpc_client.wallet_send_prepared_calls(send_prepared_calls_params)
+        return self.rpc_client.wallet_send_prepared_calls(send_prepared_calls_params)
 
-        return result
+    def wait_for_call_status(self, prepared_call_id: str) -> Dict[str, Any]:
+        retries = MAX_RETRIES
+        while True:
+            try:
+                status = self.rpc_client.wallet_get_calls_status(prepared_call_id)
 
-    def execute_calls(
-        self, calls: List[Dict[str, str]], capabilities: Optional[Dict[str, Any]] = None
+                if status["status"] == 200:
+                    return status
+
+                raise Exception("Retrying...")
+            except Exception as e:
+                retries -= 1
+
+                if retries == 0:
+                    raise Exception("Failed to get call status")
+
+            time.sleep(0.1 * (MAX_RETRIES - retries))
+
+    def handle_user_operation(
+        self, calls: List[Dict[str, str]], capabilities: Dict[str, Any] = {}
     ) -> Dict[str, Any]:
-        prepare_result = self.prepare_calls(calls, capabilities)
-        return self.send_prepared_calls(prepare_result)
+        retries = MAX_RETRIES
+        while True:
+            try:
+                additional_capabilities = {}
 
-    def get_user_operation_hash(self, send_result: Dict[str, Any]) -> str:
-        return send_result["preparedCallIds"][0]
+                # Increase the max fee per gas by 10% for subsequent retries
+                if retries <= MAX_RETRIES - 1:
+                    additional_capabilities = {"maxFeePerGas": {"multiplier": 1.1}}
 
-    def get_calls_status(self, prepared_call_id: str) -> Dict[str, Any]:
-        return self.rpc_client.wallet_get_calls_status(prepared_call_id)
+                capabilities.update(additional_capabilities)
+
+                prepare_result = self.prepare_calls(calls, capabilities)
+                result = self.send_prepared_calls(prepare_result)
+                return self.wait_for_call_status(result["preparedCallIds"][0])
+            except Exception as e:
+                retries -= 1
+
+                if retries == 0:
+                    raise Exception(e)
+
+            time.sleep(0.1 * (MAX_RETRIES - retries))
