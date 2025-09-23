@@ -6,15 +6,16 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
+
 def test_helper_functions():
     env = EnvSettings()
-            
+
     acp = VirtualsACP(
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
-        entity_id=env.BUYER_ENTITY_ID
+        entity_id=env.BUYER_ENTITY_ID,
     )
-    
+
     # Get active jobs
     active_jobs = acp.get_active_jobs(page=1, pageSize=10)
     print("\n🔵 Active Jobs:")

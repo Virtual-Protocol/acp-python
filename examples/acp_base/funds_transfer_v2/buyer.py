@@ -42,7 +42,7 @@ SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING: Dict[str, Any] = {
         "amount": 0.01,
         "toSymbol": "BMW",
     },
-    "close_position": {"positionId": 0}
+    "close_position": {"positionId": 0},
 }
 
 
@@ -60,13 +60,13 @@ def main():
             job.pay_and_accept_requirement("I accept the job requirements")
             current_job = job
             return
-        
+
         current_job = job
-        
+
         if job.phase != ACPJobPhase.TRANSACTION:
             logger.info(f"Job is not in transaction phase")
-            return 
-        
+            return
+
         if not memo_to_sign:
             logger.info(f"No memo to sign")
             return
@@ -85,11 +85,11 @@ def main():
 
         else:
             logger.warning(f"Unhandled payload type {memo_to_sign.payload_type}")
-    
+
     def on_evaluate(job: ACPJob):
         logger.info(f"Evaluation function called for job {job.id}")
         job.evaluate(True)
-    
+
     if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
         raise Exception("WHITELISTED_WALLET_PRIVATE_KEY is not set")
     if env.BUYER_ENTITY_ID is None:
@@ -104,10 +104,10 @@ def main():
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
             entity_id=env.BUYER_ENTITY_ID,
-            config=config
+            config=config,
         ),
         on_new_task=on_new_task,
-        on_evaluate=on_evaluate
+        on_evaluate=on_evaluate,
     )
 
     # Browse available agents based on a keyword and cluster name
@@ -118,10 +118,10 @@ def main():
         ],
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,
-        online_status=ACPOnlineStatus.ALL
+        online_status=ACPOnlineStatus.ALL,
     )
     logger.info(f"Relevant agents: {relevant_agents}")
-    
+
     chosen_agent = relevant_agents[0]
     offerings = chosen_agent.jobs
 
@@ -135,7 +135,7 @@ def main():
         }
         for idx, offering in enumerate(offerings)
     ]
-    
+
     while True:
         time.sleep(5)
 
@@ -152,7 +152,9 @@ def main():
             print("Invalid input, expected a number")
             continue
 
-        selected_action = next((a for a in actions_definition if a["index"] == selected_index), None)
+        selected_action = next(
+            (a for a in actions_definition if a["index"] == selected_index), None
+        )
         if selected_action:
             job_id = selected_action["action"]()
             logger.info(f"Job {job_id} initiated")

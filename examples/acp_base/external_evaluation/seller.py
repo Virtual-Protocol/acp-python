@@ -12,27 +12,25 @@ from virtuals_acp.models import ACPJobPhase, IDeliverable
 
 load_dotenv(override=True)
 
+
 def seller():
     env = EnvSettings()
 
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
         print(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
         if (
-                job.phase == ACPJobPhase.REQUEST and
-                memo_to_sign is not None and
-                memo_to_sign.next_phase == ACPJobPhase.NEGOTIATION
+            job.phase == ACPJobPhase.REQUEST
+            and memo_to_sign is not None
+            and memo_to_sign.next_phase == ACPJobPhase.NEGOTIATION
         ):
             job.respond(True)
         elif (
-                job.phase == ACPJobPhase.TRANSACTION and
-                memo_to_sign is not None and
-                memo_to_sign.next_phase == ACPJobPhase.EVALUATION
+            job.phase == ACPJobPhase.TRANSACTION
+            and memo_to_sign is not None
+            and memo_to_sign.next_phase == ACPJobPhase.EVALUATION
         ):
             print(f"Delivering job {job.id}")
-            deliverable = IDeliverable(
-                type="url",
-                value="https://example.com"
-            )
+            deliverable = IDeliverable(type="url", value="https://example.com")
             job.deliver(deliverable)
         elif job.phase == ACPJobPhase.COMPLETED:
             print("Job completed", job)
@@ -51,7 +49,7 @@ def seller():
         wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
         agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
         on_new_task=on_new_task,
-        entity_id=env.SELLER_ENTITY_ID
+        entity_id=env.SELLER_ENTITY_ID,
     )
 
     print("Waiting for new task...")
@@ -61,4 +59,3 @@ def seller():
 
 if __name__ == "__main__":
     seller()
-    

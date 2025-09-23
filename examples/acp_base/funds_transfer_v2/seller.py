@@ -32,10 +32,12 @@ class JobName(str, Enum):
     CLOSE_POSITION = "close_position"
     SWAP_TOKEN = "swap_token"
 
+
 @dataclass
 class Position:
     symbol: str
     amount: int
+
 
 @dataclass
 class ClientWallet:
@@ -43,17 +45,21 @@ class ClientWallet:
     assets: List[FareAmount] = field(default_factory=list)
     positions: List[Position] = field(default_factory=list)
 
+
 clients: Dict[str, ClientWallet] = {}
+
 
 def _derive_wallet_addr(addr: str) -> str:
     h = hashlib.sha256(addr.encode()).hexdigest()
     return f"0x{h}"
+
 
 def get_client_wallet(address: str) -> ClientWallet:
     derived = _derive_wallet_addr(address)
     if derived not in clients:
         clients[derived] = ClientWallet(client_address=derived)
     return clients[derived]
+
 
 def seller():
     env = EnvSettings()
@@ -105,44 +111,63 @@ def seller():
                 pos.amount += 1
             else:
                 wallet.positions.append(Position(symbol="USDC", amount=1))
-            return job.deliver(IDeliverable(
-                type="message", 
-                value="Opened position with hash 0x1234567890"
-            ))
+            return job.deliver(
+                IDeliverable(
+                    type="message", value="Opened position with hash 0x1234567890"
+                )
+            )
 
         if job_name == JobName.CLOSE_POSITION.value:
             wallet = get_client_wallet(job.client_address)
             pos = next((p for p in wallet.positions if p.symbol == "USDC"), None)
             wallet.positions = [p for p in wallet.positions if p.symbol != "USDC"]
 
-            asset = next((a for a in wallet.assets if a.fare.contract_address == config.base_fare.contract_address), None)
-            credited = (pos.amount if pos else 0)
+            asset = next(
+                (
+                    a
+                    for a in wallet.assets
+                    if a.fare.contract_address == config.base_fare.contract_address
+                ),
+                None,
+            )
+            credited = pos.amount if pos else 0
             if not asset:
                 wallet.assets.append(FareAmount(credited, config.base_fare))
             else:
                 asset.amount += FareAmount(credited, config.base_fare).amount
 
-            return job.deliver(IDeliverable(
-                type="message", 
-                value="Closed position with hash 0x1234567890"
-            ))
+            return job.deliver(
+                IDeliverable(
+                    type="message", value="Closed position with hash 0x1234567890"
+                )
+            )
 
         if job_name == JobName.SWAP_TOKEN.value:
             wallet = get_client_wallet(job.client_address)
-            asset = next((a for a in wallet.assets if a.fare.contract_address == config.base_fare.contract_address), None)
+            asset = next(
+                (
+                    a
+                    for a in wallet.assets
+                    if a.fare.contract_address == config.base_fare.contract_address
+                ),
+                None,
+            )
             if not asset:
                 wallet.assets.append(FareAmount(1, config.base_fare))
             else:
                 asset.amount += FareAmount(1, config.base_fare).amount
-            return job.deliver(IDeliverable(
-                type="message", 
-                value="Swapped token with hash 0x1234567890"
-            ))
+            return job.deliver(
+                IDeliverable(
+                    type="message", value="Swapped token with hash 0x1234567890"
+                )
+            )
 
         logger.warning("Unhandled job name %s in transaction", job_name)
-    
+
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
-        logger.info(f"New job {job.id} phase={job.phase} name={job.name} memo={getattr(memo_to_sign,'id',None)}")
+        logger.info(
+            f"New job {job.id} phase={job.phase} name={job.name} memo={getattr(memo_to_sign,'id',None)}"
+        )
 
         if job.phase == ACPJobPhase.REQUEST:
             if not memo_to_sign:
@@ -162,9 +187,9 @@ def seller():
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
             entity_id=env.SELLER_ENTITY_ID,
-            config=config
+            config=config,
         ),
-        on_new_task=on_new_task
+        on_new_task=on_new_task,
     )
 
     logger.info("Seller agent is running...")
