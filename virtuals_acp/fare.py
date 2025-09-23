@@ -3,6 +3,7 @@ from decimal import Decimal, ROUND_DOWN
 from typing import Union
 from web3 import Web3
 from web3.contract import Contract
+from virtuals_acp.exceptions import ACPError
 
 
 class AcpContractConfig:
@@ -52,7 +53,7 @@ class Fare:
 
 class FareAmountBase(ABC):
     def __init__(self, amount: int, fare: Fare):
-        self.amount = amount  # stored as integer (like BigInt)
+        self.amount = amount
         self.fare = fare
 
     @abstractmethod
@@ -80,7 +81,7 @@ class FareAmount(FareAmountBase):
 
     def add(self, other: FareAmountBase) -> "FareAmountBase":
         if self.fare.contract_address != other.fare.contract_address:
-            raise AcpError("Token addresses do not match")
+            raise ACPError("Token addresses do not match")
         return FareBigInt(self.amount + other.amount, self.fare)
 
 
@@ -90,7 +91,7 @@ class FareBigInt(FareAmountBase):
 
     def add(self, other: FareAmountBase) -> "FareAmountBase":
         if self.fare.contract_address != other.fare.contract_address:
-            raise AcpError("Token addresses do not match")
+            raise ACPError("Token addresses do not match")
         return FareBigInt(self.amount + other.amount, self.fare)
 
 # --- Declared Fare Instances ---

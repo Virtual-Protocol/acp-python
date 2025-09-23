@@ -9,8 +9,8 @@ from virtuals_acp.models import ACPJobPhase, IACPAgent, IDeliverable, GenericPay
     UnfulfilledPositionPayload, RequestClosePositionPayload, NegotiationPayload, T
 from virtuals_acp.utils import try_parse_json_model
 from virtuals_acp.fare import Fare
-from virtuals_acp.models import ACPAgentSort, ACPJobPhase, ACPGraduationStatus, ACPOnlineStatus, MemoType, IACPAgent, \
-    IDeliverable, FeeType, GenericPayload, T, ACPMemoStatus
+from virtuals_acp.models import ACPJobPhase, MemoType, IACPAgent, \
+    IDeliverable, FeeType, GenericPayload, T
 from virtuals_acp.fare import Fare, FareAmountBase, FareAmount
 
 if TYPE_CHECKING:
@@ -97,23 +97,24 @@ class ACPJob(BaseModel):
     def create_requirement_payable_memo(
         self,
         content: str,
-        memo_type: MemoType,
+        type: MemoType,
         amount: FareAmountBase,
         recipient: str,
-        expired_at: datetime = datetime.utcnow() + timedelta(minutes=5),
+        expired_at: Optional[datetime] = None,
     ) -> ACPMemo:
+        if expired_at is None:
+            expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
         return self.acp_client.create_payable_memo(
             self.id,
             content,
             amount,
             recipient,
             ACPJobPhase.TRANSACTION,
-            memo_type,
-            expired_at,
+            type,
+            expired_at
         )
 
     def pay_and_accept_requirement(self, reason: Optional[str] = None) -> ACPMemo:
-        """Pay requirement (with allowance approvals) and accept it."""
         memo = next((m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None)
 
         if not memo:
@@ -123,9 +124,9 @@ class ACPJob(BaseModel):
 
         if memo.payable_details:
             transfer_amount = FareAmountBase.from_contract_address(
-                memo.payable_details.amount,
-                memo.payable_details.token,
-                self.acp_client.acp_contract_client.config,
+                memo.payable_details["amount"],
+                memo.payable_details["token"],
+                self.acp_client.contract_manager.config,
             )
         else:
             transfer_amount = FareAmount(0, self._base_fare)
@@ -137,14 +138,14 @@ class ACPJob(BaseModel):
             total_amount = base_fare_amount
 
         # approve base fare
-        self.acp_client.acp_contract_client.approve_allowance(
+        self.acp_client.contract_manager.approve_allowance(
             total_amount.amount,
             self._base_fare.contract_address,
         )
 
         # approve transfer if token differs
         if base_fare_amount.fare.contract_address != transfer_amount.fare.contract_address:
-            self.acp_client.acp_contract_client.approve_allowance(
+            self.acp_client.contract_manager.approve_allowance(
                 transfer_amount.amount,
                 transfer_amount.fare.contract_address,
             )
@@ -576,10 +577,10 @@ class ACPJob(BaseModel):
             )
 
     def confirm_job_closure(
-            self,
-            memo_id: int,
-            accept: bool,
-            reason: Optional[str] = None
+        self,
+        memo_id: int,
+        accept: bool,
+        reason: Optional[str] = None
     ):
         memo = self._get_memo_by_id(memo_id)
         if memo is None:

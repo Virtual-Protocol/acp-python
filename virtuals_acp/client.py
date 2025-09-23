@@ -1,22 +1,19 @@
 # virtuals_acp/client.py
 
 import json
+import logging
 import signal
 import sys
 import threading
 import time
 from datetime import datetime, timezone, timedelta
 from importlib.metadata import version
-from typing import List, Optional, Tuple, Union, Dict, Any, Callable
+from typing import Literal, List, Optional, Tuple, Union, Dict, Any, Callable
 
 import requests
 import socketio
-# from eth_account import Account
-# from eth_account.signers.local import LocalAccount
 from web3 import Web3
-# from web3.middleware import ExtraDataToPOAMiddleware
 
-from virtuals_acp.configs import ACPContractConfig, DEFAULT_CONFIG
 from virtuals_acp.contract_manager import ACPContractManager
 from virtuals_acp.exceptions import ACPApiError, ACPError
 from virtuals_acp.job import ACPJob
@@ -25,6 +22,12 @@ from virtuals_acp.models import ACPAgentSort, ACPJobPhase, ACPGraduationStatus, 
     IDeliverable, FeeType, GenericPayload, T, ACPMemoStatus
 from virtuals_acp.offering import ACPJobOffering
 from virtuals_acp.fare import ETH_FARE, WETH_FARE, FareAmount, FareBigInt, FareAmountBase
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("ACPClient")
 
 
 class VirtualsACP:
@@ -56,20 +59,20 @@ class VirtualsACP:
         return True, "Succesful"
 
     def _on_room_joined(self, data):
-        print('Connected to room', data)  # Send acknowledgment back to server
+        logger.info('Connected to room', data)  # Send acknowledgment back to server
         return True
 
     def _on_evaluate(self, data):
-        print('--------------------------------')
-        print(f"Evaluating job {data}")
-        print('--------------------------------')
+        logger.info('--------------------------------')
+        logger.info(f"Evaluating job {data}")
+        logger.info('--------------------------------')
         if self.on_evaluate:
-            print(f"Evaluating job {data}")
+            logger.info(f"Evaluating job {data}")
             try:
                 threading.Thread(target=self.handle_evaluate, args=(data,)).start()
                 return True
             except Exception as e:
-                print(f"Error in onEvaluate handler: {e}")
+                logger.warning(f"Error in onEvaluate handler: {e}")
                 return False
 
     def _on_new_task(self, data):
@@ -78,20 +81,24 @@ class VirtualsACP:
                 threading.Thread(target=self.handle_new_task, args=(data,)).start()
                 return True
             except Exception as e:
-                print(f"Error in onNewTask handler: {e}")
+                logger.warning(f"Error in onNewTask handler: {e}")
                 return False
 
     def handle_new_task(self, data) -> None:
         memo_to_sign_id = data.get("memoToSign")
+        print("memos:")
+        print(data["memos"])
 
         memos = [ACPMemo(
+            acp_client=self,
             id=memo.get("id"),
             type=MemoType(int(memo.get("memoType"))),
             content=memo.get("content"),
             next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
             status=ACPMemoStatus(memo.get("status")),
             signed_reason=memo.get("signedReason"),
-            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
+            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+            payable_details=memo.get("payableDetails")
         ) for memo in data["memos"]]
 
         memo_to_sign = next(
@@ -118,19 +125,21 @@ class VirtualsACP:
             price_token_address=data["priceTokenAddress"],
             context=context
         )
-        print(f"Received new task: {job}")
+        logger.info(f"Received new task: {job}")
         if self.on_new_task:
             self.on_new_task(job, memo_to_sign)
 
     def handle_evaluate(self, data) -> None:
         memos = [ACPMemo(
+            acp_client=self,
             id=memo.get("id"),
             type=MemoType(int(memo.get("memoType"))),
             content=memo.get("content"),
             next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
             status=ACPMemoStatus(memo.get("status")),
             signed_reason=memo.get("signedReason"),
-            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
+            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+            payable_details=memo.get("payableDetails")
         ) for memo in data["memos"]]
 
         context = data["context"]
@@ -152,7 +161,7 @@ class VirtualsACP:
             price_token_address=data["priceTokenAddress"],
             context=context
         )
-        print(f"Received evaluate: {job}")
+        logger.info(f"Received evaluate: {job}")
         self.on_evaluate(job)
 
     def _setup_socket_handlers(self) -> None:
@@ -185,7 +194,7 @@ class VirtualsACP:
             signal.signal(signal.SIGTERM, signal_handler)
 
         except Exception as e:
-            print(f"Failed to connect to socket server: {e}")
+            logger.warning(f"Failed to connect to socket server: {e}")
 
     def __del__(self):
         """Cleanup when the object is destroyed."""
@@ -311,7 +320,7 @@ class VirtualsACP:
 
             except Exception as e:
                 if (attempt == retry_count - 1):
-                    print(f"Error in create_job function: {e}")
+                    logger.warning(f"Error in create_job function: {e}")
                 if attempt < retry_count - 1:
                     time.sleep(retry_delay)
                 else:
@@ -336,6 +345,40 @@ class VirtualsACP:
         
         return job_id
 
+    def create_memo(self, job_id: int, content: str, next_phase: ACPJobPhase):
+        return self.contract_manager.create_memo(
+            job_id,
+            content,
+            MemoType.MESSAGE,
+            False,
+            next_phase
+        )
+
+    def create_payable_memo(
+        self,
+        job_id: int,
+        content: str,
+        amount: FareAmountBase,
+        recipient: str,
+        next_phase: ACPJobPhase,
+        type: Literal["PAYABLE_REQUEST", "PAYABLE_TRANSFER_ESCROW"],
+        expired_at: datetime
+    ):
+        fee_amount = FareAmount(0, self.contract_manager.config.base_fare)
+
+        return self.contract_manager.create_payable_memo(
+            job_id,
+            content,
+            amount.amount,
+            recipient,
+            fee_amount.amount,
+            FeeType.NO_FEE,
+            next_phase,
+            type,
+            expired_at,
+            amount.fare.contract_address
+        )
+
     def respond_to_job(
         self,
         job_id: int,
@@ -350,7 +393,7 @@ class VirtualsACP:
             if not accept:
                 return tx_hash
 
-            print(f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
+            logger.info(f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             self.contract_manager.create_memo(
                 job_id,
                 content or f"Job {job_id} accepted.{f' {reason}' or ''}",
@@ -358,10 +401,10 @@ class VirtualsACP:
                 is_secured=False,
                 next_phase=ACPJobPhase.TRANSACTION
             )
-            print(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
+            logger.info(f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}")
             return tx_hash
         except Exception as e:
-            print(f"Error in respond_to_job_memo: {e}")
+            logger.warning(f"Error in respond_to_job_memo: {e}")
             raise
 
     def pay_job(
@@ -451,7 +494,7 @@ class VirtualsACP:
             and fee_fare_amount.fare.contract_address
             != self.acp_contract_client.config.base_fare.contract_address
         ):
-            raise AcpError("Fee token address is not the same as the base fare")
+            raise ACPError("Fee token address is not the same as the base fare")
 
         # Check if fee token differs from transfer token
         is_fee_token_different = (
@@ -510,19 +553,19 @@ class VirtualsACP:
         return tx_hash
 
     def respond_to_funds_transfer(
-            self,
-            memo_id: int,
-            accept: bool,
-            reason: Optional[str] = ""
+        self,
+        memo_id: int,
+        accept: bool,
+        reason: Optional[str] = ""
     ):
         data = self.contract_manager.sign_memo(memo_id, accept, reason)
         tx_hash = data.get('receipts', [])[0].get('transactionHash')
         return tx_hash
 
     def deliver_job(
-            self,
-            job_id: int,
-            deliverable: IDeliverable
+        self,
+        job_id: int,
+        deliverable: IDeliverable
     ) -> str:
         data = self.contract_manager.create_memo(
             job_id,
@@ -567,7 +610,8 @@ class VirtualsACP:
                         next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
                         status=ACPMemoStatus(memo.get("status")),
                         signed_reason=memo.get("signedReason"),
-                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
+                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                        payable_details=memo.get("payableDetails")
                     ))
 
                 context = job.get("context")
@@ -614,7 +658,8 @@ class VirtualsACP:
                         next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
                         status=ACPMemoStatus(memo.get("status")),
                         signed_reason=memo.get("signedReason"),
-                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
+                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                        payable_details=memo.get("payableDetails")
                     ))
 
                 context = job.get("context")
@@ -661,7 +706,8 @@ class VirtualsACP:
                         next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
                         status=ACPMemoStatus(memo.get("status")),
                         signed_reason=memo.get("signedReason"),
-                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
+                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                        payable_details=memo.get("payableDetails")
                     ))
 
                 context = job.get("context")
@@ -709,7 +755,8 @@ class VirtualsACP:
                     next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
                     status=ACPMemoStatus(memo.get("status")),
                     signed_reason=memo.get("signedReason"),
-                    expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
+                    expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                    payable_details=memo.get("payableDetails")
                 ))
 
             context = data.get("data", {}).get("context")
@@ -756,7 +803,8 @@ class VirtualsACP:
                 next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
                 status=ACPMemoStatus(memo.get("status")),
                 signed_reason=memo.get("signedReason"),
-                expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None
+                expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                payable_details=memo.get("payableDetails")
             )
 
         except Exception as e:

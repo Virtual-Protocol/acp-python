@@ -1,19 +1,21 @@
 import threading
 import time
 import logging
-from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
-
 from virtuals_acp import ACPMemo
 from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
-from virtuals_acp.models import ACPAgentSort, ACPJobPhase, ACPGraduationStatus, ACPOnlineStatus
-from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
-from virtuals_acp.models import PayloadType
+from virtuals_acp.models import (
+    ACPAgentSort,
+    ACPJobPhase,
+    ACPGraduationStatus,
+    ACPOnlineStatus,
+    PayloadType,
+)
 from virtuals_acp.contract_manager import ACPContractManager
 
 logging.basicConfig(
@@ -23,16 +25,36 @@ logging.basicConfig(
 logger = logging.getLogger("BuyerAgent")
 
 load_dotenv(override=True)
-
 config = BASE_SEPOLIA_CONFIG
 
+# Python dict equivalent to SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING
+SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING: Dict[str, Any] = {
+    "open_position": {
+        "symbol": "BTC",
+        "amount": 0.001,
+        "tp": {"percentage": 5},
+        "sl": {"percentage": 2},
+        "direction": "long",
+    },
+    "swap_token": {
+        "fromSymbol": "BMW",
+        "fromContractAddress": "0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
+        "amount": 0.01,
+        "toSymbol": "USDC",
+    },
+    "close_partial_position": {"positionId": 0, "amount": 1},
+    "close_position": {"positionId": 0},
+    "close_job": "Close job and withdraw all",
+}
 
-def buyer():
+
+def main():
     env = EnvSettings()
 
     current_job = None
 
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
+        nonlocal current_job
         logger.info(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
 
         if job.phase == ACPJobPhase.NEGOTIATION:
@@ -50,6 +72,21 @@ def buyer():
         if not memo_to_sign:
             logger.info(f"No memo to sign")
             return
+
+        if memo_to_sign.payload_type == PayloadType.CLOSE_JOB_AND_WITHDRAW:
+            job.confirm_job_closure(memo_to_sign.id, True)
+            logger.info("Closed job")
+
+        elif memo_to_sign.payload_type == PayloadType.RESPONSE_SWAP_TOKEN:
+            memo_to_sign.sign(True, "accepts swap token")
+            logger.info("Swapped token")
+
+        elif memo_to_sign.payload_type == PayloadType.CLOSE_POSITION:
+            job.confirm_close_position(memo_to_sign.id, True)
+            logger.info("Closed position")
+
+        else:
+            logger.warning(f"Unhandled payload type {memo_to_sign.payload_type}")
     
     def on_evaluate(job: ACPJob):
         logger.info(f"Evaluation function called for job {job.id}")
@@ -87,50 +124,43 @@ def buyer():
     )
     logger.info(f"Relevant agents: {relevant_agents}")
     
-    # Pick one of the agents based on your criteria (in this example we just pick the first one)
     chosen_agent = relevant_agents[0]
+    offerings = chosen_agent.jobs
 
-    # Pick one of the service offerings based on your criteria (in this example we just pick the first one)
-    chosen_job_offering = chosen_agent.jobs[0]
+    actions_definition = [
+        {
+            "index": idx + 1,
+            "desc": offering.name,
+            "action": lambda off=offering: off.initiate_job(
+                SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING.get(offering.name, {})
+            ),
+        }
+        for idx, offering in enumerate(offerings)
+    ]
     
-    job_id = chosen_job_offering.initiate_job({
-        "fromSymbol": "USDC",
-        "fromContractAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e", # USDC token address
-        "amount": 0.01,
-        "toSymbol": "BMW",
-        "toContractAddress": "0xbfAB80ccc15DF6fb7185f9498d6039317331846a" # BMW token address
-    })
-    
-    logger.info(f"Job {job_id} initiated")
-    logger.info("Listening for next steps...")
-    # Keep the script running to listen for next steps
-    threading.Event().wait()
+    while True:
+        time.sleep(5)
 
-    # # Interactive loop
-    # while True:
-    #     time.sleep(5)
+        if current_job:
+            continue  # skip interactive loop if a job is already active
 
-    #     if not current_job:
-    #         logger.info("No job found, waiting for new job")
-    #         continue
+        print("\nAvailable actions:")
+        for action in actions_definition:
+            print(f"{action['index']}. {action['desc']}")
 
-    #     logging.info("\nAvailable actions:")
-    #     for action in actions_definition:
-    #         logger.info(f"{action['index']}. {action['desc']}")
+        try:
+            selected_index = int(input("Select an action: ").strip())
+        except ValueError:
+            print("Invalid input, expected a number")
+            continue
 
-    #     try:
-    #         answer = input("Select an action (enter the number): ").strip()
-    #         selected_index = int(answer)
-    #     except ValueError:
-    #         logger.warning("Invalid input, expected a number")
-    #         continue
-
-    #     action = next((action["action"] for action in actions_definition if action["index"] == selected_index), None)
-    #     if action:
-    #         action(current_job)
-    #     else:
-    #         logger.warning(f"Invalid selection {selected_index}")
+        selected_action = next((a for a in actions_definition if a["index"] == selected_index), None)
+        if selected_action:
+            job_id = selected_action["action"]()
+            logger.info(f"Job {job_id} initiated")
+        else:
+            print("Invalid selection")
 
 
 if __name__ == "__main__":
-    buyer()
+    main()

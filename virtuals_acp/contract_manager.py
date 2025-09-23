@@ -56,9 +56,9 @@ class ACPContractManager:
         return int(amount_decimal * (10 ** self.config.base_fare.decimals))
 
     def _sign_transaction(
-            self, method_name: str,
-            args: list,
-            contract_address: Optional[str] = None
+        self, method_name: str,
+        args: list,
+        contract_address: Optional[str] = None
     ) -> str:
         if contract_address:
             encoded_data = self.token_contract.encode_abi(method_name, args=args)
@@ -83,10 +83,10 @@ class ACPContractManager:
             raise Exception(f"Failed to get job_id {e}")
 
     def create_job(
-            self,
-            provider_address: str,
-            evaluator_address: str,
-            expired_at: datetime
+        self,
+        provider_address: str,
+        evaluator_address: str,
+        expired_at: datetime
     ) -> str:
         retries = 3
         while retries > 0:
@@ -108,11 +108,18 @@ class ACPContractManager:
                 time.sleep(2 * (3 - retries))
         raise Exception("Failed to create job")
 
-    def approve_allowance(self, amount: float) -> Dict[str, Any]:
+    def approve_allowance(
+        self,
+        amount_base_unit: int,
+        payment_token_address: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if payment_token_address is None:
+            payment_token_address = self.config.base_fare.contract_address
+
         user_op_hash = self._sign_transaction(
             "approve",
-            [self.config.contract_address, self._format_amount(amount)],
-            self.config.payment_token_address
+            [self.config.contract_address, amount_base_unit],
+            payment_token_address
         )
 
         if user_op_hash is None:
@@ -137,19 +144,19 @@ class ACPContractManager:
         raise Exception("Failed to approve allowance")
 
     def create_payable_memo(
-            self,
-            job_id: int,
-            content: str,
-            amount: float,
-            receiver_address: str,
-            fee_amount: float,
-            fee_type: FeeType,
-            next_phase: ACPJobPhase,
-            memo_type: MemoType,
-            expired_at: datetime,
-            token: Optional[str] = None
+        self,
+        job_id: int,
+        content: str,
+        amount_base_unit: int,
+        recipient: str,
+        fee_amount_base_unit: int,
+        fee_type: FeeType,
+        next_phase: ACPJobPhase,
+        type: MemoType,
+        expired_at: datetime,
+        token: Optional[str] = None
     ) -> Dict[str, Any]:
-        receiver_address = Web3.to_checksum_address(receiver_address)
+        receiver_address = Web3.to_checksum_address(recipient)
         token = self.config.payment_token_address if token is None else token
 
         user_op_hash = self._sign_transaction(
@@ -158,11 +165,11 @@ class ACPContractManager:
                 job_id,
                 content,
                 token,
-                self._format_amount(amount),
+                amount_base_unit,
                 receiver_address,
-                self._format_amount(fee_amount),
+                fee_amount_base_unit,
                 fee_type.value,
-                memo_type.value,
+                type.value,
                 next_phase.value,
                 math.floor(expired_at.timestamp())
             ]
@@ -190,11 +197,12 @@ class ACPContractManager:
         raise Exception(f"Failed to create payable memo")
 
     def create_memo(
-            self, job_id: int,
-            content: str,
-            memo_type: MemoType,
-            is_secured: bool,
-            next_phase: ACPJobPhase
+        self, 
+        job_id: int,
+        content: str,
+        memo_type: MemoType,
+        is_secured: bool,
+        next_phase: ACPJobPhase
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
             "createMemo",
@@ -224,10 +232,10 @@ class ACPContractManager:
         raise Exception("Failed to create memo")
 
     def sign_memo(
-            self,
-            memo_id: int,
-            is_approved: bool,
-            reason: Optional[str] = ""
+        self,
+        memo_id: int,
+        is_approved: bool,
+        reason: Optional[str] = ""
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
             "signMemo",
@@ -258,7 +266,7 @@ class ACPContractManager:
     def set_budget(self, job_id: int, budget: float) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
             "setBudget",
-            [job_id, self._format_amount(budget)]
+            [job_id, budget]
         )
 
         if user_op_hash is None:
@@ -284,9 +292,9 @@ class ACPContractManager:
         raise Exception("Failed to set budget")
 
     def set_budget_with_payment_token(
-            self, job_id: int,
-            budget: float,
-            payment_token_address: str = None,
+        self, job_id: int,
+        budget: float,
+        payment_token_address: str = None,
     ) -> Dict[str, Any]:
 
         if payment_token_address is None:
@@ -294,7 +302,7 @@ class ACPContractManager:
 
         user_op_hash = self._sign_transaction(
             "setBudgetWithPaymentToken",
-            [job_id, self._format_amount(budget), payment_token_address]
+            [job_id, budget, payment_token_address]
         )
 
         if user_op_hash is None:
