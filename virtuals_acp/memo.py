@@ -3,7 +3,14 @@ from typing import TYPE_CHECKING, Optional, Type, Dict, List, Any
 
 from pydantic import BaseModel, ConfigDict
 
-from virtuals_acp.models import ACPJobPhase, MemoType, PayloadType, GenericPayload, T, ACPMemoStatus
+from virtuals_acp.models import (
+    ACPJobPhase,
+    MemoType,
+    PayloadType,
+    GenericPayload,
+    T,
+    ACPMemoStatus,
+)
 from virtuals_acp.utils import try_parse_json_model, try_validate_model
 
 if TYPE_CHECKING:
@@ -26,7 +33,9 @@ class ACPMemo(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def model_post_init(self, _):
-        self.structured_content = try_parse_json_model(self.content, GenericPayload[Dict])
+        self.structured_content = try_parse_json_model(
+            self.content, GenericPayload[Dict]
+        )
 
         if self.payable_details:
             self.payable_details["amount"] = int(self.payable_details["amount"])
@@ -54,19 +63,11 @@ class ACPMemo(BaseModel):
             return validated[0] if len(validated) == 1 else validated
         else:
             return try_validate_model(data, model)
-    
+
     def create(self, job_id: int, is_secured: bool = True):
         return self.acp_client.contract_manager.create_memo(
-            job_id,
-            self.content,
-            self.type,
-            is_secured,
-            self.next_phase
+            job_id, self.content, self.type, is_secured, self.next_phase
         )
 
     def sign(self, approved: bool, reason: str | None = None):
-        return self.acp_client.contract_manager.sign_memo(
-            self.id,
-            approved,
-            reason
-        )
+        return self.acp_client.contract_manager.sign_memo(self.id, approved, reason)

@@ -8,6 +8,7 @@ from virtuals_acp.fare import FareAmount
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
 
+
 class ACPJobOffering(BaseModel):
     acp_client: "VirtualsACP"
     provider_address: str
@@ -15,10 +16,10 @@ class ACPJobOffering(BaseModel):
     price: float
     requirement: Optional[Union[Dict[str, Any], str]] = None
     deliverable: Optional[Union[Dict[str, Any], str]] = None
-    
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    @field_validator('requirement', mode='before')
+    @field_validator("requirement", mode="before")
     def parse_requirement_schema(cls, v):
         if isinstance(v, str):
             try:
@@ -37,23 +38,23 @@ class ACPJobOffering(BaseModel):
         self,
         service_requirement: Union[Dict[str, Any], str],
         evaluator_address: Optional[str] = None,
-        expired_at: Optional[datetime] = None
+        expired_at: Optional[datetime] = None,
     ) -> int:
         # Validate against requirement schema if present
         if self.requirement:
             try:
                 service_requirement = json.loads(json.dumps(service_requirement))
             except json.JSONDecodeError:
-                raise ValueError(f"Invalid JSON in service requirement. Required format: {json.dumps(self.requirement, indent=2)}")
+                raise ValueError(
+                    f"Invalid JSON in service requirement. Required format: {json.dumps(self.requirement, indent=2)}"
+                )
 
             try:
                 validate(instance=service_requirement, schema=self.requirement)
             except ValidationError as e:
                 raise ValueError(f"Invalid service requirement: {str(e)}")
 
-        final_service_requirement = {
-            "name": self.name
-        }
+        final_service_requirement = {"name": self.name}
 
         if isinstance(service_requirement, str):
             final_service_requirement["requirement"] = service_requirement
@@ -70,6 +71,7 @@ class ACPJobOffering(BaseModel):
             ),
             expired_at=expired_at,
         )
+
 
 class ACPResourceOffering(BaseModel):
     acp_client: "VirtualsACP"

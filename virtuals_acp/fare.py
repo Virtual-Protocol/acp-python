@@ -94,6 +94,7 @@ class FareBigInt(FareAmountBase):
             raise ACPError("Token addresses do not match")
         return FareBigInt(self.amount + other.amount, self.fare)
 
+
 # --- Declared Fare Instances ---
 WETH_FARE = Fare("0x4200000000000000000000000000000000000006", 18)
 ETH_FARE = Fare("0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE", 18)

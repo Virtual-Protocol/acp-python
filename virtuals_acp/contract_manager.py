@@ -35,7 +35,9 @@ class ACPContractManager:
         wallet_private_key = self.wallet_private_key.removeprefix("0x")
 
         self.account = Account.from_key(wallet_private_key)
-        self.alchemy_kit = AlchemyAccountKit(agent_wallet_address, entity_id, self.account, config.chain_id)
+        self.alchemy_kit = AlchemyAccountKit(
+            agent_wallet_address, entity_id, self.account, config.chain_id
+        )
         self.alchemy_account = None
         self.agent_wallet_address = agent_wallet_address
 
@@ -45,30 +47,37 @@ class ACPContractManager:
             address=Web3.to_checksum_address(config.contract_address), abi=ACP_ABI
         )
         self.token_contract: Contract = self.w3.eth.contract(
-            address=Web3.to_checksum_address(config.base_fare.contract_address), abi=ERC20_ABI
+            address=Web3.to_checksum_address(config.base_fare.contract_address),
+            abi=ERC20_ABI,
         )
 
         if not self.w3.is_connected():
-            raise ConnectionError(f"Failed to connect to RPC URL: {self.config.rpc_url}")
+            raise ConnectionError(
+                f"Failed to connect to RPC URL: {self.config.rpc_url}"
+            )
 
     def _format_amount(self, amount: float) -> int:
         amount_decimal = Decimal(str(amount))
-        return int(amount_decimal * (10 ** self.config.base_fare.decimals))
+        return int(amount_decimal * (10**self.config.base_fare.decimals))
 
     def _sign_transaction(
-        self, method_name: str,
-        args: list,
-        contract_address: Optional[str] = None
+        self, method_name: str, args: list, contract_address: Optional[str] = None
     ) -> str:
         if contract_address:
             encoded_data = self.token_contract.encode_abi(method_name, args=args)
         else:
             encoded_data = self.contract.encode_abi(method_name, args=args)
 
-        trx_data = [{
-            "to": contract_address if contract_address else self.config.contract_address,
-            "data": encoded_data
-        }]
+        trx_data = [
+            {
+                "to": (
+                    contract_address
+                    if contract_address
+                    else self.config.contract_address
+                ),
+                "data": encoded_data,
+            }
+        ]
 
         self.alchemy_kit.create_session()
         send_result = self.alchemy_kit.execute_calls(trx_data)
@@ -83,10 +92,7 @@ class ACPContractManager:
             raise Exception(f"Failed to get job_id {e}")
 
     def create_job(
-        self,
-        provider_address: str,
-        evaluator_address: str,
-        expired_at: datetime
+        self, provider_address: str, evaluator_address: str, expired_at: datetime
     ) -> str:
         retries = 3
         while retries > 0:
@@ -97,8 +103,7 @@ class ACPContractManager:
 
                 # Sign the transaction
                 user_op_hash = self._sign_transaction(
-                    "createJob",
-                    [provider_address, evaluator_address, expire_timestamp]
+                    "createJob", [provider_address, evaluator_address, expire_timestamp]
                 )
                 return user_op_hash
             except Exception as e:
@@ -119,7 +124,7 @@ class ACPContractManager:
         user_op_hash = self._sign_transaction(
             "approve",
             [self.config.contract_address, amount_base_unit],
-            payment_token_address
+            payment_token_address,
         )
 
         if user_op_hash is None:
@@ -154,7 +159,7 @@ class ACPContractManager:
         next_phase: ACPJobPhase,
         type: MemoType,
         expired_at: datetime,
-        token: Optional[str] = None
+        token: Optional[str] = None,
     ) -> Dict[str, Any]:
         receiver_address = Web3.to_checksum_address(recipient)
         token = self.config.payment_token_address if token is None else token
@@ -171,8 +176,8 @@ class ACPContractManager:
                 fee_type.value,
                 type.value,
                 next_phase.value,
-                math.floor(expired_at.timestamp())
-            ]
+                math.floor(expired_at.timestamp()),
+            ],
         )
 
         if user_op_hash is None:
@@ -197,16 +202,16 @@ class ACPContractManager:
         raise Exception(f"Failed to create payable memo")
 
     def create_memo(
-        self, 
+        self,
         job_id: int,
         content: str,
         memo_type: MemoType,
         is_secured: bool,
-        next_phase: ACPJobPhase
+        next_phase: ACPJobPhase,
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
             "createMemo",
-            [job_id, content, memo_type.value, is_secured, next_phase.value]
+            [job_id, content, memo_type.value, is_secured, next_phase.value],
         )
 
         if user_op_hash is None:
@@ -232,14 +237,10 @@ class ACPContractManager:
         raise Exception("Failed to create memo")
 
     def sign_memo(
-        self,
-        memo_id: int,
-        is_approved: bool,
-        reason: Optional[str] = ""
+        self, memo_id: int, is_approved: bool, reason: Optional[str] = ""
     ) -> Dict[str, Any]:
         user_op_hash = self._sign_transaction(
-            "signMemo",
-            [memo_id, is_approved, reason]
+            "signMemo", [memo_id, is_approved, reason]
         )
 
         if user_op_hash is None:
@@ -264,10 +265,7 @@ class ACPContractManager:
         raise Exception(f"Failed to sign memo")
 
     def set_budget(self, job_id: int, budget: float) -> Dict[str, Any]:
-        user_op_hash = self._sign_transaction(
-            "setBudget",
-            [job_id, budget]
-        )
+        user_op_hash = self._sign_transaction("setBudget", [job_id, budget])
 
         if user_op_hash is None:
             raise Exception("Failed to sign transaction - set_budget")
@@ -292,7 +290,8 @@ class ACPContractManager:
         raise Exception("Failed to set budget")
 
     def set_budget_with_payment_token(
-        self, job_id: int,
+        self,
+        job_id: int,
         budget: float,
         payment_token_address: str = None,
     ) -> Dict[str, Any]:
@@ -301,8 +300,7 @@ class ACPContractManager:
             payment_token_address = self.config.payment_token_address
 
         user_op_hash = self._sign_transaction(
-            "setBudgetWithPaymentToken",
-            [job_id, budget, payment_token_address]
+            "setBudgetWithPaymentToken", [job_id, budget, payment_token_address]
         )
 
         if user_op_hash is None:
