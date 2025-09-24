@@ -136,7 +136,7 @@ class ACPJob(BaseModel):
             expired_at
         )
 
-    def pay_and_accept_requirement(self, reason: Optional[str] = None) -> ACPMemo:
+    def pay_and_accept_requirement(self, reason: Optional[str] = "") -> ACPMemo:
         memo = next((m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None)
 
         if not memo:
