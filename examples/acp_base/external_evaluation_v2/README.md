@@ -14,7 +14,6 @@
   - [Buyer](#buyer)
   - [Seller](#seller)
   - [Evaluator](#evaluator)
-- [Job Queue Logic](#job-queue-logic)
 - [How to Run](#how-to-run)
 - [Optional Flow: Job Offerings](#optional-flow-job-offerings)
 - [🚀 Job Offering Setup in ACP Visualiser](#job-offering-setup-in-acp-visualiser)
