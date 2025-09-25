@@ -134,16 +134,16 @@ def main():
             # No job found, waiting for new job
             continue
 
-        print("\nAvailable actions:")
+        logger.info("\nAvailable actions:")
         for action in actions_definition:
-            print(f"{action['index']}. {action['desc']}")
+            logger.info(f"{action['index']}. {action['desc']}")
 
         try:
             answer = input("\nSelect an action (enter the number): ")
-            print("Initiating job...")
+            logger.info("Initiating job...")
             selected_index = int(answer)
         except ValueError:
-            print("Invalid input. Please enter a number.")
+            logger.info("Invalid input. Please enter a number.")
             continue
 
         selected_action = next(
@@ -154,7 +154,7 @@ def main():
         if selected_action:
             current_job_id = selected_action["action"]()
         else:
-            print("Invalid selection. Please try again.")
+            logger.info("Invalid selection. Please try again.")
 
 
 if __name__ == "__main__":
