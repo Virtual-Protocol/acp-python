@@ -5,7 +5,6 @@ import logging
 import signal
 import sys
 import threading
-import time
 from datetime import datetime, timezone, timedelta
 from importlib.metadata import version
 from typing import Literal, List, Optional, Tuple, Union, Dict, Any, Callable
@@ -106,24 +105,17 @@ class VirtualsACP:
     def handle_new_task(self, data) -> None:
         memo_to_sign_id = data.get("memoToSign")
 
-        memos = [
-            ACPMemo(
-                acp_client=self,
-                id=memo.get("id"),
-                type=MemoType(int(memo.get("memoType"))),
-                content=memo.get("content"),
-                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
-                status=ACPMemoStatus(memo.get("status")),
-                signed_reason=memo.get("signedReason"),
-                expiry=(
-                    datetime.fromtimestamp(int(memo["expiry"]))
-                    if memo.get("expiry")
-                    else None
-                ),
-                payable_details=memo.get("payableDetails"),
-            )
-            for memo in data["memos"]
-        ]
+        memos = [ACPMemo(
+            acp_client=self,
+            id=memo.get("id"),
+            type=MemoType(int(memo.get("memoType"))),
+            content=memo.get("content"),
+            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+            status=ACPMemoStatus(memo.get("status")),
+            signed_reason=memo.get("signedReason"),
+            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+            payable_details=memo.get("payableDetails")
+        ) for memo in data["memos"]]
 
         memo_to_sign = (
             next((m for m in memos if int(m.id) == int(memo_to_sign_id)), None)
@@ -155,24 +147,17 @@ class VirtualsACP:
             self.on_new_task(job, memo_to_sign)
 
     def handle_evaluate(self, data) -> None:
-        memos = [
-            ACPMemo(
-                acp_client=self,
-                id=memo.get("id"),
-                type=MemoType(int(memo.get("memoType"))),
-                content=memo.get("content"),
-                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
-                status=ACPMemoStatus(memo.get("status")),
-                signed_reason=memo.get("signedReason"),
-                expiry=(
-                    datetime.fromtimestamp(int(memo["expiry"]))
-                    if memo.get("expiry")
-                    else None
-                ),
-                payable_details=memo.get("payableDetails"),
-            )
-            for memo in data["memos"]
-        ]
+        memos = [ACPMemo(
+            acp_client=self,
+            id=memo.get("id"),
+            type=MemoType(int(memo.get("memoType"))),
+            content=memo.get("content"),
+            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+            status=ACPMemoStatus(memo.get("status")),
+            signed_reason=memo.get("signedReason"),
+            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+            payable_details=memo.get("payableDetails")
+        ) for memo in data["memos"]]
 
         context = data["context"]
         if isinstance(context, str):
@@ -333,50 +318,25 @@ class VirtualsACP:
         if provider_address == self.agent_address:
             raise Exception("You cannot initiate a job with yourself as the provider")
 
-        job_id = None
-        retry_count = 3
-        retry_delay = 3
-
-        user_op_hash = self.contract_manager.create_job(
+        response = self.contract_manager.create_job(
             provider_address, eval_addr, expired_at
         )
 
-        time.sleep(retry_delay)
-        for attempt in range(retry_count):
-            try:
-                response = self.contract_manager.validate_transaction(user_op_hash)
+        logs = response.get("receipts", [])[0].get("logs", [])
+        contract_logs = next(
+            (
+                log
+                for log in logs
+                if log.get("address", "").lower()
+                == self.contract_manager.config.contract_address.lower()
+            ),
+            None,
+        )
 
-                if response.get("status") == 200:
-                    logs = response.get("receipts", [])[0].get("logs", [])
-                    contract_logs = next(
-                        (
-                            log
-                            for log in logs
-                            if log.get("address", "").lower()
-                            == self.contract_manager.config.contract_address.lower()
-                        ),
-                        None,
-                    )
+        if not contract_logs:
+            raise Exception("Failed to get contract logs")
 
-                    if not contract_logs:
-                        raise Exception("Failed to get contract logs")
-
-                    try:
-                        job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
-                        break
-                    except (ValueError, TypeError, AttributeError):
-                        raise Exception("Failed to parse job ID from contract logs")
-
-            except Exception as e:
-                if attempt == retry_count - 1:
-                    logger.warning(f"Error in create_job function: {e}")
-                if attempt < retry_count - 1:
-                    time.sleep(retry_delay)
-                else:
-                    raise
-
-        if job_id is None or job_id == "":
-            raise Exception("Failed to create job")
+        job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
 
         self.contract_manager.set_budget_with_payment_token(
             job_id, fare_amount.amount, fare_amount.fare.contract_address
@@ -450,9 +410,6 @@ class VirtualsACP:
                 is_secured=False,
                 next_phase=ACPJobPhase.TRANSACTION,
             )
-            logger.info(
-                f"Responded to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}"
-            )
             return tx_hash
         except Exception as e:
             logger.warning(f"Error in respond_to_job_memo: {e}")
@@ -468,6 +425,7 @@ class VirtualsACP:
 
         self.contract_manager.approve_allowance(amount_base_unit.amount)
         self.contract_manager.sign_memo(memo_id, True, reason or "")
+        
         return self.contract_manager.create_memo(
             job_id,
             f"{reason if reason else f'Job {job_id} paid.'}",
@@ -508,7 +466,7 @@ class VirtualsACP:
         self,
         memo_id: int,
         accept: bool,
-        amount: Union[float, str],
+        amount: float,
         reason: Optional[str] = "",
     ) -> str:
         if not accept:
@@ -637,22 +595,16 @@ class VirtualsACP:
             for job in data.get("data", []):
                 memos = []
                 for memo in job.get("memos", []):
-                    memos.append(
-                        ACPMemo(
-                            id=memo.get("id"),
-                            type=MemoType(int(memo.get("memoType"))),
-                            content=memo.get("content"),
-                            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
-                            status=ACPMemoStatus(memo.get("status")),
-                            signed_reason=memo.get("signedReason"),
-                            expiry=(
-                                datetime.fromtimestamp(int(memo["expiry"]))
-                                if memo.get("expiry")
-                                else None
-                            ),
-                            payable_details=memo.get("payableDetails"),
-                        )
-                    )
+                    memos.append(ACPMemo(
+                        id=memo.get("id"),
+                        type=MemoType(int(memo.get("memoType"))),
+                        content=memo.get("content"),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                        status=ACPMemoStatus(memo.get("status")),
+                        signed_reason=memo.get("signedReason"),
+                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                        payable_details=memo.get("payableDetails")
+                    ))
 
                 context = job.get("context")
                 if isinstance(context, str):
@@ -691,22 +643,16 @@ class VirtualsACP:
             for job in data.get("data", []):
                 memos = []
                 for memo in job.get("memos", []):
-                    memos.append(
-                        ACPMemo(
-                            id=memo.get("id"),
-                            type=MemoType(int(memo.get("memoType"))),
-                            content=memo.get("content"),
-                            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
-                            status=ACPMemoStatus(memo.get("status")),
-                            signed_reason=memo.get("signedReason"),
-                            expiry=(
-                                datetime.fromtimestamp(int(memo["expiry"]))
-                                if memo.get("expiry")
-                                else None
-                            ),
-                            payable_details=memo.get("payableDetails"),
-                        )
-                    )
+                    memos.append(ACPMemo(
+                        id=memo.get("id"),
+                        type=MemoType(int(memo.get("memoType"))),
+                        content=memo.get("content"),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                        status=ACPMemoStatus(memo.get("status")),
+                        signed_reason=memo.get("signedReason"),
+                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                        payable_details=memo.get("payableDetails")
+                    ))
 
                 context = job.get("context")
                 if isinstance(context, str):
@@ -745,22 +691,16 @@ class VirtualsACP:
             for job in data.get("data", []):
                 memos = []
                 for memo in job.get("memos", []):
-                    memos.append(
-                        ACPMemo(
-                            id=memo.get("id"),
-                            type=MemoType(int(memo.get("memoType"))),
-                            content=memo.get("content"),
-                            next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
-                            status=ACPMemoStatus(memo.get("status")),
-                            signed_reason=memo.get("signedReason"),
-                            expiry=(
-                                datetime.fromtimestamp(int(memo["expiry"]))
-                                if memo.get("expiry")
-                                else None
-                            ),
-                            payable_details=memo.get("payableDetails"),
-                        )
-                    )
+                    memos.append(ACPMemo(
+                        id=memo.get("id"),
+                        type=MemoType(int(memo.get("memoType"))),
+                        content=memo.get("content"),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                        status=ACPMemoStatus(memo.get("status")),
+                        signed_reason=memo.get("signedReason"),
+                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                        payable_details=memo.get("payableDetails")
+                    ))
 
                 context = job.get("context")
                 if isinstance(context, str):
@@ -800,22 +740,16 @@ class VirtualsACP:
 
             memos = []
             for memo in data.get("data", {}).get("memos", []):
-                memos.append(
-                    ACPMemo(
-                        id=memo.get("id"),
-                        type=MemoType(int(memo.get("memoType"))),
-                        content=memo.get("content"),
-                        next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
-                        status=ACPMemoStatus(memo.get("status")),
-                        signed_reason=memo.get("signedReason"),
-                        expiry=(
-                            datetime.fromtimestamp(int(memo["expiry"]))
-                            if memo.get("expiry")
-                            else None
-                        ),
-                        payable_details=memo.get("payableDetails"),
-                    )
-                )
+                memos.append(ACPMemo(
+                    id=memo.get("id"),
+                    type=MemoType(int(memo.get("memoType"))),
+                    content=memo.get("content"),
+                    next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                    status=ACPMemoStatus(memo.get("status")),
+                    signed_reason=memo.get("signedReason"),
+                    expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
+                    payable_details=memo.get("payableDetails")
+                ))
 
             context = data.get("data", {}).get("context")
             if isinstance(context, str):
@@ -854,9 +788,9 @@ class VirtualsACP:
 
             return ACPMemo(
                 id=memo.get("id"),
-                type=MemoType(int(memo.get("memoType"))),
+                type=MemoType(memo.get("memoType")),
                 content=memo.get("content"),
-                next_phase=ACPJobPhase(int(memo.get("nextPhase"))),
+                next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
                 status=ACPMemoStatus(memo.get("status")),
                 signed_reason=memo.get("signedReason"),
                 expiry=(

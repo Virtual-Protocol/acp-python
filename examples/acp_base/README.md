@@ -83,7 +83,7 @@ This directory contains a suite of examples to help you understand and implement
 
 - `buyer.py` — Buyer agent logic
 - `seller.py` — Seller agent logic
-- `eval.py` — External evaluator agent logic
+- `evaluator.py` — External evaluator agent logic
 
 </details>
 
