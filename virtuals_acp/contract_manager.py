@@ -168,7 +168,7 @@ class ACPContractManager:
     def set_budget(self, job_id: int, budget: float) -> Dict[str, Any]:
         try:
             return self._send_user_operation(
-                "setBudget", [job_id, self._format_amount(budget)]
+                "setBudget", [job_id, budget]
             )
         except Exception as e:
             raise Exception("Failed to set budget", e)
@@ -185,7 +185,7 @@ class ACPContractManager:
 
             return self._send_user_operation(
                 "setBudgetWithPaymentToken",
-                [job_id, self._format_amount(budget), payment_token_address],
+                [job_id, budget, payment_token_address],
             )
         except Exception as e:
             raise Exception("Failed to set budget with payment token", e)
