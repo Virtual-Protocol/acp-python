@@ -145,7 +145,7 @@ class ACPJob(BaseModel):
             expired_at,
         )
 
-    def pay_and_accept_requirement(self, reason: Optional[str] = None) -> ACPMemo:
+    def pay_and_accept_requirement(self, reason: Optional[str] = "") -> ACPMemo:
         memo = next(
             (m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None
         )
@@ -260,6 +260,12 @@ class ACPJob(BaseModel):
             accept,
             payload.model_dump_json() if payload else None,
             reason,
+        )
+
+    def reject(self, reason: Optional[str] = None) -> str:
+        return self.acp_client.reject_job(
+            self.id,
+            f"Job {self.id} rejected. {reason or ''}",
         )
 
     def deliver(self, deliverable: IDeliverable):

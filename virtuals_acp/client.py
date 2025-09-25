@@ -411,7 +411,7 @@ class VirtualsACP:
             )
             self.contract_manager.create_memo(
                 job_id,
-                content or f"Job {job_id} accepted.{f' {reason}' or ''}",
+                content or f"{reason or ''}",
                 MemoType.MESSAGE,
                 is_secured=False,
                 next_phase=ACPJobPhase.TRANSACTION,
@@ -568,6 +568,17 @@ class VirtualsACP:
         self, memo_id: int, accept: bool, reason: Optional[str] = ""
     ):
         data = self.contract_manager.sign_memo(memo_id, accept, reason)
+        tx_hash = data.get("receipts", [])[0].get("transactionHash")
+        return tx_hash
+
+    def reject_job(self, job_id: int, reason: Optional[str] = "") -> str:
+        data = self.contract_manager.create_memo(
+            job_id,
+            f"{reason or ''}",
+            MemoType.MESSAGE,
+            False,
+            ACPJobPhase.REJECTED
+        )
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
