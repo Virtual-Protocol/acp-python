@@ -145,15 +145,10 @@ class ACPJob(BaseModel):
             expired_at,
         )
 
-<<<<<<< HEAD
     def pay_and_accept_requirement(self, reason: Optional[str] = None) -> ACPMemo:
         memo = next(
             (m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None
         )
-=======
-    def pay_and_accept_requirement(self, reason: Optional[str] = "") -> ACPMemo:
-        memo = next((m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None)
->>>>>>> 06b94e243a320b291357a16a33bcd75e80718623
 
         if not memo:
             raise Exception("No transaction memo found")

@@ -157,15 +157,11 @@ class AlchemyAccountKit:
 
         # Concatenate hex values (equivalent to concatHex in viem)
         # Concatenate hex values by removing 0x prefix from subsequent values
-        self.permissions_context = (
+        return (
             permissions_context_version
             + is_global_validation  # Remove 0x prefix
-            + to_hex(self.entity_id)[2:].zfill(8)  # Remove 0x prefix and pad to 8 chars
+            + to_hex(entity_id)[2:].zfill(8)  # Remove 0x prefix and pad to 8 chars
         )
-        if not self.permissions_context.startswith("0x"):
-            self.permissions_context = "0x" + self.permissions_context
-
-        return
 
     def get_random_nonce(self, bits=152):
         bytes_length = bits // 8
@@ -181,24 +177,23 @@ class AlchemyAccountKit:
         if not self.permissions_context:
             raise ValueError("Must create session first")
 
-        # call createAccount -- return the same account address -
-        if capabilities is None:
-            capabilities = {
-                "permissions": {"context": self.permissions_context},
-                "paymasterService": {"policyId": BASE_SEPOLIA_CONFIG.alchemy_policy_id},
-                "nonceOverride": {"nonceKey": self.get_random_nonce()},
-            }
+        final_capabilities = {
+            "permissions": {"context": self.permissions_context},
+            "paymasterService": {"policyId": BASE_SEPOLIA_CONFIG.alchemy_policy_id},
+            "nonceOverride": {"nonceKey": self.get_random_nonce()},
+        }
+
+        if capabilities:
+            final_capabilities.update(capabilities)
 
         params = {
             "from": self.account_address,
             "chainId": to_hex(self.chain_id),
             "calls": calls,
-            "capabilities": capabilities,
+            "capabilities": final_capabilities,
         }
 
         return self.rpc_client.wallet_prepare_calls(params)
-
-        return result
 
     def send_prepared_calls(
         self, prepare_calls_result: Dict[str, Any]
