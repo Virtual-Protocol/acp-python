@@ -19,7 +19,7 @@ from .configs import (
 from .exceptions import ACPError, ACPApiError, ACPContractError, TransactionFailedError
 from .client import VirtualsACP
 from .job import ACPJob
-from .offering import ACPJobOffering
+from .job_offering import ACPJobOffering
 from .memo import ACPMemo
 from .abi import ACP_ABI, ERC20_ABI
 

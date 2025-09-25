@@ -30,7 +30,7 @@ from virtuals_acp.models import (
     T,
     ACPMemoStatus,
 )
-from virtuals_acp.offering import ACPJobOffering
+from virtuals_acp.job_offering import ACPJobOffering
 from virtuals_acp.fare import (
     ETH_FARE,
     WETH_FARE,
@@ -286,7 +286,7 @@ class VirtualsACP:
                         wallet_address=Web3.to_checksum_address(
                             agent_data["walletAddress"]
                         ),
-                        jobs=job_offerings,
+                        job_offerings=job_offerings,
                         twitter_handle=agent_data.get("twitterHandle"),
                         metrics=agent_data.get("metrics"),
                         processing_time=agent_data.get("processingTime", ""),
@@ -368,9 +368,15 @@ class VirtualsACP:
         amount: FareAmountBase,
         recipient: str,
         next_phase: ACPJobPhase,
-        type: Literal["PAYABLE_REQUEST", "PAYABLE_TRANSFER_ESCROW"],
+        type: Literal[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER_ESCROW],
         expired_at: datetime,
     ):
+        if type == MemoType.PAYABLE_TRANSFER_ESCROW:
+            self.contract_manager.approve_allowance(
+                amount.amount,
+                amount.fare.contract_address
+        )
+
         fee_amount = FareAmount(0, self.contract_manager.config.base_fare)
 
         return self.contract_manager.create_payable_memo(

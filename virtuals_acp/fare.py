@@ -3,14 +3,13 @@ from decimal import Decimal, ROUND_DOWN
 from typing import Union
 from web3 import Web3
 from web3.contract import Contract
+
 from virtuals_acp.exceptions import ACPError
 
+from typing import TYPE_CHECKING
 
-class AcpContractConfig:
-    def __init__(self, chain: str, rpc_endpoint: str, base_fare: "Fare"):
-        self.chain = chain
-        self.rpc_endpoint = rpc_endpoint
-        self.base_fare = base_fare
+if TYPE_CHECKING:
+    from virtuals_acp.configs import ACPContractConfig
 
 
 class Fare:
@@ -25,14 +24,14 @@ class Fare:
 
     @staticmethod
     def from_contract_address(
-        contract_address: str, config: AcpContractConfig
+        contract_address: str, config: "ACPContractConfig"
     ) -> "Fare":
         if Web3.to_checksum_address(contract_address) == Web3.to_checksum_address(
             config.base_fare.contract_address
         ):
             return config.base_fare
 
-        w3 = Web3(Web3.HTTPProvider(config.rpc_endpoint))
+        w3 = Web3(Web3.HTTPProvider(config.rpc_url))
 
         erc20_abi = [
             {
@@ -62,7 +61,7 @@ class FareAmountBase(ABC):
 
     @staticmethod
     def from_contract_address(
-        amount: Union[int, float], contract_address: str, config: AcpContractConfig
+        amount: Union[int, float], contract_address: str, config: "ACPContractConfig"
     ) -> "FareAmountBase":
         fare = Fare.from_contract_address(contract_address, config)
         if isinstance(amount, (int, float)):

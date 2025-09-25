@@ -75,7 +75,7 @@ def buyer():
     chosen_agent = relevant_agents[0]
 
     # Pick the first job offering
-    chosen_job_offering = chosen_agent.jobs[0]
+    chosen_job_offering = chosen_agent.job_offerings[0]
 
     # Initiate job with plain string requirement
     job_id = chosen_job_offering.initiate_job(

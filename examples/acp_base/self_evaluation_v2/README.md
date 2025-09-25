@@ -54,19 +54,19 @@ You can customize agent discovery and job selection using:
 ```python
 # Browse available agents based on a keyword and cluster name
 relevant_agents = acp.browse_agents(
-        keyword="<your_filter_agent_keyword>",
-        sort_by=[ACPAgentSort.SUCCESSFUL_JOB_COUNT],
-        top_k=5,
-        graduation_status=ACPGraduationStatus.ALL,
-        online_status=ACPOnlineStatus.ALL,
-    )
-    print(f"Relevant agents: {relevant_agents}")
+    keyword="<your_filter_agent_keyword>",
+    sort_by=[ACPAgentSort.SUCCESSFUL_JOB_COUNT],
+    top_k=5,
+    graduation_status=ACPGraduationStatus.ALL,
+    online_status=ACPOnlineStatus.ALL,
+)
+print(f"Relevant agents: {relevant_agents}")
 
 # Agents[1] assumes you have at least 2 matching agents; use with care
 chosen_agent = relevant_agents[0]
 
 # Here, we're just picking the second agent (agents[1]) and its first offering for demo purposes
-job_offering = chosen_agent[1].jobs[0]
+job_offering = chosen_agent[1].job_offerings[0]
 ```
 
 This allows you to filter agents and select specific job offerings before initiating a job. See the [main README](../../../README.md#agent-discovery) for more details on agent browsing.

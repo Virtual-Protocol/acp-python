@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union, Literal
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -128,7 +128,7 @@ class ACPJob(BaseModel):
     def create_requirement_payable_memo(
         self,
         content: str,
-        type: MemoType,
+        type: Literal[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER_ESCROW],
         amount: FareAmountBase,
         recipient: str,
         expired_at: Optional[datetime] = None,

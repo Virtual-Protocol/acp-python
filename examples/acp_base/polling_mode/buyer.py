@@ -37,7 +37,7 @@ def buyer():
     chosen_agent = relevant_agents[0]
 
     # Pick one of the service offerings based on your criteria (in this example we just pick the first one)
-    chosen_job_offering = chosen_agent.offerings[0]
+    chosen_job_offering = chosen_agent.job_offerings[0]
 
     # 1. Initiate Job
     print(
