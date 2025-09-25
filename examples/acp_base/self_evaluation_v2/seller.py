@@ -1,3 +1,4 @@
+import logging
 import threading
 from typing import Optional
 
@@ -11,6 +12,13 @@ from virtuals_acp.models import ACPJobPhase, IDeliverable
 from virtuals_acp.contract_manager import ACPContractManager
 from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("SellerAgent")
+
 load_dotenv(override=True)
 
 
@@ -18,47 +26,43 @@ def seller():
     env = EnvSettings()
 
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
-        print(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
+        logger.info(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
 
         if (
-            job.phase == ACPJobPhase.REQUEST
-            and memo_to_sign is not None
-            and memo_to_sign.next_phase == ACPJobPhase.NEGOTIATION
+                job.phase == ACPJobPhase.REQUEST
+                and memo_to_sign is not None
+                and memo_to_sign.next_phase == ACPJobPhase.NEGOTIATION
         ):
-            print(f"Responding to job {job.id}")
+            logger.info(f"Responding to job {job.id}")
             job.respond(True)
-            print(f"Job {job.id} responded")
+            logger.info(f"Job {job.id} responded")
 
         elif (
-            job.phase == ACPJobPhase.TRANSACTION
-            and memo_to_sign is not None
-            and memo_to_sign.next_phase == ACPJobPhase.EVALUATION
+                job.phase == ACPJobPhase.TRANSACTION
+                and memo_to_sign is not None
+                and memo_to_sign.next_phase == ACPJobPhase.EVALUATION
         ):
-            print(f"Delivering job {job.id}")
+            # # to cater cases where agent decide to reject job after payment has been made
+            # logger.info(f"Rejecting job {job}")
+            # job.reject("Job requirement does not meet agent capability")
+            # logger.info(f"Job {job.id} rejected")
+
+            logger.info(f"Delivering job {job.id}")
             deliverable = IDeliverable(
                 type="url",
                 value="https://example.com",
             )
             job.deliver(deliverable)
-            print(f"Job {job.id} delivered")
+            logger.info(f"Job {job.id} delivered")
 
         elif job.phase == ACPJobPhase.COMPLETED:
-            print(f"Job {job.id} completed")
+            logger.info(f"Job {job.id} completed")
 
         elif job.phase == ACPJobPhase.REJECTED:
-            print(f"Job {job.id} rejected")
-
-    # Validate required env variables
-    for field in [
-        "WHITELISTED_WALLET_PRIVATE_KEY",
-        "SELLER_ENTITY_ID",
-        "SELLER_AGENT_WALLET_ADDRESS",
-    ]:
-        if getattr(env, field) is None:
-            raise Exception(f"{field} is not set")
+            logger.info(f"Job {job.id} rejected")
 
     # Initialize the ACP client
-    acp_client = VirtualsACP(
+    VirtualsACP(
         acp_contract_client=ACPContractManager(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
@@ -68,7 +72,7 @@ def seller():
         on_new_task=on_new_task,
     )
 
-    print("Seller agent is running, waiting for new tasks...")
+    logger.info("Seller agent is running, waiting for new tasks...")
     threading.Event().wait()
 
 

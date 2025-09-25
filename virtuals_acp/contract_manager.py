@@ -181,7 +181,7 @@ class ACPContractManager:
     ) -> Dict[str, Any]:
         try:
             if payment_token_address is None:
-                payment_token_address = self.config.payment_token_address
+                payment_token_address = self.config.base_fare.contract_address
 
             return self._send_user_operation(
                 "setBudgetWithPaymentToken",

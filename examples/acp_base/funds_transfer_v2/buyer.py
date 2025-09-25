@@ -4,7 +4,7 @@ import logging
 from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
-from virtuals_acp import ACPMemo
+from virtuals_acp import ACPMemo, MemoType
 from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
@@ -13,8 +13,7 @@ from virtuals_acp.models import (
     ACPAgentSort,
     ACPJobPhase,
     ACPGraduationStatus,
-    ACPOnlineStatus,
-    PayloadType,
+    ACPOnlineStatus
 )
 from virtuals_acp.contract_manager import ACPContractManager
 
@@ -22,144 +21,140 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-logger = logging.getLogger("BuyerAgent")
+logger = logging.getLogger("FundsBuyerAgent")
 
 load_dotenv(override=True)
 config = BASE_SEPOLIA_CONFIG
 
 # Python dict equivalent to SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING
 SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING: Dict[str, Any] = {
-    "open_position": {
-        "symbol": "BTC",
-        "amount": 0.001,
-        "tp": {"percentage": 5},
-        "sl": {"percentage": 2},
-        "direction": "long",
-    },
     "swap_token": {
         "fromSymbol": "USDC",
         "fromContractAddress": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
-        "amount": 0.01,
+        "amount": 0.08,
         "toSymbol": "BMW",
+        "toContractAddress": "0xbfAB80ccc15DF6fb7185f9498d6039317331846a",
     },
-    "close_position": {"positionId": 0},
+    "open_position": {
+        "symbol": "BTC",
+        "amount": 0.09,
+        "tp": { "percentage": 5 },
+        "sl": { "percentage": 2 },
+        "direction": "long",
+    },
+    "close_position": { "symbol": "BTC" },
 }
 
 
 def main():
     env = EnvSettings()
-
-    current_job = None
+    current_job_id: Optional[int] = None
 
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
-        nonlocal current_job
-        logger.info(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
+        nonlocal current_job_id
 
-        if job.phase == ACPJobPhase.NEGOTIATION:
-            logger.info(f"Paying job {job.id}")
+        job_id = job.id
+        job_phase = job.phase
+
+        if memo_to_sign is None:
+            logger.info(f"[on_new_task] No memo to sign | job_id={job_id}")
+            if job.phase == ACPJobPhase.REJECTED:
+                current_job_id = None
+            return
+
+        memo_id = memo_to_sign.id
+
+        logger.info(f"[on_new_task] New job received | job_id={job_id}, memo_id={memo_id}, job_phase={job_phase}")
+
+        if job.phase == ACPJobPhase.NEGOTIATION and memo_to_sign.next_phase == ACPJobPhase.TRANSACTION:
+            logger.info(f"[on_new_task] Paying job {job.id}")
             job.pay_and_accept_requirement("I accept the job requirements")
-            current_job = job
-            return
+            logger.info(f"[on_new_task] Job {job_id} paid")
 
-        current_job = job
+        elif job.phase == ACPJobPhase.TRANSACTION:
+            if memo_to_sign.next_phase == ACPJobPhase.REJECTED:
+                logger.info(f"[on_new_task] Signing job rejection memo | job_id={job_id}, memo_id={memo_id}")
+                memo_to_sign.sign(True, "Accepted job rejection")
+                logger.info(f"[on_new_task] Rejection memo signed {job.id}")
+                current_job_id = None
 
-        if job.phase != ACPJobPhase.TRANSACTION:
-            logger.info(f"Job is not in transaction phase")
-            return
-
-        if not memo_to_sign:
-            logger.info(f"No memo to sign")
-            return
-
-        if memo_to_sign.payload_type == PayloadType.CLOSE_JOB_AND_WITHDRAW:
-            job.confirm_job_closure(memo_to_sign.id, True)
-            logger.info("Closed job")
-
-        elif memo_to_sign.payload_type == PayloadType.RESPONSE_SWAP_TOKEN:
-            memo_to_sign.sign(True, "accepts swap token")
-            logger.info("Swapped token")
-
-        elif memo_to_sign.payload_type == PayloadType.CLOSE_POSITION:
-            job.confirm_close_position(memo_to_sign.id, True)
-            logger.info("Closed position")
-
-        else:
-            logger.warning(f"Unhandled payload type {memo_to_sign.payload_type}")
+            elif memo_to_sign.next_phase == ACPJobPhase.TRANSACTION and memo_to_sign.type == MemoType.PAYABLE_TRANSFER_ESCROW:
+                logger.info(f"[on_new_task] Accepting funds transfer | job_id={job_id}, memo_id={memo_id}")
+                memo_to_sign.sign(True, "Accepted funds transfer")
+                logger.info(f"[on_new_task] Funds transfer memo signed {job.id}")
 
     def on_evaluate(job: ACPJob):
-        logger.info(f"Evaluation function called for job {job.id}")
-        job.evaluate(True)
+        nonlocal current_job_id
+        logger.info(
+            f"[on_evaluate] Evaluation function called | job_id={job.id}, requirement={job.requirement}, deliverable={job.deliverable}"
+        )
+        job.evaluate(True, "job auto-evaluated")
+        logger.info(f"[on_evaluate] Job {job.id} evaluated")
+        current_job_id = None
 
-    if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
-        raise Exception("WHITELISTED_WALLET_PRIVATE_KEY is not set")
-    if env.BUYER_ENTITY_ID is None:
-        raise Exception("BUYER_ENTITY_ID is not set")
-    if env.BUYER_AGENT_WALLET_ADDRESS is None:
-        raise Exception("BUYER_AGENT_WALLET_ADDRESS is not set")
-
-    logger.info("Buyer agent started, browsing agents...")
-
-    acp = VirtualsACP(
+    acp_client = VirtualsACP(
         acp_contract_client=ACPContractManager(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
             entity_id=env.BUYER_ENTITY_ID,
-            config=config,
+            config=config
         ),
         on_new_task=on_new_task,
-        on_evaluate=on_evaluate,
+        on_evaluate=on_evaluate
     )
 
-    # Browse available agents based on a keyword and cluster name
-    relevant_agents = acp.browse_agents(
+    relevant_agents = acp_client.browse_agents(
         keyword="<your-filter-agent-keyword>",
-        sort_by=[
-            ACPAgentSort.SUCCESSFUL_JOB_COUNT,
-        ],
+        sort_by=[ACPAgentSort.SUCCESSFUL_JOB_COUNT],
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,
-        online_status=ACPOnlineStatus.ALL,
+        online_status=ACPOnlineStatus.ALL
     )
     logger.info(f"Relevant agents: {relevant_agents}")
 
     chosen_agent = relevant_agents[0]
-    offerings = chosen_agent.jobs
+    job_offerings = chosen_agent.job_offerings
+    logger.info(job_offerings)
 
     actions_definition = [
         {
             "index": idx + 1,
             "desc": offering.name,
             "action": lambda off=offering: off.initiate_job(
-                SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING.get(offering.name, {})
+                SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING[off.name]
             ),
         }
-        for idx, offering in enumerate(offerings)
+        for idx, offering in enumerate(job_offerings or [])
     ]
 
     while True:
         time.sleep(5)
 
-        if current_job:
-            continue  # skip interactive loop if a job is already active
+        if current_job_id is not None:
+            # No job found, waiting for new job
+            continue
 
         print("\nAvailable actions:")
         for action in actions_definition:
             print(f"{action['index']}. {action['desc']}")
 
         try:
-            selected_index = int(input("Select an action: ").strip())
+            answer = input("\nSelect an action (enter the number): ")
+            print("Initiating job...")
+            selected_index = int(answer)
         except ValueError:
-            print("Invalid input, expected a number")
+            print("Invalid input. Please enter a number.")
             continue
 
         selected_action = next(
-            (a for a in actions_definition if a["index"] == selected_index), None
+            (a for a in actions_definition if a["index"] == selected_index),
+            None
         )
+
         if selected_action:
-            job_id = selected_action["action"]()
-            logger.info(f"Job {job_id} initiated")
+            current_job_id = selected_action["action"]()
         else:
-            print("Invalid selection")
+            print("Invalid selection. Please try again.")
 
 
 if __name__ == "__main__":

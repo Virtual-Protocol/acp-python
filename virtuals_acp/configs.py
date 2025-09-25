@@ -1,5 +1,4 @@
 # virtuals_acp/configs.py
-from dataclasses import dataclass
 from typing import Literal, Optional
 from virtuals_acp.fare import Fare
 

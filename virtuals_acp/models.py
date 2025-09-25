@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 if TYPE_CHECKING:
-    from virtuals_acp.offering import ACPJobOffering, ACPResourceOffering
+    from virtuals_acp.job_offering import ACPJobOffering, ACPResourceOffering
 
 
 class ACPMemoStatus(str, Enum):
@@ -95,7 +95,7 @@ class IACPAgent:
     name: str
     description: str
     wallet_address: str  # Checksummed address
-    jobs: List["ACPJobOffering"] = field(default_factory=list)
+    job_offerings: List["ACPJobOffering"] = field(default_factory=list)
     resources: List["ACPResourceOffering"] = field(default_factory=list)
     twitter_handle: Optional[str] = None
     # Full fields from TS for completeness, though browse_agent returns a subset
