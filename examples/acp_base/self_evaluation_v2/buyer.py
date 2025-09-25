@@ -1,5 +1,5 @@
-import threading
 import logging
+import threading
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -17,40 +17,46 @@ from virtuals_acp.models import (
 from virtuals_acp.contract_manager import ACPContractManager
 from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("BuyerAgent")
+
 load_dotenv(override=True)
 
 def buyer():
     env = EnvSettings()
 
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
-        print(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
+        logger.info(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
         if (
-            job.phase == ACPJobPhase.NEGOTIATION
-            and memo_to_sign is not None
-            and memo_to_sign.next_phase == ACPJobPhase.TRANSACTION
+                job.phase == ACPJobPhase.NEGOTIATION
+                and memo_to_sign is not None
+                and memo_to_sign.next_phase == ACPJobPhase.TRANSACTION
         ):
-            print("Paying job", job.id)
+            logger.info(f"Paying job {job.id}")
             job.pay_and_accept_requirement()
-            print(f"Job {job.id} paid")
+            logger.info(f"Job {job.id} paid")
+        elif (
+                job.phase == ACPJobPhase.TRANSACTION
+                and memo_to_sign is not None
+                and memo_to_sign.next_phase == ACPJobPhase.REJECTED
+        ):
+            logger.info(f"Signing job rejection memo {job}")
+            memo_to_sign.sign(True, "accepts job rejection")
+            logger.info(f"Job {job.id} rejection memo signed")
         elif job.phase == ACPJobPhase.COMPLETED:
-            print(f"Job {job.id} completed")
+            logger.info(f"Job {job.id} completed")
         elif job.phase == ACPJobPhase.REJECTED:
-            print(f"Job {job.id} rejected")
+            logger.info(f"Job {job.id} rejected")
 
     def on_evaluate(job: ACPJob):
-        print(f"Evaluation function called for job {job.id}")
+        logger.info(f"Evaluation function called for job {job.id}")
         job.evaluate(True)
 
-    # Validate env variables
-    for field in [
-        "WHITELISTED_WALLET_PRIVATE_KEY",
-        "BUYER_ENTITY_ID",
-        "BUYER_AGENT_WALLET_ADDRESS",
-    ]:
-        if getattr(env, field) is None:
-            raise Exception(f"{field} is not set")
-
-    acp = VirtualsACP(
+    acp_client = VirtualsACP(
         acp_contract_client=ACPContractManager(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
@@ -62,14 +68,14 @@ def buyer():
     )
 
     # Browse available agents
-    relevant_agents = acp.browse_agents(
-        keyword="<your_filter_agent_keyword>",
+    relevant_agents = acp_client.browse_agents(
+        keyword="<your-filter-agent-keyword>",
         sort_by=[ACPAgentSort.SUCCESSFUL_JOB_COUNT],
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,
         online_status=ACPOnlineStatus.ALL,
     )
-    print(f"Relevant agents: {relevant_agents}")
+    logger.info(f"Relevant agents: {relevant_agents}")
 
     # Pick the first agent
     chosen_agent = relevant_agents[0]
@@ -79,13 +85,13 @@ def buyer():
 
     # Initiate job with plain string requirement
     job_id = chosen_job_offering.initiate_job(
-        {"service_requirement": "Help me to generate a flower meme."},
+        service_requirement={ "<your_schema_field>": "Help me to generate a flower meme." },
         evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
         expired_at=datetime.now() + timedelta(days=1)
     )
 
-    print(f"Job {job_id} initiated")
-    print("Listening for next steps...")
+    logger.info(f"Job {job_id} initiated")
+    logger.info("Listening for next steps...")
 
     # Keep script alive
     threading.Event().wait()

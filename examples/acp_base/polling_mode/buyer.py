@@ -1,11 +1,20 @@
+import logging
 import time
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 
-from virtuals_acp import VirtualsACP, ACPJob, ACPJobPhase
+from virtuals_acp import VirtualsACP, ACPJob, ACPJobPhase, BASE_SEPOLIA_CONFIG
+from virtuals_acp.contract_manager import ACPContractManager
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.models import ACPGraduationStatus, ACPOnlineStatus
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("BuyerAgent")
 
 load_dotenv(override=True)
 
@@ -16,22 +25,24 @@ POLL_INTERVAL_SECONDS = 20
 
 def buyer():
     env = EnvSettings()
-    acp = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
-        agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
-        entity_id=env.BUYER_ENTITY_ID,
+    acp_client = VirtualsACP(
+        acp_contract_client=ACPContractManager(
+            wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+            agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
+            entity_id=env.BUYER_ENTITY_ID,
+            config=BASE_SEPOLIA_CONFIG,
+        ),
     )
-    print(f"Buyer ACP Initialized. Agent: {acp.agent_address}")
+    logger.info(f"Buyer ACP Initialized. Agent: {acp_client.agent_address}")
 
     # Browse available agents based on a keyword and cluster name
-    relevant_agents = acp.browse_agents(
-        keyword="<your_filter_agent_keyword>",
-        cluster="<your_cluster_name>",
+    relevant_agents = acp_client.browse_agents(
+        keyword="<your-filter-agent-keyword>",
         graduation_status=ACPGraduationStatus.ALL,
         online_status=ACPOnlineStatus.ALL,
     )
 
-    print(f"Relevant agents: {relevant_agents}")
+    logger.info(f"Relevant agents: {relevant_agents}")
 
     # Pick one of the agents based on your criteria (in this example we just pick the first one)
     chosen_agent = relevant_agents[0]
@@ -40,7 +51,7 @@ def buyer():
     chosen_job_offering = chosen_agent.job_offerings[0]
 
     # 1. Initiate Job
-    print(
+    logger.info(
         f"\nInitiating job with Seller: {chosen_agent.wallet_address}, Evaluator: {env.EVALUATOR_AGENT_WALLET_ADDRESS}"
     )
 
@@ -54,36 +65,44 @@ def buyer():
         expired_at=datetime.now() + timedelta(days=1),
     )
 
-    print(f"Job {job_id} initiated")
+    logger.info(f"Job {job_id} initiated")
     # 2. Wait for Seller's acceptance memo (which sets next_phase to TRANSACTION)
-    print(f"\nWaiting for Seller to accept job {job_id}...")
+    logger.info(f"\nWaiting for Seller to accept job {job_id}...")
 
     while True:
         # wait for some time before checking job again
         time.sleep(POLL_INTERVAL_SECONDS)
-        job: ACPJob = acp.get_job_by_onchain_id(job_id)
-        print(f"Polling Job {job_id}: Current Phase: {job.phase.name}")
+        job: ACPJob = acp_client.get_job_by_onchain_id(job_id)
+        logger.info(f"Polling Job {job_id}: Current Phase: {job.phase.name}")
 
-        if job.phase == ACPJobPhase.NEGOTIATION:
-            # Check if there's a memo that indicates next phase is TRANSACTION
-            for memo in job.memos:
-                if memo.next_phase == ACPJobPhase.TRANSACTION:
-                    print("Paying job", job_id)
-                    job.pay(job.price)
+        # Check if the latest memo indicates next phase is TRANSACTION
+        if (
+            job.phase == ACPJobPhase.NEGOTIATION and
+            job.latest_memo.next_phase == ACPJobPhase.TRANSACTION
+        ):
+            logger.info(f"Paying job ${job_id}")
+            job.pay_and_accept_requirement()
+        elif (
+                job.phase == ACPJobPhase.TRANSACTION
+                and job.latest_memo.next_phase == ACPJobPhase.REJECTED
+        ):
+            logger.info(f"Signing job rejection memo {job}")
+            job.latest_memo.sign(True, "accepts job rejection")
+            logger.info(f"Job {job.id} rejection memo signed")
         elif job.phase == ACPJobPhase.REQUEST:
-            print(f"Job {job_id} still in REQUEST phase. Waiting for seller...")
+            logger.info(f"Job {job_id} still in REQUEST phase. Waiting for seller...")
         elif job.phase == ACPJobPhase.EVALUATION:
-            print(f"Job {job_id} is in EVALUATION. Waiting for evaluator's decision...")
+            logger.info(f"Job {job_id} is in EVALUATION. Waiting for evaluator's decision...")
         elif job.phase == ACPJobPhase.TRANSACTION:
-            print(f"Job {job_id} is in TRANSACTION. Waiting for seller to deliver...")
+            logger.info(f"Job {job_id} is in TRANSACTION. Waiting for seller to deliver...")
         elif job.phase == ACPJobPhase.COMPLETED:
-            print("Job completed", job)
+            logger.info(f"Job completed ${job}")
             break
         elif job.phase == ACPJobPhase.REJECTED:
-            print("Job rejected", job)
+            logger.info(f"Job rejected {job}")
             break
 
-    print("\n--- Buyer Script Finished ---")
+    logger.info("\n--- Buyer Script Finished ---")
 
 
 if __name__ == "__main__":
