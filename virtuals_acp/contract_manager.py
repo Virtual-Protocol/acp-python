@@ -3,11 +3,12 @@
 import math
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 
 from eth_account import Account
 from web3 import Web3
 from web3.contract import Contract
+from eth_utils.abi import event_abi_to_log_topic
 
 from virtuals_acp.abi import ACP_ABI, ERC20_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
@@ -38,6 +39,19 @@ class _ACPContractManager:
         self.token_contract: Contract = self.w3.eth.contract(
             address=Web3.to_checksum_address(config.payment_token_address),
             abi=ERC20_ABI,
+        )
+
+        job_created_event_abi: Any = next(
+            (
+                e
+                for e in ACP_ABI
+                if e.get("type") == "event" and e.get("name") == "JobCreated"
+            ),
+            None,
+        )
+
+        self.job_created_event_signature_hex = (
+            "0x" + event_abi_to_log_topic(job_created_event_abi).hex()
         )
 
     def _format_amount(self, amount: float) -> int:
@@ -79,6 +93,48 @@ class _ACPContractManager:
             )
         except Exception as e:
             raise Exception("Failed to create job", e)
+
+    def get_job_id(
+        self, response: Dict[str, Any], client_address: str, provider_address: str
+    ) -> int:
+        logs: List[Dict[str, Any]] = response.get("receipts", [])[0].get("logs", [])
+
+        decoded_create_job_logs = [
+            self.contract.events.JobCreated().process_log(
+                {
+                    "topics": log["topics"],
+                    "data": log["data"],
+                    "address": log["address"],
+                    "logIndex": 0,
+                    "transactionIndex": 0,
+                    "transactionHash": "0x0000",
+                    "blockHash": "0x0000",
+                    "blockNumber": 0,
+                }
+            )
+            for log in logs
+            if log["topics"][0] == self.job_created_event_signature_hex
+        ]
+
+        if len(decoded_create_job_logs) == 0:
+            raise Exception("No logs found for JobCreated event")
+
+        created_job_log = next(
+            (
+                log
+                for log in decoded_create_job_logs
+                if log["args"]["provider"] == provider_address
+                and log["args"]["client"] == client_address
+            ),
+            None,
+        )
+
+        if not created_job_log:
+            raise Exception(
+                "No logs found for JobCreated event with provider and client addresses"
+            )
+
+        return int(created_job_log["args"]["jobId"])
 
     def approve_allowance(self, amount: float) -> Dict[str, Any]:
         try:

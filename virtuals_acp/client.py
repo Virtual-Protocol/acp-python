@@ -340,21 +340,9 @@ class VirtualsACP:
             provider_address, eval_addr, expired_at
         )
 
-        logs = response.get("receipts", [])[0].get("logs", [])
-        contract_logs = next(
-            (
-                log
-                for log in logs
-                if log.get("address", "").lower()
-                == self.contract_manager.config.contract_address.lower()
-            ),
-            None,
+        job_id = self.contract_manager.get_job_id(
+            response, self.agent_address, provider_address
         )
-
-        if not contract_logs:
-            raise Exception("Failed to get contract logs")
-
-        job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
 
         self.contract_manager.set_budget_with_payment_token(job_id, amount)
 
