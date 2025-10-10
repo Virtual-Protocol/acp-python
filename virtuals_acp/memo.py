@@ -14,11 +14,11 @@ from virtuals_acp.models import (
 from virtuals_acp.utils import try_parse_json_model, try_validate_model
 
 if TYPE_CHECKING:
-    from virtuals_acp.client import VirtualsACP
+    from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 
 
 class ACPMemo(BaseModel):
-    acp_client: "VirtualsACP"
+    contract_client: "BaseAcpContractClient"
     id: int
     type: MemoType
     content: str
@@ -28,22 +28,18 @@ class ACPMemo(BaseModel):
     expiry: Optional[datetime] = None
     payable_details: Optional[Dict[str, Any]] = None
 
-    structured_content: Optional[Dict[str, Any]] = None
+    structured_content: Optional[GenericPayload] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def model_post_init(self, _):
         self.structured_content = try_parse_json_model(
-            self.content, GenericPayload[Dict]
+            self.content, GenericPayload
         )
 
         if self.payable_details:
             self.payable_details["amount"] = int(self.payable_details["amount"])
             self.payable_details["feeAmount"] = int(self.payable_details["feeAmount"])
-
-        self.structured_content = try_parse_json_model(
-            self.content, GenericPayload[Dict]
-        )
 
     def __str__(self):
         return f"AcpMemo({self.model_dump(exclude={'payable_details'})})"
@@ -65,9 +61,9 @@ class ACPMemo(BaseModel):
             return try_validate_model(data, model)
 
     def create(self, job_id: int, is_secured: bool = True):
-        return self.acp_client.contract_manager.create_memo(
+        return self.contract_client.create_memo(
             job_id, self.content, self.type, is_secured, self.next_phase
         )
 
     def sign(self, approved: bool, reason: str | None = None):
-        return self.acp_client.contract_manager.sign_memo(self.id, approved, reason)
+        return self.contract_client.sign_memo(self.id, approved, reason)

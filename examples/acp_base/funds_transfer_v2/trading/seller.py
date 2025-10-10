@@ -13,8 +13,8 @@ from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
 from virtuals_acp.models import ACPJobPhase, IDeliverable
-from virtuals_acp.contract_manager import ACPContractManager
-from virtuals_acp.fare import FareAmount, Fare
+from virtuals_acp.contract_clients.contract_client import ACPContractManager
+from virtuals_acp.fare import FareAmountBase, Fare
 
 # Logging setup
 logging.basicConfig(
@@ -95,7 +95,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         return job.create_requirement_payable_memo(
             "Send me USDC to open position",
             MemoType.PAYABLE_REQUEST,
-            FareAmount(
+            FareAmountBase(
                 float(job.requirement.get("amount", 0)),
                 config.base_fare  # Open position against ACP Base Currency: USDC
             ),

@@ -1,6 +1,8 @@
 # virtuals_acp/configs.py
-from typing import Literal, Optional
+from typing import Literal, Optional, Union, List, Dict, Any
 from virtuals_acp.fare import Fare
+from virtuals_acp.abis.abi import ACP_ABI
+from virtuals_acp.abis.abi_v2 import ACP_V2_ABI
 
 ChainEnv = Literal["base-sepolia", "base"]
 
@@ -16,6 +18,7 @@ class ACPContractConfig:
         alchemy_base_url: str,
         acp_api_url: str,
         alchemy_policy_id: str,
+        abi: Union[List[Dict[str, Any]], type(ACP_ABI), type(ACP_V2_ABI)],
         rpc_endpoint: Optional[str] = None,
     ):
         self.chain = chain
@@ -26,6 +29,7 @@ class ACPContractConfig:
         self.alchemy_base_url = alchemy_base_url
         self.acp_api_url = acp_api_url
         self.alchemy_policy_id = alchemy_policy_id
+        self.abi = abi
         self.rpc_endpoint = rpc_endpoint
 
 
@@ -38,6 +42,19 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.gg/api",
+    abi=ACP_ABI,
+)
+
+BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
+    chain="base-sepolia",
+    rpc_url="https://sepolia.base.org",
+    chain_id=84532,
+    contract_address="0xd56F89058F88A97a997cf029793F02f84860c5a1",
+    base_fare=Fare("0x036CbD53842c5426634e7929541eC2318f3dCF7e", 6),
+    alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
+    alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
+    acp_api_url="https://acpx.virtuals.gg/api",
+    abi=ACP_V2_ABI,
 )
 
 BASE_MAINNET_CONFIG = ACPContractConfig(
@@ -49,6 +66,7 @@ BASE_MAINNET_CONFIG = ACPContractConfig(
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.io/api",
+    abi=ACP_ABI,
 )
 
 DEFAULT_CONFIG = BASE_MAINNET_CONFIG

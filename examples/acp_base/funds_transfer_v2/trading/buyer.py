@@ -15,7 +15,7 @@ from virtuals_acp.models import (
     ACPGraduationStatus,
     ACPOnlineStatus
 )
-from virtuals_acp.contract_manager import ACPContractManager
+from virtuals_acp.contract_clients.contract_client import ACPContractManager
 
 logging.basicConfig(
     level=logging.INFO,
@@ -104,7 +104,7 @@ def main():
     )
 
     relevant_agents = acp_client.browse_agents(
-        keyword="<your-filter-agent-keyword>",
+        keyword="calm_seller",
         sort_by=[ACPAgentSort.SUCCESSFUL_JOB_COUNT],
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,

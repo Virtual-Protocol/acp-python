@@ -9,7 +9,7 @@ from virtuals_acp.exceptions import ACPError
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from virtuals_acp.configs import ACPContractConfig
+    from virtuals_acp.configs.configs import ACPContractConfig
 
 
 class Fare:

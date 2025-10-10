@@ -1,5 +1,5 @@
 from datetime import datetime, timezone, timedelta
-from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union, Literal
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -21,7 +21,7 @@ from virtuals_acp.models import (
     NegotiationPayload,
     T,
 )
-from virtuals_acp.utils import try_parse_json_model
+from virtuals_acp.utils import try_parse_json_model, deprecated
 from virtuals_acp.fare import Fare
 from virtuals_acp.models import (
     ACPJobPhase,
@@ -44,6 +44,7 @@ class ACPJob(BaseModel):
     provider_address: str
     client_address: str
     evaluator_address: str
+    contract_address: Optional[str] = None
     price: float
     price_token_address: str
     memos: List[ACPMemo] = Field(default_factory=list)
@@ -97,6 +98,7 @@ class ACPJob(BaseModel):
             f"  provider_address='{self.provider_address}',\n"
             f"  client_address='{self.client_address}',\n"
             f"  evaluator_address='{self.evaluator_address}',\n"
+            f"  contract_address='{self.contract_address}',\n"
             f"  price={self.price},\n"
             f"  price_token_address='{self.price_token_address}',\n"
             f"  memos=[{', '.join(str(memo) for memo in self.memos)}],\n"
@@ -104,6 +106,23 @@ class ACPJob(BaseModel):
             f"  context={self.context}\n"
             f")"
         )
+
+    @property
+    def acp_contract_client(self):
+        if not self.contract_address:
+            return self.acp_client.contract_client
+        return self.acp_client.contract_client_by_address(self.contract_address)
+
+    @property
+    def config(self):
+        return self.acp_contract_client.config
+
+    @property
+    def base_fare(self) -> Fare:
+        return self.acp_contract_client.config.base_fare
+
+    def account(self):
+        return self.acp_client.get_account_by_job_id(self.id, self.acp_contract_client)
 
     @property
     def deliverable(self) -> Optional[str]:
@@ -119,33 +138,46 @@ class ACPJob(BaseModel):
         return memo.content if memo else None
 
     def create_requirement_memo(self, content: str) -> ACPMemo:
-        return self.acp_client.create_memo(
+        return self.acp_contract_client.create_memo(
             self.id,
             content,
+            MemoType.MESSAGE,
+            False,
             ACPJobPhase.TRANSACTION,
         )
 
     def create_requirement_payable_memo(
         self,
         content: str,
-        type: Literal[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER_ESCROW],
+        type: MemoType,
         amount: FareAmountBase,
         recipient: str,
         expired_at: Optional[datetime] = None,
     ) -> ACPMemo:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
-        return self.acp_client.create_payable_memo(
+        if type == MemoType.PAYABLE_TRANSFER_ESCROW or type == MemoType.PAYABLE_TRANSFER:
+            self.acp_contract_client.approve_allowance(
+                amount.amount,
+                amount.fare.contract_address,
+            )
+
+        fee_amount = FareAmount(0, self.base_fare)
+
+        return self.acp_contract_client.create_payable_memo(
             self.id,
             content,
-            amount,
+            amount.amount,
             recipient,
+            fee_amount.amount,
+            FeeType.NO_FEE,
             ACPJobPhase.TRANSACTION,
             type,
             expired_at,
+            amount.fare.contract_address,
         )
 
-    def pay_and_accept_requirement(self, reason: Optional[str] = "") -> ACPMemo:
+    def pay_and_accept_requirement(self, reason: Optional[str] = None) -> ACPMemo:
         memo = next(
             (m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None
         )
@@ -153,16 +185,16 @@ class ACPJob(BaseModel):
         if not memo:
             raise Exception("No transaction memo found")
 
-        base_fare_amount = FareAmount(self.price, self._base_fare)
+        base_fare_amount = FareAmount(self.price, self.base_fare)
 
         if memo.payable_details:
             transfer_amount = FareAmountBase.from_contract_address(
                 memo.payable_details["amount"],
                 memo.payable_details["token"],
-                self.acp_client.contract_manager.config,
+                self.config,
             )
         else:
-            transfer_amount = FareAmount(0, self._base_fare)
+            transfer_amount = FareAmount(0, self.base_fare)
 
         # merge amounts if same token
         if (
@@ -174,9 +206,9 @@ class ACPJob(BaseModel):
             total_amount = base_fare_amount
 
         # approve base fare
-        self.acp_client.contract_manager.approve_allowance(
+        self.acp_contract_client.approve_allowance(
             total_amount.amount,
-            self._base_fare.contract_address,
+            self.base_fare.contract_address,
         )
 
         # approve transfer if token differs
@@ -184,7 +216,7 @@ class ACPJob(BaseModel):
             base_fare_amount.fare.contract_address
             != transfer_amount.fare.contract_address
         ):
-            self.acp_client.contract_manager.approve_allowance(
+            self.acp_contract_client.approve_allowance(
                 transfer_amount.amount,
                 transfer_amount.fare.contract_address,
             )
@@ -192,10 +224,35 @@ class ACPJob(BaseModel):
         # sign memo
         memo.sign(True, reason)
 
-        return self.acp_client.create_memo(
+        return self.acp_contract_client.create_memo(
             self.id,
             f"Payment made. {reason or ''}".strip(),
+            MemoType.MESSAGE,
+            True,
             ACPJobPhase.EVALUATION,
+        )
+
+    def accept(self, reason: Optional[str] = None):
+        if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
+            raise ValueError("No negotiation memo found")
+        memo = self.latest_memo
+        memo.sign(True, reason)
+        return self.acp_contract_client.create_memo(
+            self.id,
+            f"Job {self.id} accepted. {reason or ''}",
+            MemoType.MESSAGE,
+            True,
+            ACPJobPhase.TRANSACTION,
+        )
+
+    def reject(self, reason: Optional[str] = None):
+        if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
+            raise ValueError("No negotiation memo found")
+        memo = self.latest_memo
+        return self.acp_contract_client.sign_memo(
+            memo.id,
+            False,
+            f"Job {self.id} rejected. {reason or ''}",
         )
 
     @property
@@ -262,12 +319,6 @@ class ACPJob(BaseModel):
             reason,
         )
 
-    def reject(self, reason: Optional[str] = None) -> str:
-        return self.acp_client.reject_job(
-            self.id,
-            f"Job {self.id} rejected. {reason or ''}",
-        )
-
     def deliver(self, deliverable: IDeliverable):
         if (
             self.latest_memo is None
@@ -288,7 +339,17 @@ class ACPJob(BaseModel):
             reason = f"Job {self.id} delivery {'accepted' if accept else 'rejected'}"
 
         return self.acp_client.sign_memo(self.latest_memo.id, accept, reason)
+    
+    def create_notification(self, content: str):
+        return await self.acp_contract_client.create_memo(
+            job_id=self.id,
+            content=content,
+            memo_type=MemoType.FEEDBACK,
+            is_secured=True,
+            next_phase=ACPJobPhase.COMPLETED,
+        )
 
+    @deprecated("The method should not be used")
     def open_position(
         self,
         payload: List[OpenPositionPayload],
@@ -319,6 +380,7 @@ class ACPJob(BaseModel):
             expired_at,
         )
 
+    @deprecated("The method should not be used")
     def respond_open_position(
         self,
         memo_id: int,
@@ -349,6 +411,7 @@ class ACPJob(BaseModel):
 
         return self.acp_client.respond_to_funds_transfer(memo.id, accept, reason)
 
+    @deprecated("The method should not be used")
     def close_partial_position(
         self, payload: ClosePositionPayload, expired_at: Optional[datetime] = None
     ):
@@ -370,6 +433,7 @@ class ACPJob(BaseModel):
             expired_at,
         )
 
+    @deprecated("The method should not be used")
     def respond_close_partial_position(
         self, memo_id: int, accept: bool, reason: Optional[str] = None
     ):
@@ -400,6 +464,7 @@ class ACPJob(BaseModel):
             memo.id, accept, close_position_payload.data.amount, reason
         )
 
+    @deprecated("The method should not be used")
     def request_close_position(self, payload: RequestClosePositionPayload):
         return self.acp_client.send_message(
             self.id,
@@ -407,6 +472,7 @@ class ACPJob(BaseModel):
             ACPJobPhase.TRANSACTION,
         )
 
+    @deprecated("The method should not be used")
     def response_request_close_position(
         self,
         memo_id: int,
@@ -453,6 +519,7 @@ class ACPJob(BaseModel):
                 expired_at,
             )
 
+    @deprecated("The method should not be used")
     def confirm_close_position(
         self, memo_id: int, accept: bool, reason: Optional[str] = None
     ):
@@ -497,6 +564,7 @@ class ACPJob(BaseModel):
             expired_at,
         )
 
+    @deprecated("The method should not be used")
     def respond_position_fulfilled(
         self, memo_id: int, accept: bool, reason: Optional[str] = None
     ):
@@ -522,6 +590,7 @@ class ACPJob(BaseModel):
 
         return self.acp_client.respond_to_funds_transfer(memo.id, accept, reason)
 
+    @deprecated("The method should not be used")
     def unfulfilled_position(
         self, payload: UnfulfilledPositionPayload, expired_at: Optional[datetime] = None
     ):
@@ -543,6 +612,7 @@ class ACPJob(BaseModel):
             expired_at,
         )
 
+    @deprecated("The method should not be used")
     def respond_unfulfilled_position(
         self, memo_id: int, accept: bool, reason: Optional[str] = None
     ):
@@ -568,6 +638,7 @@ class ACPJob(BaseModel):
 
         return self.acp_client.respond_to_funds_transfer(memo.id, accept, reason)
 
+    @deprecated("The method should not be used")
     def close_job(self, message: str = "Close job and withdraw all"):
         close_job_payload = GenericPayload(
             type=PayloadType.CLOSE_JOB_AND_WITHDRAW,
@@ -578,6 +649,7 @@ class ACPJob(BaseModel):
             self.id, close_job_payload, ACPJobPhase.TRANSACTION
         )
 
+    @deprecated("The method should not be used")
     def respond_close_job(
         self,
         memo_id: int,
@@ -629,6 +701,7 @@ class ACPJob(BaseModel):
                 expired_at,
             )
 
+    @deprecated("The method should not be used")
     def confirm_job_closure(
         self, memo_id: int, accept: bool, reason: Optional[str] = None
     ):

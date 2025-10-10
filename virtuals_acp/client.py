@@ -13,8 +13,9 @@ import requests
 import socketio
 from web3 import Web3
 
-from virtuals_acp.contract_manager import ACPContractManager
+from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPApiError, ACPError
+from virtuals_acp.account import ACPAccount
 from virtuals_acp.job import ACPJob
 from virtuals_acp.memo import ACPMemo
 from virtuals_acp.models import (
@@ -38,6 +39,11 @@ from virtuals_acp.fare import (
     FareBigInt,
     FareAmountBase,
 )
+from virtuals_acp.configs.configs import (
+    ACPContractConfig,
+    BASE_SEPOLIA_CONFIG,
+    BASE_MAINNET_CONFIG,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -49,14 +55,30 @@ logger = logging.getLogger("ACPClient")
 class VirtualsACP:
     def __init__(
         self,
-        acp_contract_client: "ACPContractManager",
+        acp_contract_clients: Union[BaseAcpContractClient, List[BaseAcpContractClient]],
         on_new_task: Optional[Callable] = None,
         on_evaluate: Optional[Callable] = None,
     ):
-        self.contract_manager = acp_contract_client
-        self.agent_wallet_address = acp_contract_client.agent_wallet_address
-        self.config = acp_contract_client.config
-        self.acp_api_url = self.contract_manager.config.acp_api_url
+        # Handle both single client and list of clients
+        if isinstance(acp_contract_clients, list):
+            self.contract_clients = acp_contract_clients
+        else:
+            self.contract_clients = [acp_contract_clients]
+        
+        if len(self.contract_clients) == 0:
+            raise ACPError("ACP contract client is required")
+        
+        # Validate all clients have the same agent wallet address
+        first_agent_address = self.contract_clients[0].agent_wallet_address
+        for client in self.contract_clients:
+            if client.agent_wallet_address != first_agent_address:
+                raise ACPError("All contract clients must have the same agent wallet address")
+        
+        # Use the first client for common properties
+        self.contract_client = self.contract_clients[0]
+        self.agent_wallet_address = first_agent_address
+        self.config = self.contract_client.config
+        self.acp_api_url = self.config.acp_api_url
 
         if self.agent_wallet_address:
             self._agent_wallet_address = Web3.to_checksum_address(
@@ -71,6 +93,32 @@ class VirtualsACP:
         self.sio = socketio.Client()
         self._setup_socket_handlers()
         self._connect_socket()
+
+    @property
+    def acp_contract_client(self):
+        """Get the first contract client (for backward compatibility)."""
+        return self.contract_clients[0]
+
+    @property
+    def acp_url(self):
+        """Get the ACP URL from the first contract client."""
+        return self.contract_client.config.acp_api_url
+
+    @property
+    def wallet_address(self):
+        """Get the wallet address from the first contract client."""
+        return self.contract_client.agent_wallet_address
+
+    def contract_client_by_address(self, address: Optional[str]):
+        """Find contract client by contract address."""
+        if not address:
+            return self.contract_clients[0]
+        
+        for client in self.contract_clients:
+            if hasattr(client, 'contract_address') and client.contract_address == address:
+                return client
+        
+        raise ACPError("ACP contract client not found")
 
     def _default_on_evaluate(self, job: ACPJob) -> Tuple[bool, str]:
         """Default handler for job evaluation events."""
@@ -106,7 +154,7 @@ class VirtualsACP:
         memo_to_sign_id = data.get("memoToSign")
 
         memos = [ACPMemo(
-            acp_client=self,
+            contract_client=self.contract_client_by_address(data.get("contractAddress")),
             id=memo.get("id"),
             type=MemoType(int(memo.get("memoType"))),
             content=memo.get("content"),
@@ -131,11 +179,12 @@ class VirtualsACP:
                 context = None
 
         job = ACPJob(
-            acp_client=self,
+            contract_client=self.contract_client_by_address(data.get("contractAddress")),
             id=data["id"],
             provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
             evaluator_address=data["evaluatorAddress"],
+            contract_address=data.get("contractAddress"),
             memos=memos,
             phase=data["phase"],
             price=data["price"],
@@ -148,7 +197,7 @@ class VirtualsACP:
 
     def handle_evaluate(self, data) -> None:
         memos = [ACPMemo(
-            acp_client=self,
+            contract_client=self.contract_client_by_address(data.get("contractAddress")),
             id=memo.get("id"),
             type=MemoType(int(memo.get("memoType"))),
             content=memo.get("content"),
@@ -167,11 +216,12 @@ class VirtualsACP:
                 context = None
 
         job = ACPJob(
-            acp_client=self,
+            contract_client=self.contract_client_by_address(data.get("contractAddress")),
             id=data["id"],
             provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
             evaluator_address=data["evaluatorAddress"],
+            contract_address=data.get("contractAddress"),
             memos=memos,
             phase=data["phase"],
             price=data["price"],
@@ -191,6 +241,7 @@ class VirtualsACP:
         headers_data = {
             "x-sdk-version": version("virtuals_acp"),
             "x-sdk-language": "python",
+            "x-contract-address": self.contract_clients[0].contract_address,
         }
         auth_data = {"walletAddress": self.agent_address}
 
@@ -265,11 +316,29 @@ class VirtualsACP:
             data = response.json()
 
             agents_data = data.get("data", [])
+            
+            # Filter agents by available contract addresses
+            available_contract_addresses = [
+                client.contract_address.lower() for client in self.contract_clients
+            ]
+            
+            # Filter out self and agents not using our contract addresses
+            filtered_agents = [
+                agent for agent in agents_data
+                if agent["walletAddress"].lower() != self.agent_address.lower()
+                and agent.get("contractAddress", "").lower() in available_contract_addresses
+            ]
+            
             agents = []
-            for agent_data in agents_data:
+            for agent_data in filtered_agents:
+                # Find the contract client for this agent
+                agent_contract_address = agent_data.get("contractAddress", "").lower()
+                contract_client = self.contract_client_by_address(agent_contract_address)
+                
                 job_offerings = [
                     ACPJobOffering(
-                        acp_client=self,
+                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
+                        contract_client=contract_client,
                         provider_address=agent_data["walletAddress"],
                         name=job["name"],
                         price=job["price"],
@@ -318,31 +387,48 @@ class VirtualsACP:
         if provider_address == self.agent_address:
             raise Exception("You cannot initiate a job with yourself as the provider")
 
-        response = self.contract_manager.create_job(
-            provider_address, eval_addr, expired_at
+        # Lookup existing account between client and provider
+        account = self.get_by_client_and_provider(
+            self.agent_address,
+            provider_address,
+            self.contract_client
         )
 
-        logs = response.get("receipts", [])[0].get("logs", [])
-        contract_logs = next(
-            (
-                log
-                for log in logs
-                if log.get("address", "").lower()
-                == self.contract_manager.config.contract_address.lower()
-            ),
-            None,
+        # Determine whether to call createJob or createJobWithAccount
+        base_contract_addresses = {
+            BASE_SEPOLIA_CONFIG.contract_address.lower(),
+            BASE_MAINNET_CONFIG.contract_address.lower(),
+        }
+
+        use_simple_create = (
+            self.contract_client.config.contract_address.lower() in base_contract_addresses
+            or not account
         )
 
-        if not contract_logs:
-            raise Exception("Failed to get contract logs")
+        if use_simple_create:
+            response = self.contract_manager.create_job(
+                provider_address, eval_addr, expired_at
+            )
+        else:
+            response = self.contract_client.create_job_with_account(
+                account.account_id,
+                provider_address,
+                eval_addr,
+                fare_amount.amount,
+                fare_amount.fare.contract_address,
+                expired_at
+            )
 
-        job_id = int(Web3.to_int(hexstr=contract_logs.get("data")))
-
-        self.contract_manager.set_budget_with_payment_token(
-            job_id, fare_amount.amount, fare_amount.fare.contract_address
+        job_id = self.contract_client.get_job_id(
+            response, self.agent_address, provider_address
         )
 
-        self.contract_manager.create_memo(
+        # Budget and first memo
+        self.contract_client.set_budget_with_payment_token(
+            job_id, fare_amount
+        )
+
+        self.contract_client.create_memo(
             job_id,
             (
                 service_requirement
@@ -356,8 +442,71 @@ class VirtualsACP:
 
         return job_id
 
+    def get_by_client_and_provider(
+        self,
+        client_address: str,
+        provider_address: str,
+        acp_contract_client: Optional[BaseAcpContractClient] = None,
+    ) -> Optional[ACPAccount]:
+        """Get account by client and provider addresses."""
+        try:
+            url = f"{self.acp_url}/api/accounts/client/{client_address}/provider/{provider_address}"
+            
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data.get("data"):
+                return None
+                
+            account_data = data["data"]
+            contract_client = acp_contract_client or self.contract_clients[0]
+            
+            return ACPAccount(
+                contract_client=contract_client,
+                account_id=account_data["id"],
+                client_address=account_data["clientAddress"],
+                provider_address=account_data["providerAddress"],
+                metadata=account_data.get("metadata", ""),
+            )
+        except requests.exceptions.RequestException as e:
+            raise ACPApiError(f"Failed to get account by client and provider: {e}")
+        except Exception as e:
+            raise ACPError(f"An unexpected error occurred while getting account: {e}")
+
+    def get_account_by_job_id(
+        self,
+        job_id: int,
+        acp_contract_client: Optional[BaseAcpContractClient] = None,
+    ) -> Optional[ACPAccount]:
+        """Get account by job ID."""
+        try:
+            url = f"{self.acp_url}/api/accounts/job/{job_id}"
+            
+            response = requests.get(url)
+            response.raise_for_status()
+            data = response.json()
+            
+            if not data.get("data"):
+                return None
+                
+            account_data = data["data"]
+            contract_client = acp_contract_client or self.contract_clients[0]
+            
+            return ACPAccount(
+                contract_client=contract_client,
+                account_id=account_data["id"],
+                client_address=account_data["clientAddress"],
+                provider_address=account_data["providerAddress"],
+                metadata=account_data.get("metadata", ""),
+            )
+        except requests.exceptions.RequestException as e:
+            raise ACPApiError(f"Failed to get account by job id: {e}")
+        except Exception as e:
+            raise ACPError(f"An unexpected error occurred while getting account by job id: {e}")
+
     def create_memo(self, job_id: int, content: str, next_phase: ACPJobPhase):
-        return self.contract_manager.create_memo(
+        return self.contract_client.create_memo(
             job_id, content, MemoType.MESSAGE, False, next_phase
         )
 
@@ -420,6 +569,17 @@ class VirtualsACP:
         except Exception as e:
             logger.warning(f"Error in respond_to_job_memo: {e}")
             raise
+
+    def reject_job(self, job_id: int, reason: Optional[str] = None) -> str:
+        """Reject a job with optional reason."""
+        content = f"Job {job_id} rejected. {reason or ''}"
+        return self.contract_client.create_memo(
+            job_id,
+            content,
+            MemoType.MESSAGE,
+            is_secured=False,
+            next_phase=ACPJobPhase.REJECTED,
+        )
 
     def pay_job(
         self,
@@ -500,14 +660,14 @@ class VirtualsACP:
     ) -> str:
         # Wrap ETH → WETH if transfer token is ETH
         if transfer_fare_amount.fare.contract_address == ETH_FARE.contract_address:
-            self.acp_contract_client.wrap_eth(transfer_fare_amount.amount)
+            self.contract_client.wrap_eth(transfer_fare_amount.amount)
             transfer_fare_amount = FareBigInt(transfer_fare_amount.amount, WETH_FARE)
 
         # Fee token must match base fare
         if (
             fee_fare_amount.amount > 0
             and fee_fare_amount.fare.contract_address
-            != self.acp_contract_client.config.base_fare.contract_address
+            != self.contract_client.config.base_fare.contract_address
         ):
             raise ACPError("Fee token address is not the same as the base fare")
 
@@ -518,7 +678,7 @@ class VirtualsACP:
         )
 
         if is_fee_token_different:
-            self.acp_contract_client.approve_allowance(
+            self.contract_client.approve_allowance(
                 fee_fare_amount.amount,
                 fee_fare_amount.fare.contract_address,
             )
@@ -613,6 +773,7 @@ class VirtualsACP:
                 memos = []
                 for memo in job.get("memos", []):
                     memos.append(ACPMemo(
+                        contract_client=self.contract_client,
                         id=memo.get("id"),
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
@@ -632,11 +793,12 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        acp_client=self,
+                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
                         evaluator_address=job.get("evaluatorAddress"),
+                        contract_address=job.get("contractAddress"),
                         memos=memos,
                         phase=job.get("phase"),
                         price=job.get("price"),
@@ -661,6 +823,7 @@ class VirtualsACP:
                 memos = []
                 for memo in job.get("memos", []):
                     memos.append(ACPMemo(
+                        contract_client=self.contract_client,
                         id=memo.get("id"),
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
@@ -680,11 +843,12 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        acp_client=self,
+                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
                         evaluator_address=job.get("evaluatorAddress"),
+                        contract_address=job.get("contractAddress"),
                         memos=memos,
                         phase=job.get("phase"),
                         price=job.get("price"),
@@ -709,6 +873,7 @@ class VirtualsACP:
                 memos = []
                 for memo in job.get("memos", []):
                     memos.append(ACPMemo(
+                        contract_client=self.contract_client,
                         id=memo.get("id"),
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
@@ -728,11 +893,12 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        acp_client=self,
+                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
                         evaluator_address=job.get("evaluatorAddress"),
+                        contract_address=job.get("contractAddress"),
                         memos=memos,
                         phase=job.get("phase"),
                         price=job.get("price"),
@@ -758,6 +924,7 @@ class VirtualsACP:
             memos = []
             for memo in data.get("data", {}).get("memos", []):
                 memos.append(ACPMemo(
+                    contract_client=self.contract_client,
                     id=memo.get("id"),
                     type=MemoType(int(memo.get("memoType"))),
                     content=memo.get("content"),
@@ -776,11 +943,12 @@ class VirtualsACP:
                     context = None
 
             return ACPJob(
-                acp_client=self,
+                contract_client=self.contract_client_by_address(data.get("contractAddress")),
                 id=data.get("data", {}).get("id"),
                 provider_address=data.get("data", {}).get("providerAddress"),
                 client_address=data.get("data", {}).get("clientAddress"),
                 evaluator_address=data.get("data", {}).get("evaluatorAddress"),
+                contract_address=data.get("data", {}).get("contractAddress"),
                 memos=memos,
                 phase=data.get("data", {}).get("phase"),
                 price=data.get("data", {}).get("price"),
@@ -804,6 +972,7 @@ class VirtualsACP:
             memo = data.get("data", {})
 
             return ACPMemo(
+                contract_client=self.contract_client,
                 id=memo.get("id"),
                 type=MemoType(memo.get("memoType")),
                 content=memo.get("content"),
@@ -837,7 +1006,7 @@ class VirtualsACP:
 
             offerings = [
                 ACPJobOffering(
-                    acp_client=self,
+                    contract_client=self.contract_client_by_address(data.get("contractAddress")),
                     provider_address=agent_data["walletAddress"],
                     name=offering["name"],
                     price=offering["price"],

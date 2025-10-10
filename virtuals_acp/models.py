@@ -28,19 +28,24 @@ class ACPMemoStatus(str, Enum):
     EXPIRED = "EXPIRED"
 
 
-class MemoType(Enum):
-    MESSAGE = 0
-    CONTEXT_URL = 1
-    IMAGE_URL = 2
-    VOICE_URL = 3
-    OBJECT_URL = 4
-    TXHASH = 5
-    PAYABLE_REQUEST = 6
-    PAYABLE_TRANSFER = 7
-    PAYABLE_TRANSFER_ESCROW = 8
+class MemoType(int, Enum):
+    MESSAGE = 0                    # Text message
+    CONTEXT_URL = 1                # URL for context
+    IMAGE_URL = 2                  # Image URL
+    VOICE_URL = 3                  # Voice/audio URL
+    OBJECT_URL = 4                 # Object/file URL
+    TXHASH = 5                     # Transaction hash reference
+    PAYABLE_REQUEST = 6            # Payment request
+    PAYABLE_TRANSFER = 7           # Direct payment transfer
+    PAYABLE_TRANSFER_ESCROW = 8    # Escrowed payment transfer
+    MILESTONE_PROPOSAL = 9         # Milestone proposal
+    MILESTONE_COMPLETION = 10      # Milestone completion claim
+    DELIVERABLE_SUBMISSION = 11    # Deliverable submission
+    FEEDBACK = 12                  # Temp for notification
+    REVISION_REQUEST = 13          # Request for revisions
 
 
-class ACPJobPhase(Enum):
+class ACPJobPhase(int, Enum):
     REQUEST = 0
     NEGOTIATION = 1
     TRANSACTION = 2
@@ -59,7 +64,7 @@ class ACPJobPhase(Enum):
             return None
 
 
-class FeeType(Enum):
+class FeeType(int, Enum):
     NO_FEE = 0
     IMMEDIATE_FEE = 1
     DEFERRED_FEE = 2

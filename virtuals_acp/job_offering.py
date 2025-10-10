@@ -4,6 +4,13 @@ from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 from pydantic import BaseModel, field_validator, ConfigDict
 from jsonschema import ValidationError, validate
 from virtuals_acp.fare import FareAmount
+from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
+from virtuals_acp.configs.configs import ACPContractConfig
+from virtuals_acp.models import ACPJobPhase, MemoType
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG
+from web3 import Web3
+from web3.constants import ZERO_ADDRESS
+
 
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
@@ -11,6 +18,7 @@ if TYPE_CHECKING:
 
 class ACPJobOffering(BaseModel):
     acp_client: "VirtualsACP"
+    contract_client: BaseAcpContractClient
     provider_address: str
     name: str
     price: float
@@ -61,16 +69,64 @@ class ACPJobOffering(BaseModel):
         else:
             final_service_requirement["requirement"] = service_requirement
 
-        return self.acp_client.initiate_job(
-            provider_address=self.provider_address,
-            service_requirement=final_service_requirement,
-            evaluator_address=evaluator_address,
-            fare_amount=FareAmount(
-                self.price,
-                self.acp_client.config.base_fare,
-            ),
-            expired_at=expired_at,
+        # Prepare fare amount based on this offering's price and contract's base fare
+        fare_amount = FareAmount(self.price, self.contract_client.config.base_fare)
+
+        # Lookup existing account between client and provider
+        account = self.acp_client.get_by_client_and_provider(
+            self.contract_client.agent_wallet_address,
+            self.provider_address,
+            self.contract_client
         )
+        
+        base_contract_addresses = {
+            BASE_SEPOLIA_CONFIG.contract_address.lower(),
+            BASE_MAINNET_CONFIG.contract_address.lower(),
+        }
+
+        use_simple_create = (
+            self.contract_client.config.contract_address.lower() in base_contract_addresses
+            or not account
+        )
+
+        if use_simple_create:
+            response = self.contract_client.create_job(
+                self.provider_address,
+                evaluator_address or self.contract_client.agent_wallet_address,
+                expired_at or datetime.utcnow(),
+            )
+        else:
+            evaluator = Web3.to_checksum_address(evaluator_address) if evaluator_address else ZERO_ADDRESS
+            response = self.contract_client.create_job_with_account(
+                account.id,
+                self.provider_address,
+                evaluator_address or self.contract_client.agent_wallet_address,
+                fare_amount.amount,
+                fare_amount.fare.contract_address,
+                expired_at or datetime.utcnow(),
+            )
+
+        job_id = self.contract_client.get_job_id(
+            response,
+            self.contract_client.agent_wallet_address,
+            self.provider_address,
+        )
+
+        # Budget and initial memo
+        self.contract_client.set_budget_with_payment_token(
+            job_id,
+            fare_amount,
+        )
+
+        self.contract_client.create_memo(
+            job_id,
+            json.dumps(final_service_requirement),
+            MemoType.MESSAGE,
+            True,
+            ACPJobPhase.NEGOTIATION,
+        )
+
+        return job_id
 
 
 class ACPResourceOffering(BaseModel):

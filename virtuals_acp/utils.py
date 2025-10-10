@@ -1,5 +1,7 @@
+import functools
 import json
-from typing import Type, Optional
+import warnings
+from typing import Optional, Type
 
 from pydantic import ValidationError
 
@@ -18,3 +20,18 @@ def try_validate_model(data: dict, model: Type[T]) -> Optional[T]:
         return model.model_validate(data)
     except ValidationError:
         return None
+
+
+def deprecated(reason: str = "This function is deprecated and should not be used."):
+    """Decorator to mark functions or methods as deprecated."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapped(*args, **kwargs):
+            warnings.warn(
+                f"Call to deprecated function {func.__name__}: {reason}",
+                category=DeprecationWarning,
+                stacklevel=2,
+            )
+            return func(*args, **kwargs)
+        return wrapped
+    return decorator
