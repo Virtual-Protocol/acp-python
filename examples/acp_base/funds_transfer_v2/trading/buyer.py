@@ -1,11 +1,9 @@
-import threading
 import time
 import logging
 from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
-from virtuals_acp import ACPMemo, MemoType
-from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
+from virtuals_acp.memo import ACPMemo, MemoType
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
@@ -15,7 +13,8 @@ from virtuals_acp.models import (
     ACPGraduationStatus,
     ACPOnlineStatus
 )
-from virtuals_acp.contract_clients.contract_client import ACPContractManager
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG_V2
+from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,7 +23,7 @@ logging.basicConfig(
 logger = logging.getLogger("FundsBuyerAgent")
 
 load_dotenv(override=True)
-config = BASE_SEPOLIA_CONFIG
+config = BASE_SEPOLIA_CONFIG_V2
 
 # Python dict equivalent to SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING
 SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING: Dict[str, Any] = {
@@ -93,11 +92,11 @@ def main():
         current_job_id = None
 
     acp_client = VirtualsACP(
-        acp_contract_client=ACPContractManager(
+        acp_contract_clients=ACPContractClientV2(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
             entity_id=env.BUYER_ENTITY_ID,
-            config=config
+            config=BASE_SEPOLIA_CONFIG_V2
         ),
         on_new_task=on_new_task,
         on_evaluate=on_evaluate

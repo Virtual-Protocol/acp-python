@@ -341,7 +341,7 @@ class ACPJob(BaseModel):
         return self.acp_client.sign_memo(self.latest_memo.id, accept, reason)
     
     def create_notification(self, content: str):
-        return await self.acp_contract_client.create_memo(
+        return self.acp_contract_client.create_memo(
             job_id=self.id,
             content=content,
             memo_type=MemoType.FEEDBACK,

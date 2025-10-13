@@ -18,7 +18,7 @@ class ACPContractConfig:
         alchemy_base_url: str,
         acp_api_url: str,
         alchemy_policy_id: str,
-        abi: Union[List[Dict[str, Any]], type(ACP_ABI), type(ACP_V2_ABI)],
+        abi: Union[List[Dict[str, Any]]],
         rpc_endpoint: Optional[str] = None,
     ):
         self.chain = chain

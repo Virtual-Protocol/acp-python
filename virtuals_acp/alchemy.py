@@ -11,7 +11,7 @@ from eth_utils.conversions import to_hex
 from eth_account.messages import encode_defunct
 
 
-from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG
 
 MAX_RETRIES = 10
 
@@ -96,6 +96,7 @@ class AlchemyRPCClient:
 class AlchemyAccountKit:
     def __init__(
         self,
+        config: Dict[str, Any],
         agent_wallet_address: str,
         entity_id: int,
         owner_account: Account,
@@ -109,8 +110,8 @@ class AlchemyAccountKit:
             entity_id: Entity ID
             chain_id: Chain ID to use (defaults to BASE_SEPOLIA_CONFIG.chain_id)
         """
-        self.chain_id = chain_id or BASE_SEPOLIA_CONFIG.chain_id
-        self.rpc_client = AlchemyRPCClient(BASE_SEPOLIA_CONFIG.alchemy_base_url)
+        self.chain_id = chain_id or config.chain_id
+        self.rpc_client = AlchemyRPCClient(config.alchemy_base_url)
         self.account_address = agent_wallet_address
         self.owner_account = owner_account
 

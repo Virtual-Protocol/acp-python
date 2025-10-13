@@ -40,7 +40,6 @@ from virtuals_acp.fare import (
     FareAmountBase,
 )
 from virtuals_acp.configs.configs import (
-    ACPContractConfig,
     BASE_SEPOLIA_CONFIG,
     BASE_MAINNET_CONFIG,
 )
@@ -331,14 +330,10 @@ class VirtualsACP:
             
             agents = []
             for agent_data in filtered_agents:
-                # Find the contract client for this agent
-                agent_contract_address = agent_data.get("contractAddress", "").lower()
-                contract_client = self.contract_client_by_address(agent_contract_address)
-                
                 job_offerings = [
                     ACPJobOffering(
+                        acp_client=self,
                         contract_client=self.contract_client_by_address(data.get("contractAddress")),
-                        contract_client=contract_client,
                         provider_address=agent_data["walletAddress"],
                         name=job["name"],
                         price=job["price"],
@@ -378,14 +373,14 @@ class VirtualsACP:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(days=1)
 
+        if provider_address == self.agent_address:
+            raise ACPError("Provider address cannot be the same as the client address")
+
         eval_addr = (
             Web3.to_checksum_address(evaluator_address)
             if evaluator_address
             else self.agent_address
         )
-
-        if provider_address == self.agent_address:
-            raise Exception("You cannot initiate a job with yourself as the provider")
 
         # Lookup existing account between client and provider
         account = self.get_by_client_and_provider(
@@ -407,13 +402,18 @@ class VirtualsACP:
 
         if use_simple_create:
             response = self.contract_manager.create_job(
-                provider_address, eval_addr, expired_at
+                provider_address, 
+                eval_addr or self.wallet_address, 
+                expired_at,
+                fare_amount.fare.contract_address,
+                fare_amount.amount,
+                ""
             )
         else:
             response = self.contract_client.create_job_with_account(
                 account.account_id,
                 provider_address,
-                eval_addr,
+                eval_addr or self.wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
                 expired_at
@@ -453,6 +453,9 @@ class VirtualsACP:
             url = f"{self.acp_url}/api/accounts/client/{client_address}/provider/{provider_address}"
             
             response = requests.get(url)
+            if response.status_code == 404:
+                return None
+            
             response.raise_for_status()
             data = response.json()
             

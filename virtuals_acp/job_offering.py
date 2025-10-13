@@ -9,11 +9,12 @@ from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.models import ACPJobPhase, MemoType
 from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG
 from web3 import Web3
-from web3.constants import ZERO_ADDRESS
 
 
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
+
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
 class ACPJobOffering(BaseModel):
@@ -94,9 +95,12 @@ class ACPJobOffering(BaseModel):
                 self.provider_address,
                 evaluator_address or self.contract_client.agent_wallet_address,
                 expired_at or datetime.utcnow(),
+                fare_amount.fare.contract_address,
+                fare_amount.amount,
+                ""
             )
         else:
-            evaluator = Web3.to_checksum_address(evaluator_address) if evaluator_address else ZERO_ADDRESS
+            evaluator_address = Web3.to_checksum_address(evaluator_address) if evaluator_address else ZERO_ADDRESS
             response = self.contract_client.create_job_with_account(
                 account.id,
                 self.provider_address,
