@@ -9,7 +9,6 @@ from web3 import Web3
 from web3.contract import Contract
 from eth_utils.abi import event_abi_to_log_topic
 
-from virtuals_acp.abis.abi import ACP_ABI
 from virtuals_acp.abis.erc20_abi import ERC20_ABI
 from virtuals_acp.abis.weth_abi import WETH_ABI
 from virtuals_acp.configs.configs import ACPContractConfig

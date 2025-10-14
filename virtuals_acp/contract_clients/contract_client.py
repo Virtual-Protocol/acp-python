@@ -1,4 +1,3 @@
-import time
 import math
 import secrets
 from datetime import datetime
@@ -8,7 +7,7 @@ from eth_account import Account
 from web3 import Web3
 
 from virtuals_acp.alchemy import AlchemyAccountKit
-from virtuals_acp.configs.configs import ACPContractConfig
+from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
@@ -20,7 +19,7 @@ class ACPContractClient(BaseAcpContractClient):
         wallet_private_key: str,
         agent_wallet_address: str,
         entity_id: int,
-        config: ACPContractConfig,
+        config: ACPContractConfig = BASE_MAINNET_CONFIG,
     ):
         super().__init__(agent_wallet_address, config)
         self.account = Account.from_key(wallet_private_key)

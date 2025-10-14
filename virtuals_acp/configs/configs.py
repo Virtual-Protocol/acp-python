@@ -69,5 +69,17 @@ BASE_MAINNET_CONFIG = ACPContractConfig(
     abi=ACP_ABI,
 )
 
-DEFAULT_CONFIG = BASE_MAINNET_CONFIG
+BASE_MAINNET_CONFIG_V2 = ACPContractConfig(
+    chain="base",
+    rpc_url="https://mainnet.base.org",
+    chain_id=8453,
+    contract_address="0xa6C9BA866992cfD7fd6460ba912bfa405adA9df0",
+    base_fare=Fare("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6),
+    alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
+    alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
+    acp_api_url="https://acpx.virtuals.io/api",
+    abi=ACP_V2_ABI,
+)
+
+DEFAULT_CONFIG = BASE_MAINNET_CONFIG_V2
 # Or: DEFAULT_CONFIG = BASE_SEPOLIA_CONFIG
