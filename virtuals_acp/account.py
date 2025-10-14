@@ -19,8 +19,8 @@ class ACPAccount:
         self.metadata = metadata
 
     def update_metadata(self, metadata: Dict[str, Any]) -> str:
-        hash_ = self.contract_client.update_account_metadata(
+        result = self.contract_client.update_account_metadata(
             self.id,
             json.dumps(metadata),
         )
-        return hash_
+        return result.get("receipts", [])[0].get("transactionHash")

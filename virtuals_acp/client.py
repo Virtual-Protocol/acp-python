@@ -488,7 +488,7 @@ class VirtualsACP:
     ) -> Optional[ACPAccount]:
         """Get account by job ID."""
         try:
-            url = f"{self.acp_url}/api/accounts/job/{job_id}"
+            url = f"{self.acp_url}/accounts/job/{job_id}"
 
             response = requests.get(url)
             response.raise_for_status()

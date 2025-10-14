@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
+from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
 from virtuals_acp.models import (
     ACPJobPhase,
@@ -121,7 +122,8 @@ class ACPJob(BaseModel):
     def base_fare(self) -> Fare:
         return self.acp_contract_client.config.base_fare
 
-    def account(self):
+    @property
+    def account(self) -> Optional[ACPAccount]:
         return self.acp_client.get_account_by_job_id(self.id, self.acp_contract_client)
 
     @property

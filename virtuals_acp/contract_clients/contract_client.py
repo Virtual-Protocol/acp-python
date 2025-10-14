@@ -156,3 +156,6 @@ class ACPContractClient(BaseAcpContractClient):
         expired_at: datetime,
     ) -> Dict[str, Any]:
         raise ACPError("Not Supported")
+
+    def update_account_metadata(self, account_id: int, metadata: str) -> Dict[str, Any]:
+        raise ACPError("Not Supported")

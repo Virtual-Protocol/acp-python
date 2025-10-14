@@ -89,6 +89,14 @@ class BaseAcpContractClient(ABC):
     def _format_amount(self, amount: float) -> int:
         return int(Decimal(str(amount)) * (10**self.config.base_fare.decimals))
 
+    def update_account_metadata(self, account_id: int, metadata: str) -> Dict[str, Any]:
+        data = self._build_user_operation(
+            "updateAccountMetadata",
+            [account_id, metadata],
+            self.config.contract_address,
+        )
+        return self._send_user_operation(data)
+
     def create_job(
         self,
         provider_address: str,
