@@ -217,7 +217,10 @@ class BaseAcpContractClient(ABC):
         )
         # Build a user operation (single call)
         trx_data = self._build_user_operation(
-            method_name="deposit", args=[], contract_address=weth_contract.address
+            method_name="deposit", 
+            args=[], 
+            contract_address=weth_contract.address,
+            abi=WETH_ABI
         )
 
         # Add ETH value to send along with the deposit
