@@ -12,7 +12,7 @@ from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
 from virtuals_acp.models import ACPJobPhase, IDeliverable
-from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG_V2
+from virtuals_acp.configs.configs import BASE_MAINNET_CONFIG_V2
 from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 from virtuals_acp.fare import FareAmount, FareAmountBase, Fare
 
@@ -24,7 +24,7 @@ logging.basicConfig(
 logger = logging.getLogger("FundsSellerAgent")
 
 load_dotenv(override=True)
-config = BASE_SEPOLIA_CONFIG_V2
+config = BASE_MAINNET_CONFIG_V2
 
 
 class JobName(str, Enum):
