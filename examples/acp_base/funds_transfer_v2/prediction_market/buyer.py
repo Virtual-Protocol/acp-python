@@ -1,11 +1,9 @@
-import threading
 import time
 import logging
 from typing import Optional, Dict, Any
 
 from dotenv import load_dotenv
-from virtuals_acp import ACPMemo, MemoType
-from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
+from virtuals_acp.memo import ACPMemo, MemoType
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
@@ -15,7 +13,8 @@ from virtuals_acp.models import (
     ACPGraduationStatus,
     ACPOnlineStatus
 )
-from virtuals_acp.contract_manager import ACPContractManager
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG_V2
+from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 
 logging.basicConfig(
     level=logging.INFO,
@@ -24,7 +23,6 @@ logging.basicConfig(
 logger = logging.getLogger("Prediction_Market_Buyer_Agent")
 
 load_dotenv(override=True)
-config = BASE_SEPOLIA_CONFIG
 
 # Python dict equivalent to SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING
 SERVICE_REQUIREMENTS_JOB_TYPE_MAPPING: Dict[str, Any] = {
@@ -58,7 +56,7 @@ def main():
 
         if memo_to_sign is None:
             logger.info(f"[on_new_task] No memo to sign | job_id={job_id}")
-            if job.phase == ACPJobPhase.REJECTED:
+            if job.phase == ACPJobPhase.REJECTED or job.phase == ACPJobPhase.COMPLETED:
                 current_job_id = None
             return
 
@@ -83,6 +81,10 @@ def main():
                 memo_to_sign.sign(True, "Accepted funds transfer")
                 logger.info(f"[on_new_task] Funds transfer memo signed {job.id}")
 
+        elif job.phase == ACPJobPhase.COMPLETED:
+            logger.info(f"[on_new_task] Job {job_id} completed successfully")
+            current_job_id = None
+
     def on_evaluate(job: ACPJob):
         nonlocal current_job_id
         logger.info(
@@ -93,12 +95,14 @@ def main():
         current_job_id = None
 
     acp_client = VirtualsACP(
-        acp_contract_client=ACPContractManager(
-            wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
-            agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
-            entity_id=env.BUYER_ENTITY_ID,
-            config=config
-        ),
+        acp_contract_clients=[
+            ACPContractClientV2(
+                wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+                agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
+                entity_id=env.BUYER_ENTITY_ID,
+                config=BASE_SEPOLIA_CONFIG_V2
+            )
+        ],
         on_new_task=on_new_task,
         on_evaluate=on_evaluate
     )
