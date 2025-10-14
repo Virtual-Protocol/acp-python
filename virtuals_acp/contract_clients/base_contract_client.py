@@ -80,7 +80,9 @@ class BaseAcpContractClient(ABC):
         pass
 
     @abstractmethod
-    def get_job_id(self, hash: str, client_address: str, provider_address: str) -> int:
+    def get_job_id(
+        self, receipt: Dict[str, Any], client_address: str, provider_address: str
+    ) -> int:
         """Abstract method to retrieve a job ID from a transaction hash and related addresses."""
         pass
 

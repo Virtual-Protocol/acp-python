@@ -31,7 +31,7 @@ from virtuals_acp.models import (
     T,
     ACPMemoStatus,
 )
-from virtuals_acp.job_offering import ACPJobOffering
+from virtuals_acp.job_offering import ACPJobOffering, ACPResourceOffering
 from virtuals_acp.fare import (
     ETH_FARE,
     WETH_FARE,
@@ -81,12 +81,7 @@ class VirtualsACP:
         self.config = self.contract_client.config
         self.acp_api_url = self.config.acp_api_url
 
-        if self.agent_wallet_address:
-            self._agent_wallet_address = Web3.to_checksum_address(
-                self.agent_wallet_address
-            )
-        else:
-            self._agent_wallet_address = self.signer_account.address
+        self._agent_wallet_address = Web3.to_checksum_address(self.agent_wallet_address)
 
         # Socket.IO setup
         self.on_new_task = on_new_task
@@ -124,7 +119,7 @@ class VirtualsACP:
 
         raise ACPError("ACP contract client not found")
 
-    def _default_on_evaluate(self, job: ACPJob) -> Tuple[bool, str]:
+    def _default_on_evaluate(self, job: ACPJob):
         """Default handler for job evaluation events."""
         job.evaluate(True, "Evaluated by default")
 
@@ -189,9 +184,6 @@ class VirtualsACP:
 
         job = ACPJob(
             acp_client=self,
-            contract_client=self.contract_client_by_address(
-                data.get("contractAddress")
-            ),
             id=data["id"],
             provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
@@ -295,10 +287,6 @@ class VirtualsACP:
     def agent_address(self) -> str:
         return self._agent_wallet_address
 
-    @property
-    def signer_address(self) -> str:
-        return self.signer_account.address
-
     def browse_agents(
         self,
         keyword: str,
@@ -361,7 +349,7 @@ class VirtualsACP:
                         provider_address=agent_data["walletAddress"],
                         name=job["name"],
                         price=job["price"],
-                        requirement_schema=job.get("requirement", None),
+                        requirement=job.get("requirement", None),
                     )
                     for job in agent_data.get("jobs", [])
                 ]
@@ -420,10 +408,9 @@ class VirtualsACP:
         use_simple_create = (
             self.contract_client.config.contract_address.lower()
             in base_contract_addresses
-            or not account
         )
 
-        if use_simple_create:
+        if use_simple_create or not account:
             response = self.contract_client.create_job(
                 provider_address,
                 eval_addr or self.wallet_address,
@@ -434,7 +421,7 @@ class VirtualsACP:
             )
         else:
             response = self.contract_client.create_job_with_account(
-                account.account_id,
+                account.id,
                 eval_addr or self.wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
@@ -515,7 +502,7 @@ class VirtualsACP:
 
             return ACPAccount(
                 contract_client=contract_client,
-                account_id=account_data["id"],
+                id=account_data["id"],
                 client_address=account_data["clientAddress"],
                 provider_address=account_data["providerAddress"],
                 metadata=account_data.get("metadata", ""),
@@ -590,147 +577,6 @@ class VirtualsACP:
         except Exception as e:
             logger.warning(f"Error in respond_to_job_memo: {e}")
             raise
-
-    def reject_job(self, job_id: int, reason: Optional[str] = None) -> str:
-        """Reject a job with optional reason."""
-        content = f"Job {job_id} rejected. {reason or ''}"
-        return self.contract_client.create_memo(
-            job_id,
-            content,
-            MemoType.MESSAGE,
-            is_secured=False,
-            next_phase=ACPJobPhase.REJECTED,
-        )
-
-    def pay_job(
-        self,
-        job_id: int,
-        memo_id: int,
-        amount_base_unit: int,
-        reason: Optional[str] = "",
-    ) -> Dict[str, Any]:
-
-        self.contract_client.approve_allowance(amount_base_unit.amount)
-        self.contract_client.sign_memo(memo_id, True, reason or "")
-
-        return self.contract_client.create_memo(
-            job_id,
-            f"{reason if reason else f'Job {job_id} paid.'}",
-            MemoType.MESSAGE,
-            is_secured=False,
-            next_phase=ACPJobPhase.EVALUATION,
-        )
-
-    def request_funds(
-        self,
-        job_id: int,
-        transfer_fare_amount: FareAmountBase,
-        recipient: str,
-        fee_fare_amount: FareAmountBase,
-        fee_type: FeeType,
-        reason: GenericPayload[T],
-        next_phase: ACPJobPhase,
-        expired_at: datetime,
-    ) -> str:
-        recipient = Web3.to_checksum_address(recipient)
-
-        data = self.contract_client.create_payable_memo(
-            job_id,
-            json.dumps(reason.model_dump()),
-            transfer_fare_amount.amount,
-            recipient,
-            fee_fare_amount.amount,
-            fee_type,
-            next_phase,
-            MemoType.PAYABLE_REQUEST,
-            expired_at,
-        )
-
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
-
-    def respond_to_funds_request(
-        self,
-        memo_id: int,
-        accept: bool,
-        amount: float,
-        reason: Optional[str] = "",
-    ) -> str:
-        if not accept:
-            data = self.contract_client.sign_memo(memo_id, False, reason)
-            tx_hash = data.get("receipts", [])[0].get("transactionHash")
-            return tx_hash
-
-        if amount > 0:
-            self.contract_client.approve_allowance(amount)
-
-        data = self.contract_client.sign_memo(memo_id, True, reason)
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
-
-    def transfer_funds(
-        self,
-        job_id: int,
-        transfer_fare_amount: FareAmountBase,
-        recipient: str,
-        fee_fare_amount: FareAmountBase,
-        fee_type: FeeType,
-        reason: GenericPayload[T],
-        next_phase: ACPJobPhase,
-        expired_at: datetime,
-    ) -> str:
-        # Wrap ETH → WETH if transfer token is ETH
-        if transfer_fare_amount.fare.contract_address == ETH_FARE.contract_address:
-            self.contract_client.wrap_eth(transfer_fare_amount.amount)
-            transfer_fare_amount = FareBigInt(transfer_fare_amount.amount, WETH_FARE)
-
-        # Fee token must match base fare
-        if (
-            fee_fare_amount.amount > 0
-            and fee_fare_amount.fare.contract_address
-            != self.contract_client.config.base_fare.contract_address
-        ):
-            raise ACPError("Fee token address is not the same as the base fare")
-
-        # Check if fee token differs from transfer token
-        is_fee_token_different = (
-            fee_fare_amount.fare.contract_address
-            != transfer_fare_amount.fare.contract_address
-        )
-
-        if is_fee_token_different:
-            self.contract_client.approve_allowance(
-                fee_fare_amount.amount,
-                fee_fare_amount.fare.contract_address,
-            )
-
-        # Final amount depends on whether tokens match
-        final_amount = (
-            transfer_fare_amount
-            if is_fee_token_different
-            else transfer_fare_amount.add(fee_fare_amount)
-        )
-
-        # Approve final amount
-        self.contract_client.approve_allowance(
-            final_amount.amount,
-            transfer_fare_amount.fare.contract_address,
-        )
-
-        data = self.contract_client.create_payable_memo(
-            job_id,
-            json.dumps(reason.model_dump()),
-            transfer_fare_amount.amount,
-            recipient,
-            fee_fare_amount.amount,
-            fee_type,
-            next_phase,
-            MemoType.PAYABLE_TRANSFER_ESCROW,
-            expired_at,
-            transfer_fare_amount.fare.contract_address,
-        )
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
 
     def send_message(
         self, job_id: int, message: GenericPayload[T], next_phase: ACPJobPhase
@@ -816,9 +662,7 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        contract_client=self.contract_client_by_address(
-                            data.get("contractAddress")
-                        ),
+                        acp_client=self,
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
@@ -826,6 +670,7 @@ class VirtualsACP:
                         contract_address=job.get("contractAddress"),
                         memos=memos,
                         phase=job.get("phase"),
+                        price_token_address=job.get("priceTokenAddress"),
                         price=job.get("price"),
                         context=context,
                     )
@@ -874,14 +719,13 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        contract_client=self.contract_client_by_address(
-                            data.get("contractAddress")
-                        ),
+                        acp_client=self,
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
                         evaluator_address=job.get("evaluatorAddress"),
                         contract_address=job.get("contractAddress"),
+                        price_token_address=job.get("priceTokenAddress"),
                         memos=memos,
                         phase=job.get("phase"),
                         price=job.get("price"),
@@ -932,9 +776,7 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        contract_client=self.contract_client_by_address(
-                            data.get("contractAddress")
-                        ),
+                        acp_client=self,
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
@@ -942,6 +784,7 @@ class VirtualsACP:
                         contract_address=job.get("contractAddress"),
                         memos=memos,
                         phase=job.get("phase"),
+                        price_token_address=job.get("priceTokenAddress"),
                         price=job.get("price"),
                         context=context,
                     )
@@ -990,9 +833,7 @@ class VirtualsACP:
                     context = None
 
             return ACPJob(
-                contract_client=self.contract_client_by_address(
-                    data.get("contractAddress")
-                ),
+                acp_client=self,
                 id=data.get("data", {}).get("id"),
                 provider_address=data.get("data", {}).get("providerAddress"),
                 client_address=data.get("data", {}).get("clientAddress"),
@@ -1001,6 +842,7 @@ class VirtualsACP:
                 memos=memos,
                 phase=data.get("data", {}).get("phase"),
                 price=data.get("data", {}).get("price"),
+                price_token_address=data.get("data", {}).get("priceTokenAddress"),
                 context=context,
             )
         except Exception as e:
@@ -1055,16 +897,28 @@ class VirtualsACP:
 
             offerings = [
                 ACPJobOffering(
+                    acp_client=self,
                     contract_client=self.contract_client_by_address(
-                        data.get("contractAddress")
+                        offering.get("contractAddress")
                     ),
                     provider_address=agent_data["walletAddress"],
                     name=offering["name"],
                     price=offering["price"],
-                    price_usd=offering["priceUsd"],
-                    requirement_schema=offering.get("requirementSchema", None),
+                    requirement=offering.get("requirementSchema", None),
                 )
                 for offering in agent_data.get("offerings", [])
+            ]
+
+            resources = [
+                ACPResourceOffering(
+                    acp_client=self,
+                    name=resource["name"],
+                    description=resource["description"],
+                    url=resource["url"],
+                    parameters=resource.get("parameters", None),
+                    id=resource["id"],
+                )
+                for resource in agent_data.get("resources", [])
             ]
 
             return IACPAgent(
@@ -1072,7 +926,8 @@ class VirtualsACP:
                 name=agent_data.get("name"),
                 description=agent_data.get("description"),
                 wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
-                offerings=offerings,
+                job_offerings=offerings,
+                resources=resources,
                 twitter_handle=agent_data.get("twitterHandle"),
                 metrics=agent_data.get("metrics"),
                 processing_time=agent_data.get("processingTime", ""),

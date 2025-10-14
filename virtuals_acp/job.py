@@ -137,14 +137,17 @@ class ACPJob(BaseModel):
         )
         return memo.content if memo else None
 
-    def create_requirement_memo(self, content: str) -> ACPMemo:
-        return self.acp_contract_client.create_memo(
+    def create_requirement_memo(self, content: str) -> str:
+        result = self.acp_contract_client.create_memo(
             self.id,
             content,
             MemoType.MESSAGE,
             False,
             ACPJobPhase.TRANSACTION,
         )
+
+        tx_hash = result.get("receipts", [])[0].get("transactionHash")
+        return tx_hash
 
     def create_requirement_payable_memo(
         self,
@@ -153,7 +156,7 @@ class ACPJob(BaseModel):
         amount: FareAmountBase,
         recipient: str,
         expired_at: Optional[datetime] = None,
-    ) -> ACPMemo:
+    ) -> str:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
         if (
@@ -167,7 +170,7 @@ class ACPJob(BaseModel):
 
         fee_amount = FareAmount(0, self.base_fare)
 
-        return self.acp_contract_client.create_payable_memo(
+        result = self.acp_contract_client.create_payable_memo(
             self.id,
             content,
             amount.amount,
@@ -180,7 +183,10 @@ class ACPJob(BaseModel):
             amount.fare.contract_address,
         )
 
-    def pay_and_accept_requirement(self, reason: Optional[str] = "") -> ACPMemo:
+        tx_hash = result.get("receipts", [])[0].get("transactionHash")
+        return tx_hash
+
+    def pay_and_accept_requirement(self, reason: Optional[str] = "") -> str:
         memo = next(
             (m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None
         )
@@ -227,7 +233,7 @@ class ACPJob(BaseModel):
         # sign memo
         memo.sign(True, reason)
 
-        return self.acp_contract_client.create_memo(
+        result = self.acp_contract_client.create_memo(
             self.id,
             f"Payment made. {reason or ''}".strip(),
             MemoType.MESSAGE,
@@ -235,21 +241,28 @@ class ACPJob(BaseModel):
             ACPJobPhase.EVALUATION,
         )
 
-    def accept(self, reason: Optional[str] = ""):
+        tx_hash = result.get("receipts", [])[0].get("transactionHash")
+        return tx_hash
+
+    def accept(self, reason: Optional[str] = "") -> str:
         if (
             self.latest_memo is None
             or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
         ):
             raise ValueError("No negotiation memo found")
         memo = self.latest_memo
+
         memo.sign(True, reason)
-        return self.acp_contract_client.create_memo(
+
+        result = self.acp_contract_client.create_memo(
             self.id,
             f"Job {self.id} accepted. {reason or ''}",
             MemoType.MESSAGE,
             True,
             ACPJobPhase.TRANSACTION,
         )
+        tx_hash = result.get("receipts", [])[0].get("transactionHash")
+        return tx_hash
 
     def reject(self, reason: Optional[str] = ""):
         if (
@@ -258,11 +271,14 @@ class ACPJob(BaseModel):
         ):
             raise ValueError("No negotiation memo found")
         memo = self.latest_memo
-        return self.acp_contract_client.sign_memo(
+        result = self.acp_contract_client.sign_memo(
             memo.id,
             False,
             f"Job {self.id} rejected. {reason or ''}",
         )
+
+        tx_hash = result.get("receipts", [])[0].get("transactionHash")
+        return tx_hash
 
     @property
     def provider_agent(self) -> Optional["IACPAgent"]:
@@ -286,24 +302,6 @@ class ACPJob(BaseModel):
 
     def _get_memo_by_id(self, memo_id):
         return next((m for m in self.memos if m.id == memo_id), None)
-
-    def pay(self, amount: float, reason: Optional[str] = None) -> dict[str, Any]:
-        memo = next(
-            (
-                m
-                for m in self.memos
-                if ACPJobPhase(m.next_phase) == ACPJobPhase.TRANSACTION
-            ),
-            None,
-        )
-
-        if not memo:
-            raise ValueError("No transaction memo found")
-
-        if not reason:
-            reason = f"Job {self.id} paid"
-
-        return self.acp_client.pay_job(self.id, memo.id, amount, reason)
 
     def respond(
         self,
@@ -357,377 +355,3 @@ class ACPJob(BaseModel):
             is_secured=True,
             next_phase=ACPJobPhase.COMPLETED,
         )
-
-    @deprecated("The method should not be used")
-    def open_position(
-        self,
-        payload: List[OpenPositionPayload],
-        fee_amount: float,
-        expired_at: Optional[datetime] = None,
-        wallet_address: Optional[str] = None,
-    ) -> str:
-        if not payload:
-            raise ValueError("No positions to open")
-
-        if expired_at is None:
-            expired_at = datetime.now(timezone.utc) + timedelta(minutes=3)
-
-        total_amount = sum(p.amount for p in payload)
-
-        open_position_payload = GenericPayload(
-            type=PayloadType.OPEN_POSITION, data=payload
-        )
-
-        return self.acp_client.transfer_funds(
-            self.id,
-            total_amount,
-            wallet_address or self.provider_address,
-            fee_amount,
-            FeeType.IMMEDIATE_FEE,
-            open_position_payload,
-            ACPJobPhase.TRANSACTION,
-            expired_at,
-        )
-
-    @deprecated("The method should not be used")
-    def respond_open_position(
-        self,
-        memo_id: int,
-        accept: bool,
-        reason: Optional[str] = None,
-    ):
-        memo = self._get_memo_by_id(memo_id)
-        if (
-            memo is None
-            or memo.next_phase != ACPJobPhase.TRANSACTION
-            or memo.type != MemoType.PAYABLE_TRANSFER_ESCROW
-        ):
-            raise ValueError("No open position memo found")
-
-        open_position_payload = try_parse_json_model(
-            memo.content, GenericPayload[OpenPositionPayload]
-        )
-        if (
-            open_position_payload is None
-            or open_position_payload.type != PayloadType.OPEN_POSITION
-        ):
-            raise ValueError("Invalid open position memo")
-
-        if not reason:
-            reason = (
-                f"Job {self.id} position opening {'accepted' if accept else 'rejected'}"
-            )
-
-        return self.acp_client.respond_to_funds_transfer(memo.id, accept, reason)
-
-    @deprecated("The method should not be used")
-    def close_partial_position(
-        self, payload: ClosePositionPayload, expired_at: Optional[datetime] = None
-    ):
-        if expired_at is None:
-            expired_at = datetime.now(timezone.utc) + timedelta(days=1)
-
-        close_position_payload = GenericPayload(
-            type=PayloadType.CLOSE_PARTIAL_POSITION, data=payload
-        )
-
-        return self.acp_client.request_funds(
-            self.id,
-            payload.amount,
-            self.client_address,
-            0,
-            FeeType.NO_FEE,
-            close_position_payload,
-            ACPJobPhase.TRANSACTION,
-            expired_at,
-        )
-
-    @deprecated("The method should not be used")
-    def respond_close_partial_position(
-        self, memo_id: int, accept: bool, reason: Optional[str] = None
-    ):
-        memo = self._get_memo_by_id(memo_id)
-
-        if (
-            memo is None
-            or memo.next_phase != ACPJobPhase.TRANSACTION
-            or memo.type != MemoType.PAYABLE_REQUEST
-        ):
-            raise ValueError("No close position memo found")
-
-        close_position_payload = try_parse_json_model(
-            memo.content, GenericPayload[ClosePositionPayload]
-        )
-        if (
-            close_position_payload is None
-            or close_position_payload.type != PayloadType.CLOSE_PARTIAL_POSITION
-        ):
-            raise ValueError("Invalid close position memo")
-
-        if not reason:
-            reason = (
-                f"Job {self.id} position closing {'accepted' if accept else 'rejected'}"
-            )
-
-        return self.acp_client.respond_to_funds_request(
-            memo.id, accept, close_position_payload.data.amount, reason
-        )
-
-    @deprecated("The method should not be used")
-    def request_close_position(self, payload: RequestClosePositionPayload):
-        return self.acp_client.send_message(
-            self.id,
-            GenericPayload(type=PayloadType.CLOSE_POSITION, data=payload),
-            ACPJobPhase.TRANSACTION,
-        )
-
-    @deprecated("The method should not be used")
-    def response_request_close_position(
-        self,
-        memo_id: int,
-        accept: bool,
-        payload: ClosePositionPayload,
-        reason: Optional[str] = None,
-        expired_at: Optional[datetime] = None,
-    ):
-        memo = self._get_memo_by_id(memo_id)
-        if (
-            memo is None
-            or memo.next_phase != ACPJobPhase.TRANSACTION
-            or memo.type != MemoType.MESSAGE
-        ):
-            raise ValueError("No message memo found")
-
-        message_payload = try_parse_json_model(
-            memo.content, GenericPayload[RequestClosePositionPayload]
-        )
-        if (
-            message_payload is None
-            or message_payload.type != PayloadType.CLOSE_POSITION
-        ):
-            raise ValueError("Invalid close position memo")
-
-        if not reason:
-            reason = f"Job {self.id} close position request {'accepted' if accept else 'rejected'}"
-
-        # Sign the memo
-        self.acp_client.contract_manager.sign_memo(memo_id, accept, reason)
-
-        if accept:
-            if expired_at is None:
-                expired_at = datetime.now(timezone.utc) + timedelta(days=1)
-
-            return self.acp_client.transfer_funds(
-                self.id,
-                payload.amount,
-                self.client_address,
-                0,
-                FeeType.NO_FEE,
-                GenericPayload(type=PayloadType.CLOSE_POSITION, data=payload),
-                ACPJobPhase.TRANSACTION,
-                expired_at,
-            )
-
-    @deprecated("The method should not be used")
-    def confirm_close_position(
-        self, memo_id: int, accept: bool, reason: Optional[str] = None
-    ):
-        memo = self._get_memo_by_id(memo_id)
-        if (
-            memo is None
-            or memo.next_phase != ACPJobPhase.TRANSACTION
-            or memo.type != MemoType.PAYABLE_TRANSFER_ESCROW
-        ):
-            raise ValueError("No payable transfer memo found")
-
-        payload = try_parse_json_model(
-            memo.content, GenericPayload[ClosePositionPayload]
-        )
-        if payload is None or payload.type != PayloadType.CLOSE_POSITION:
-            raise ValueError("Invalid close position memo")
-
-        if not reason:
-            reason = f"Job {self.id} close position confirmation {'accepted' if accept else 'rejected'}"
-
-        # Sign the memo
-        self.acp_client.contract_manager.sign_memo(memo_id, accept, reason)
-
-    def position_fulfilled(
-        self, payload: PositionFulfilledPayload, expired_at: Optional[datetime] = None
-    ):
-        if expired_at is None:
-            expired_at = datetime.now(timezone.utc) + timedelta(days=1)
-
-        position_fulfilled_payload = GenericPayload(
-            type=PayloadType.POSITION_FULFILLED, data=payload
-        )
-
-        return self.acp_client.transfer_funds(
-            self.id,
-            payload.amount,
-            self.client_address,
-            0,
-            FeeType.NO_FEE,
-            position_fulfilled_payload,
-            ACPJobPhase.TRANSACTION,
-            expired_at,
-        )
-
-    @deprecated("The method should not be used")
-    def respond_position_fulfilled(
-        self, memo_id: int, accept: bool, reason: Optional[str] = None
-    ):
-        memo = self._get_memo_by_id(memo_id)
-        if (
-            memo is None
-            or memo.next_phase != ACPJobPhase.TRANSACTION
-            or memo.type != MemoType.PAYABLE_TRANSFER_ESCROW
-        ):
-            raise ValueError("No position fulfilled memo found")
-
-        position_fulfilled_payload = try_parse_json_model(
-            memo.content, GenericPayload[PositionFulfilledPayload]
-        )
-        if (
-            position_fulfilled_payload is None
-            or position_fulfilled_payload.type != PayloadType.POSITION_FULFILLED
-        ):
-            raise ValueError("Invalid position fulfilled memo")
-
-        if not reason:
-            reason = f"Job {self.id} position fulfilled {'accepted' if accept else 'rejected'}"
-
-        return self.acp_client.respond_to_funds_transfer(memo.id, accept, reason)
-
-    @deprecated("The method should not be used")
-    def unfulfilled_position(
-        self, payload: UnfulfilledPositionPayload, expired_at: Optional[datetime] = None
-    ):
-        if expired_at is None:
-            expired_at = datetime.now(timezone.utc) + timedelta(days=1)
-
-        unfulfilled_position_payload = GenericPayload(
-            type=PayloadType.UNFULFILLED_POSITION, data=payload
-        )
-
-        return self.acp_client.transfer_funds(
-            self.id,
-            payload.amount,
-            self.client_address,
-            0,
-            FeeType.NO_FEE,
-            unfulfilled_position_payload,
-            ACPJobPhase.TRANSACTION,
-            expired_at,
-        )
-
-    @deprecated("The method should not be used")
-    def respond_unfulfilled_position(
-        self, memo_id: int, accept: bool, reason: Optional[str] = None
-    ):
-        memo = self._get_memo_by_id(memo_id)
-        if (
-            memo is None
-            or memo.next_phase != ACPJobPhase.TRANSACTION
-            or memo.type != MemoType.PAYABLE_TRANSFER_ESCROW
-        ):
-            raise ValueError("No unfulfilled position memo found")
-
-        unfulfilled_position_payload = try_parse_json_model(
-            memo.content, GenericPayload[UnfulfilledPositionPayload]
-        )
-        if (
-            unfulfilled_position_payload is None
-            or unfulfilled_position_payload.type != PayloadType.UNFULFILLED_POSITION
-        ):
-            raise ValueError("Invalid unfulfilled position memo")
-
-        if not reason:
-            reason = f"Job {self.id} unfulfilled position {'accepted' if accept else 'rejected'}"
-
-        return self.acp_client.respond_to_funds_transfer(memo.id, accept, reason)
-
-    @deprecated("The method should not be used")
-    def close_job(self, message: str = "Close job and withdraw all"):
-        close_job_payload = GenericPayload(
-            type=PayloadType.CLOSE_JOB_AND_WITHDRAW,
-            data=CloseJobAndWithdrawPayload(message=message),
-        )
-
-        return self.acp_client.send_message(
-            self.id, close_job_payload, ACPJobPhase.TRANSACTION
-        )
-
-    @deprecated("The method should not be used")
-    def respond_close_job(
-        self,
-        memo_id: int,
-        accept: bool,
-        fulfilled_positions: List[PositionFulfilledPayload],
-        reason: Optional[str] = None,
-        expired_at: Optional[datetime] = None,
-    ):
-        memo = self._get_memo_by_id(memo_id)
-        if (
-            memo is None
-            or memo.next_phase != ACPJobPhase.TRANSACTION
-            or memo.type != MemoType.MESSAGE
-        ):
-            raise ValueError("No close job memo found")
-
-        close_job_payload = try_parse_json_model(
-            memo.content, GenericPayload[CloseJobAndWithdrawPayload]
-        )
-        if (
-            close_job_payload is None
-            or close_job_payload.type != PayloadType.CLOSE_JOB_AND_WITHDRAW
-        ):
-            raise ValueError("Invalid close job memo")
-
-        if not reason:
-            reason = f"Job {self.id} job closing {'accepted' if accept else 'rejected'}"
-
-        self.acp_client.sign_memo(memo.id, accept, reason)
-
-        if accept:
-            if expired_at is None:
-                expired_at = datetime.now(timezone.utc) + timedelta(days=1)
-
-            total_amount = sum(p.amount for p in fulfilled_positions)
-            close_job_response_payload = GenericPayload(
-                type=PayloadType.POSITION_FULFILLED,
-                data=fulfilled_positions,
-            )
-
-            return self.acp_client.transfer_funds(
-                self.id,
-                total_amount,
-                self.provider_address,
-                0,
-                FeeType.NO_FEE,
-                close_job_response_payload,
-                ACPJobPhase.COMPLETED,
-                expired_at,
-            )
-
-    @deprecated("The method should not be used")
-    def confirm_job_closure(
-        self, memo_id: int, accept: bool, reason: Optional[str] = None
-    ):
-        memo = self._get_memo_by_id(memo_id)
-        if memo is None:
-            raise ValueError("Memo not found")
-
-        job_closure_payload = try_parse_json_model(
-            memo.content, GenericPayload[CloseJobAndWithdrawPayload]
-        )
-        if (
-            job_closure_payload is None
-            or job_closure_payload.type != PayloadType.CLOSE_JOB_AND_WITHDRAW
-        ):
-            raise ValueError("Invalid close job and withdraw memo")
-
-        if not reason:
-            reason = f"Job {self.id} closing confirmation {'accepted' if accept else 'rejected'}"
-
-        return self.acp_client.sign_memo(memo.id, accept, reason)

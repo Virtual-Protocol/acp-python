@@ -22,7 +22,7 @@ class ACPMemo(BaseModel):
     id: int
     type: MemoType
     content: str
-    next_phase: Optional[ACPJobPhase] = None
+    next_phase: ACPJobPhase
     status: ACPMemoStatus
     signed_reason: Optional[str] = None
     expiry: Optional[datetime] = None
@@ -46,17 +46,6 @@ class ACPMemo(BaseModel):
     def payload_type(self) -> Optional[PayloadType]:
         if self.structured_content is not None:
             return self.structured_content.type
-
-    def get_data_as(self, model: Type[T]) -> Optional[T | List[T]]:
-        if self.structured_content is None:
-            return None
-
-        data = self.structured_content.data
-        if isinstance(data, list):
-            validated = [try_validate_model(i, model) for i in data]
-            return validated[0] if len(validated) == 1 else validated
-        else:
-            return try_validate_model(data, model)
 
     def create(self, job_id: int, is_secured: bool = True):
         return self.contract_client.create_memo(

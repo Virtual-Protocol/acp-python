@@ -50,15 +50,14 @@ class ACPJobPhase(int, Enum):
     COMPLETED = 4
     REJECTED = 5
     EXPIRED = 6
+    UNDEFINED = 999
 
     @classmethod
-    def from_value(cls, value: str | None):
-        if value is None:
-            return None
+    def from_value(cls, value: str):
         try:
             return cls(value)
         except ValueError:
-            return None
+            return cls.UNDEFINED
 
 
 class FeeType(int, Enum):

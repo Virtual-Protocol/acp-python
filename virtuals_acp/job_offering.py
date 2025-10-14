@@ -22,8 +22,8 @@ class ACPJobOffering(BaseModel):
     provider_address: str
     name: str
     price: float
-    requirement: Optional[Union[Dict[str, Any], str]] = None
-    deliverable: Optional[Union[Dict[str, Any], str]] = None
+    requirement: Optional[Dict[str, Any]] = None
+    deliverable: Optional[Dict[str, Any]] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -65,7 +65,7 @@ class ACPJobOffering(BaseModel):
             except ValidationError as e:
                 raise ValueError(f"Invalid service requirement: {str(e)}")
 
-        final_service_requirement = {"name": self.name}
+        final_service_requirement: Dict[str, Any] = {"name": self.name}
 
         if isinstance(service_requirement, str):
             final_service_requirement["requirement"] = service_requirement
@@ -90,12 +90,9 @@ class ACPJobOffering(BaseModel):
         use_simple_create = (
             self.contract_client.config.contract_address.lower()
             in base_contract_addresses
-            or not account
         )
 
-        if use_simple_create:
-            print("contract_address", self.contract_client.config.contract_address)
-            print("Using simple create job flow")
+        if use_simple_create or not account:
             response = self.contract_client.create_job(
                 self.provider_address,
                 evaluator_address or self.contract_client.agent_wallet_address,
