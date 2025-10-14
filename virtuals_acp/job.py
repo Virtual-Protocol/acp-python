@@ -180,7 +180,7 @@ class ACPJob(BaseModel):
             amount.fare.contract_address,
         )
 
-    def pay_and_accept_requirement(self, reason: Optional[str] = None) -> ACPMemo:
+    def pay_and_accept_requirement(self, reason: Optional[str] = "") -> ACPMemo:
         memo = next(
             (m for m in self.memos if m.next_phase == ACPJobPhase.TRANSACTION), None
         )
@@ -235,7 +235,7 @@ class ACPJob(BaseModel):
             ACPJobPhase.EVALUATION,
         )
 
-    def accept(self, reason: Optional[str] = None):
+    def accept(self, reason: Optional[str] = ""):
         if (
             self.latest_memo is None
             or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
@@ -251,7 +251,7 @@ class ACPJob(BaseModel):
             ACPJobPhase.TRANSACTION,
         )
 
-    def reject(self, reason: Optional[str] = None):
+    def reject(self, reason: Optional[str] = ""):
         if (
             self.latest_memo is None
             or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
