@@ -24,8 +24,13 @@ class ACPContractClientV2(BaseAcpContractClient):
         self.account = Account.from_key(wallet_private_key)
         self.entity_id = entity_id
         self.alchemy_kit = AlchemyAccountKit(
-            config, agent_wallet_address, entity_id, self.account, config.chain_id
+            config=config, 
+            agent_wallet_address=agent_wallet_address, 
+            entity_id=entity_id, 
+            owner_account=self.account, 
+            chain_id=config.chain_id
         )
+        self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
 
         def multicall_read(w3: Web3, contract_address: str, abi: list[str], calls: list[str]):
             contract = w3.eth.contract(address=contract_address, abi=abi)
@@ -43,7 +48,7 @@ class ACPContractClientV2(BaseAcpContractClient):
         if not all([job_manager, memo_manager, account_manager]):
             raise ACPError("Failed to fetch sub-manager contract addresses")
         
-        self.job_manager_address = job_manager
+        self.job_manager_address = Web3.to_checksum_address(job_manager)
 
         self.job_manager_contract = self.w3.eth.contract(
             address=self.job_manager_address, abi=JOB_MANAGER_ABI
@@ -56,64 +61,45 @@ class ACPContractClientV2(BaseAcpContractClient):
         return int.from_bytes(random_bytes, byteorder="big")
     
     def _send_user_operation(
-        self, method_name: str, args: list, contract_address: Optional[str] = None
+        self, trx_data: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        if contract_address:
-            encoded_data = self.token_contract.encode_abi(method_name, args=args)
-        else:
-            encoded_data = self.contract.encode_abi(method_name, args=args)
-
-        trx_data = [
-            {
-                "to": (
-                    contract_address
-                    if contract_address
-                    else self.config.contract_address
-                ),
-                "data": encoded_data,
-            }
-        ]
-
         return self.alchemy_kit.handle_user_operation(trx_data)
-
+    
     def get_job_id(
         self, response: Dict[str, Any], client_address: str, provider_address: str
     ) -> int:
         logs: List[Dict[str, Any]] = response.get("receipts", [])[0].get("logs", [])
 
-        decoded_create_job_logs = [
-            self.contract.events.JobCreated().process_log(
-                {
+        job_manager_logs = [
+            log for log in logs
+            if log["address"].lower() == self.job_manager_address.lower()
+        ]
+
+        decoded_logs = []
+        for log in job_manager_logs:
+            try:
+                event = self.job_manager_contract.events.JobCreated().process_log({
                     "topics": log["topics"],
                     "data": log["data"],
                     "address": log["address"],
                     "logIndex": 0,
                     "transactionIndex": 0,
-                    "transactionHash": "0x0000",
-                    "blockHash": "0x0000",
+                    "transactionHash": "0x0",
+                    "blockHash": "0x0",
                     "blockNumber": 0,
-                }
-            )
-            for log in logs
-            if log["topics"][0] == self.job_created_event_signature_hex
-        ]
+                })
+                decoded_logs.append(event)
+            except Exception:
+                continue
 
-        if len(decoded_create_job_logs) == 0:
-            raise ACPError("No logs found for JobCreated event")
+        if not decoded_logs:
+            raise ACPError("No JobCreated events decoded from JobManager logs")
 
-        created_job_log = next(
-            (
-                log
-                for log in decoded_create_job_logs
-                if log["args"]["provider"] == provider_address
-                and log["args"]["client"] == client_address
-            ),
-            None,
-        )
+        for event in decoded_logs:
+            if (
+                event["args"]["provider"].lower() == provider_address.lower()
+                and event["args"]["client"].lower() == client_address.lower()
+            ):
+                return int(event["args"]["jobId"])
 
-        if not created_job_log:
-            raise ACPError(
-                "No logs found for JobCreated event with provider and client addresses"
-            )
-
-        return int(created_job_log["args"]["jobId"])
+        raise ACPError("No JobCreated event matched given client/provider addresses")

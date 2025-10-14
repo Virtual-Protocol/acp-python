@@ -178,6 +178,7 @@ class VirtualsACP:
                 context = None
 
         job = ACPJob(
+            acp_client=self,
             contract_client=self.contract_client_by_address(data.get("contractAddress")),
             id=data["id"],
             provider_address=data["providerAddress"],
@@ -401,7 +402,7 @@ class VirtualsACP:
         )
 
         if use_simple_create:
-            response = self.contract_manager.create_job(
+            response = self.contract_client.create_job(
                 provider_address, 
                 eval_addr or self.wallet_address, 
                 expired_at,
@@ -412,7 +413,6 @@ class VirtualsACP:
         else:
             response = self.contract_client.create_job_with_account(
                 account.account_id,
-                provider_address,
                 eval_addr or self.wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
@@ -421,11 +421,6 @@ class VirtualsACP:
 
         job_id = self.contract_client.get_job_id(
             response, self.agent_address, provider_address
-        )
-
-        # Budget and first memo
-        self.contract_client.set_budget_with_payment_token(
-            job_id, fare_amount
         )
 
         self.contract_client.create_memo(
@@ -450,7 +445,7 @@ class VirtualsACP:
     ) -> Optional[ACPAccount]:
         """Get account by client and provider addresses."""
         try:
-            url = f"{self.acp_url}/api/accounts/client/{client_address}/provider/{provider_address}"
+            url = f"{self.acp_url}/accounts/client/{client_address}/provider/{provider_address}"
             
             response = requests.get(url)
             if response.status_code == 404:
@@ -467,7 +462,7 @@ class VirtualsACP:
             
             return ACPAccount(
                 contract_client=contract_client,
-                account_id=account_data["id"],
+                id=account_data["id"],
                 client_address=account_data["clientAddress"],
                 provider_address=account_data["providerAddress"],
                 metadata=account_data.get("metadata", ""),
@@ -746,7 +741,7 @@ class VirtualsACP:
         return tx_hash
 
     def deliver_job(self, job_id: int, deliverable: IDeliverable) -> str:
-        data = self.contract_manager.create_memo(
+        data = self.contract_client.create_memo(
             job_id,
             deliverable.model_dump_json(),
             MemoType.OBJECT_URL,

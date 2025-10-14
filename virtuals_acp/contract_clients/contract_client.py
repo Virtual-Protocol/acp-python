@@ -9,9 +9,9 @@ from web3 import Web3
 
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig
+from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
-from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 
 
 class ACPContractClient(BaseAcpContractClient):
@@ -36,24 +36,8 @@ class ACPContractClient(BaseAcpContractClient):
         return int.from_bytes(random_bytes, byteorder="big")
     
     def _send_user_operation(
-        self, method_name: str, args: list, contract_address: Optional[str] = None
+        self, trx_data: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        if contract_address:
-            encoded_data = self.token_contract.encode_abi(method_name, args=args)
-        else:
-            encoded_data = self.contract.encode_abi(method_name, args=args)
-
-        trx_data = [
-            {
-                "to": (
-                    contract_address
-                    if contract_address
-                    else self.config.contract_address
-                ),
-                "data": encoded_data,
-            }
-        ]
-
         return self.alchemy_kit.handle_user_operation(trx_data)
 
     def get_job_id(
@@ -107,17 +91,15 @@ class ACPContractClient(BaseAcpContractClient):
         budget_base_unit: int,
         metadata: str = "",
     ) -> Dict[str, Any]:
-        """
-        Equivalent to TypeScript createJob + setBudgetWithPaymentToken
-        """
         try:
             provider_address = Web3.to_checksum_address(provider_address)
             evaluator_address = Web3.to_checksum_address(evaluator_address)
             expire_timestamp = math.floor(expire_at.timestamp())
 
-            tx_response = self._send_user_operation(
+            data = self._build_user_operation(
                 "createJob", [provider_address, evaluator_address, expire_timestamp]
             )
+            tx_response = self._send_user_operation(data)
             job_id = self.get_job_id(
                 tx_response, self.agent_wallet_address, provider_address
             )

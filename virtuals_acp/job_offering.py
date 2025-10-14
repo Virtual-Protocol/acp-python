@@ -1,11 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import json
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING
 from pydantic import BaseModel, field_validator, ConfigDict
 from jsonschema import ValidationError, validate
 from virtuals_acp.fare import FareAmount
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
-from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.models import ACPJobPhase, MemoType
 from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG
 from web3 import Web3
@@ -49,6 +48,9 @@ class ACPJobOffering(BaseModel):
         evaluator_address: Optional[str] = None,
         expired_at: Optional[datetime] = None,
     ) -> int:
+        if expired_at is None:
+            expired_at = datetime.now(timezone.utc) + timedelta(days=1)
+
         # Validate against requirement schema if present
         if self.requirement:
             try:
@@ -91,6 +93,8 @@ class ACPJobOffering(BaseModel):
         )
 
         if use_simple_create:
+            print("contract_address", self.contract_client.config.contract_address)
+            print("Using simple create job flow")
             response = self.contract_client.create_job(
                 self.provider_address,
                 evaluator_address or self.contract_client.agent_wallet_address,
@@ -103,7 +107,6 @@ class ACPJobOffering(BaseModel):
             evaluator_address = Web3.to_checksum_address(evaluator_address) if evaluator_address else ZERO_ADDRESS
             response = self.contract_client.create_job_with_account(
                 account.id,
-                self.provider_address,
                 evaluator_address or self.contract_client.agent_wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
@@ -114,12 +117,6 @@ class ACPJobOffering(BaseModel):
             response,
             self.contract_client.agent_wallet_address,
             self.provider_address,
-        )
-
-        # Budget and initial memo
-        self.contract_client.set_budget_with_payment_token(
-            job_id,
-            fare_amount,
         )
 
         self.contract_client.create_memo(
