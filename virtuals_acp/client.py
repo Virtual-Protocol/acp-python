@@ -133,11 +133,7 @@ class VirtualsACP:
         return True
 
     def _on_evaluate(self, data):
-        logger.info("--------------------------------")
-        logger.info(f"Evaluating job {data}")
-        logger.info("--------------------------------")
         if self.on_evaluate:
-            logger.info(f"Evaluating job {data}")
             try:
                 threading.Thread(target=self.handle_evaluate, args=(data,)).start()
                 return True
@@ -207,7 +203,6 @@ class VirtualsACP:
             price_token_address=data["priceTokenAddress"],
             context=context,
         )
-        logger.info(f"Received new task: {job}")
         if self.on_new_task:
             self.on_new_task(job, memo_to_sign)
 
@@ -253,7 +248,6 @@ class VirtualsACP:
             price_token_address=data["priceTokenAddress"],
             context=context,
         )
-        logger.info(f"Received evaluate: {job}")
         self.on_evaluate(job)
 
     def _setup_socket_handlers(self) -> None:

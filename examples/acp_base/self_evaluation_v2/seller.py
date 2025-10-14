@@ -9,7 +9,6 @@ from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
 from virtuals_acp.models import ACPJobPhase, IDeliverable
-from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG_V2
 from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 
 # Configure logging
@@ -21,6 +20,7 @@ logger = logging.getLogger("SellerAgent")
 
 load_dotenv(override=True)
 
+REJECT_JOB = False
 
 def seller():
     env = EnvSettings()
@@ -29,31 +29,36 @@ def seller():
         logger.info(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
 
         if (
-                job.phase == ACPJobPhase.REQUEST
-                and memo_to_sign is not None
-                and memo_to_sign.next_phase == ACPJobPhase.NEGOTIATION
+            job.phase == ACPJobPhase.REQUEST
+            and memo_to_sign is not None
+            and memo_to_sign.next_phase == ACPJobPhase.NEGOTIATION
         ):
-            logger.info(f"Responding to job {job.id}")
-            job.respond(True)
-            logger.info(f"Job {job.id} responded")
+            response = True
+            logger.info(f"Responding to job {job.id} with requirement {job.requirement}")
+            job.respond(response)
+            logger.info(f"Job {job.id} responded with {response}")
 
         elif (
-                job.phase == ACPJobPhase.TRANSACTION
-                and memo_to_sign is not None
-                and memo_to_sign.next_phase == ACPJobPhase.EVALUATION
+            job.phase == ACPJobPhase.TRANSACTION
+            and memo_to_sign is not None
+            and memo_to_sign.next_phase == ACPJobPhase.EVALUATION
         ):
-            # # to cater cases where agent decide to reject job after payment has been made
-            # logger.info(f"Rejecting job {job}")
-            # job.reject("Job requirement does not meet agent capability")
-            # logger.info(f"Job {job.id} rejected")
+            # to cater cases where agent decide to reject job after payment has been made
+            if REJECT_JOB: # conditional check for job rejection logic
+                reason = "Job requirement does not meet agent capability"
+                logger.info(f"Rejecting job {job.id} with reason: {reason}")
+                job.respond(False, reason=reason)
+                logger.info(f"Job {job.id} rejected")
+                return
 
-            logger.info(f"Delivering job {job.id}")
             deliverable = IDeliverable(
                 type="url",
                 value="https://example.com",
             )
+            logger.info(f"Delivering job {job.id} with deliverable {deliverable}")
             job.deliver(deliverable)
             logger.info(f"Job {job.id} delivered")
+            return
 
         elif job.phase == ACPJobPhase.COMPLETED:
             logger.info(f"Job {job.id} completed")
@@ -61,7 +66,7 @@ def seller():
         elif job.phase == ACPJobPhase.REJECTED:
             logger.info(f"Job {job.id} rejected")
 
-    acp_client = VirtualsACP(
+    VirtualsACP(
         acp_contract_clients=ACPContractClientV2(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
