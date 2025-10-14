@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from dotenv import load_dotenv
-from virtuals_acp import ACPMemo
+from virtuals_acp.memo import ACPMemo
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
@@ -14,8 +14,8 @@ from virtuals_acp.models import (
     ACPGraduationStatus,
     ACPOnlineStatus,
 )
-from virtuals_acp.contract_manager import ACPContractManager
-from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG_V2
+from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 
 # Configure logging
 logging.basicConfig(
@@ -52,19 +52,14 @@ def buyer():
         elif job.phase == ACPJobPhase.REJECTED:
             logger.info(f"Job {job.id} rejected")
 
-    def on_evaluate(job: ACPJob):
-        logger.info(f"Evaluation function called for job {job.id}")
-        job.evaluate(True)
-
     acp_client = VirtualsACP(
-        acp_contract_client=ACPContractManager(
+        acp_contract_clients=ACPContractClientV2(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
             entity_id=env.BUYER_ENTITY_ID,
-            config=BASE_SEPOLIA_CONFIG,
+            config=BASE_SEPOLIA_CONFIG_V2
         ),
-        on_new_task=on_new_task,
-        on_evaluate=on_evaluate
+        on_new_task=on_new_task
     )
 
     # Browse available agents

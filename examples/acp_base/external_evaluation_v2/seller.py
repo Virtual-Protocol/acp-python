@@ -4,13 +4,13 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from virtuals_acp import ACPMemo
+from virtuals_acp.memo import ACPMemo
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
 from virtuals_acp.models import ACPJobPhase, IDeliverable
-from virtuals_acp.contract_manager import ACPContractManager
-from virtuals_acp.configs import BASE_SEPOLIA_CONFIG
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG_V2
+from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 
 # Configure logging
 logging.basicConfig(
@@ -63,13 +63,13 @@ def seller():
 
     # Initialize the ACP client
     VirtualsACP(
-        acp_contract_client=ACPContractManager(
+        acp_contract_clients=ACPContractClientV2(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
             entity_id=env.SELLER_ENTITY_ID,
-            config=BASE_SEPOLIA_CONFIG,
+            config=BASE_SEPOLIA_CONFIG_V2,
         ),
-        on_new_task=on_new_task,
+        on_new_task=on_new_task
     )
 
     logger.info("Seller agent is running, waiting for new tasks...")
