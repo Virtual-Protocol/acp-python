@@ -38,11 +38,8 @@ class MemoType(int, Enum):
     PAYABLE_REQUEST = 6            # Payment request
     PAYABLE_TRANSFER = 7           # Direct payment transfer
     PAYABLE_TRANSFER_ESCROW = 8    # Escrowed payment transfer
-    MILESTONE_PROPOSAL = 9         # Milestone proposal
-    MILESTONE_COMPLETION = 10      # Milestone completion claim
-    DELIVERABLE_SUBMISSION = 11    # Deliverable submission
-    FEEDBACK = 12                  # Temp for notification
-    REVISION_REQUEST = 13          # Request for revisions
+    NOTIFICATION = 9               # Notification
+    PAYABLE_NOTIFICATION =  10     # Payable notification
 
 
 class ACPJobPhase(int, Enum):

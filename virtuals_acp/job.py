@@ -344,7 +344,7 @@ class ACPJob(BaseModel):
         return self.acp_contract_client.create_memo(
             job_id=self.id,
             content=content,
-            memo_type=MemoType.FEEDBACK,
+            memo_type=MemoType.NOTIFICATION,
             is_secured=True,
             next_phase=ACPJobPhase.COMPLETED,
         )
