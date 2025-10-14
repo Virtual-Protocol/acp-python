@@ -2,8 +2,9 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
 import math
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, cast
 
+from eth_typing import ABIEvent
 from web3 import Web3
 from web3.contract import Contract
 from eth_utils.abi import event_abi_to_log_topic
@@ -41,7 +42,7 @@ class BaseAcpContractClient(ABC):
         job_created_event_abi = next(
             (
                 item
-                for item in ACP_ABI
+                for item in config.abi
                 if item.get("type") == "event" and item.get("name") == "JobCreated"
             ),
             None,
@@ -51,7 +52,7 @@ class BaseAcpContractClient(ABC):
             raise ACPError("JobCreated event not found in ACP_ABI")
 
         self.job_created_event_signature_hex = (
-            "0x" + event_abi_to_log_topic(job_created_event_abi).hex()
+            "0x" + event_abi_to_log_topic(cast(ABIEvent, job_created_event_abi)).hex()
         )
 
     def _build_user_operation(
@@ -217,10 +218,10 @@ class BaseAcpContractClient(ABC):
         )
         # Build a user operation (single call)
         trx_data = self._build_user_operation(
-            method_name="deposit", 
-            args=[], 
+            method_name="deposit",
+            args=[],
             contract_address=weth_contract.address,
-            abi=WETH_ABI
+            abi=WETH_ABI,
         )
 
         # Add ETH value to send along with the deposit

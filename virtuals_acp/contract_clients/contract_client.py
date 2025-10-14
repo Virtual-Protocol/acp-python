@@ -126,7 +126,7 @@ class ACPContractClient(BaseAcpContractClient):
     ) -> Dict[str, Any]:
         try:
             token_address = token or self.config.base_fare.contract_address
-            encoded = self._send_user_operation(
+            data = self._build_user_operation(
                 "createPayableMemo",
                 [
                     job_id,
@@ -142,7 +142,8 @@ class ACPContractClient(BaseAcpContractClient):
                     secured,
                 ],
             )
-            return encoded
+
+            return self._send_user_operation(data)
         except Exception as e:
             raise ACPError("Failed to create payable memo", e)
 
@@ -155,32 +156,4 @@ class ACPContractClient(BaseAcpContractClient):
         payment_token_address: str,
         expired_at: datetime,
     ) -> Dict[str, Any]:
-        try:
-            encoded = self.contract.encode_abi(
-                "createJobWithAccount",
-                [
-                    account_id,
-                    Web3.to_checksum_address(evaluator_address),
-                    int(budget_base_unit),
-                    Web3.to_checksum_address(payment_token_address),
-                    math.floor(expired_at.timestamp()),
-                ],
-            )
-
-            # Send the user operation through Alchemy or whatever backend handles operations
-            tx_response = self.handle_operation(encoded, self.config.contract_address)
-
-            # Extract jobId from JobCreated event logs
-            job_id = self.get_job_id(
-                tx_response,
-                self.agent_wallet_address,
-                provider_address,
-            )
-
-            return {
-                "tx_response": tx_response,
-                "job_id": job_id,
-            }
-
-        except Exception as e:
-            raise ACPError("Failed to create job with account", e)
+        raise ACPError("Not Supported")

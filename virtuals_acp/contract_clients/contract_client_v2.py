@@ -33,9 +33,11 @@ class ACPContractClientV2(BaseAcpContractClient):
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
 
         def multicall_read(
-            w3: Web3, contract_address: str, abi: list[str], calls: list[str]
+            w3: Web3, contract_address: str, abi: list[Dict[str, Any]], calls: list[str]
         ):
-            contract = w3.eth.contract(address=contract_address, abi=abi)
+            contract = w3.eth.contract(
+                address=Web3.to_checksum_address(contract_address), abi=abi
+            )
             results = []
             for fn_name in calls:
                 fn = getattr(contract.functions, fn_name)
@@ -70,39 +72,39 @@ class ACPContractClientV2(BaseAcpContractClient):
     ) -> int:
         logs: List[Dict[str, Any]] = response.get("receipts", [])[0].get("logs", [])
 
-        job_manager_logs = [
-            log
+        decoded_create_job_logs = [
+            self.contract.events.JobCreated().process_log(
+                {
+                    "topics": log["topics"],
+                    "data": log["data"],
+                    "address": log["address"],
+                    "logIndex": 0,
+                    "transactionIndex": 0,
+                    "transactionHash": "0x0000",
+                    "blockHash": "0x0000",
+                    "blockNumber": 0,
+                }
+            )
             for log in logs
-            if log["address"].lower() == self.job_manager_address.lower()
+            if log["topics"][0] == self.job_created_event_signature_hex
         ]
 
-        decoded_logs = []
-        for log in job_manager_logs:
-            try:
-                event = self.job_manager_contract.events.JobCreated().process_log(
-                    {
-                        "topics": log["topics"],
-                        "data": log["data"],
-                        "address": log["address"],
-                        "logIndex": 0,
-                        "transactionIndex": 0,
-                        "transactionHash": "0x0",
-                        "blockHash": "0x0",
-                        "blockNumber": 0,
-                    }
-                )
-                decoded_logs.append(event)
-            except Exception:
-                continue
+        if len(decoded_create_job_logs) == 0:
+            raise Exception("No logs found for JobCreated event")
 
-        if not decoded_logs:
-            raise ACPError("No JobCreated events decoded from JobManager logs")
+        created_job_log = next(
+            (
+                log
+                for log in decoded_create_job_logs
+                if log["args"]["provider"] == provider_address
+                and log["args"]["client"] == client_address
+            ),
+            None,
+        )
 
-        for event in decoded_logs:
-            if (
-                event["args"]["provider"].lower() == provider_address.lower()
-                and event["args"]["client"].lower() == client_address.lower()
-            ):
-                return int(event["args"]["jobId"])
+        if not created_job_log:
+            raise Exception(
+                "No logs found for JobCreated event with provider and client addresses"
+            )
 
-        raise ACPError("No JobCreated event matched given client/provider addresses")
+        return int(created_job_log["args"]["jobId"])

@@ -1,4 +1,4 @@
-ACP_V2_ABI = [
+initial_acp_v2_abi = [
     {"inputs": [], "stateMutability": "nonpayable", "type": "constructor"},
     {"inputs": [], "name": "AccessControlBadConfirmation", "type": "error"},
     {
@@ -872,3 +872,51 @@ ACP_V2_ABI = [
         "type": "function",
     },
 ]
+
+custom_abi = [
+    {
+        "anonymous": False,
+        "inputs": [
+            {
+                "indexed": True,
+                "internalType": "uint256",
+                "name": "jobId",
+                "type": "uint256",
+            },
+            {
+                "indexed": True,
+                "internalType": "uint256",
+                "name": "accountId",
+                "type": "uint256",
+            },
+            {
+                "indexed": True,
+                "internalType": "address",
+                "name": "client",
+                "type": "address",
+            },
+            {
+                "indexed": False,
+                "internalType": "address",
+                "name": "provider",
+                "type": "address",
+            },
+            {
+                "indexed": False,
+                "internalType": "address",
+                "name": "evaluator",
+                "type": "address",
+            },
+            {
+                "indexed": False,
+                "internalType": "uint256",
+                "name": "expiredAt",
+                "type": "uint256",
+            },
+        ],
+        "name": "JobCreated",
+        "type": "event",
+    }
+]
+
+ACP_V2_ABI = initial_acp_v2_abi + custom_abi

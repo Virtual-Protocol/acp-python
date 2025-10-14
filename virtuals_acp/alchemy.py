@@ -11,7 +11,7 @@ from eth_utils.conversions import to_hex
 from eth_account.messages import encode_defunct
 
 
-from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, ACPContractConfig
 
 MAX_RETRIES = 10
 
@@ -96,7 +96,7 @@ class AlchemyRPCClient:
 class AlchemyAccountKit:
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: ACPContractConfig,
         agent_wallet_address: str,
         entity_id: int,
         owner_account: Account,
