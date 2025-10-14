@@ -103,7 +103,7 @@ def main():
     )
 
     relevant_agents = acp_client.browse_agents(
-        keyword="calm_seller",
+        keyword="<your-filter-agent-keyword>",
         sort_by=[ACPAgentSort.SUCCESSFUL_JOB_COUNT],
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,

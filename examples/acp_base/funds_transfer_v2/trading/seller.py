@@ -95,7 +95,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         return job.create_requirement_payable_memo(
             "Send me USDC to open position",
             MemoType.PAYABLE_REQUEST,
-            FareAmountBase(
+            FareAmount(
                 float(job.requirement.get("amount", 0)),
                 config.base_fare  # Open position against ACP Base Currency: USDC
             ),
