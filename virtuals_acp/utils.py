@@ -24,6 +24,7 @@ def try_validate_model(data: dict, model: Type[T]) -> Optional[T]:
 
 def deprecated(reason: str = "This function is deprecated and should not be used."):
     """Decorator to mark functions or methods as deprecated."""
+
     def decorator(func):
         @functools.wraps(func)
         def wrapped(*args, **kwargs):
@@ -33,5 +34,7 @@ def deprecated(reason: str = "This function is deprecated and should not be used
                 stacklevel=2,
             )
             return func(*args, **kwargs)
+
         return wrapped
+
     return decorator

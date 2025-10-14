@@ -78,7 +78,12 @@ ACP_V2_ABI = [
                 "name": "accountId",
                 "type": "uint256",
             },
-            {"indexed": False, "internalType": "bool", "name": "isActive", "type": "bool"},
+            {
+                "indexed": False,
+                "internalType": "bool",
+                "name": "isActive",
+                "type": "bool",
+            },
         ],
         "name": "AccountStatusUpdated",
         "type": "event",
@@ -212,7 +217,12 @@ ACP_V2_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "bytes32", "name": "role", "type": "bytes32"},
+            {
+                "indexed": True,
+                "internalType": "bytes32",
+                "name": "role",
+                "type": "bytes32",
+            },
             {
                 "indexed": True,
                 "internalType": "bytes32",
@@ -232,7 +242,12 @@ ACP_V2_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "bytes32", "name": "role", "type": "bytes32"},
+            {
+                "indexed": True,
+                "internalType": "bytes32",
+                "name": "role",
+                "type": "bytes32",
+            },
             {
                 "indexed": True,
                 "internalType": "address",
@@ -252,7 +267,12 @@ ACP_V2_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "bytes32", "name": "role", "type": "bytes32"},
+            {
+                "indexed": True,
+                "internalType": "bytes32",
+                "name": "role",
+                "type": "bytes32",
+            },
             {
                 "indexed": True,
                 "internalType": "address",
@@ -422,7 +442,11 @@ ACP_V2_ABI = [
             {"internalType": "uint256", "name": "amount", "type": "uint256"},
             {"internalType": "address", "name": "recipient", "type": "address"},
             {"internalType": "uint256", "name": "feeAmount", "type": "uint256"},
-            {"internalType": "enum ACPTypes.FeeType", "name": "feeType", "type": "uint8"},
+            {
+                "internalType": "enum ACPTypes.FeeType",
+                "name": "feeType",
+                "type": "uint8",
+            },
             {
                 "internalType": "enum ACPTypes.MemoType",
                 "name": "memoType",
@@ -513,9 +537,21 @@ ACP_V2_ABI = [
                     },
                     {"internalType": "uint256", "name": "createdAt", "type": "uint256"},
                     {"internalType": "bool", "name": "isApproved", "type": "bool"},
-                    {"internalType": "address", "name": "approvedBy", "type": "address"},
-                    {"internalType": "uint256", "name": "approvedAt", "type": "uint256"},
-                    {"internalType": "bool", "name": "requiresApproval", "type": "bool"},
+                    {
+                        "internalType": "address",
+                        "name": "approvedBy",
+                        "type": "address",
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "approvedAt",
+                        "type": "uint256",
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "requiresApproval",
+                        "type": "bool",
+                    },
                     {"internalType": "string", "name": "metadata", "type": "string"},
                     {"internalType": "bool", "name": "isSecured", "type": "bool"},
                     {
@@ -560,9 +596,21 @@ ACP_V2_ABI = [
                     },
                     {"internalType": "uint256", "name": "createdAt", "type": "uint256"},
                     {"internalType": "bool", "name": "isApproved", "type": "bool"},
-                    {"internalType": "address", "name": "approvedBy", "type": "address"},
-                    {"internalType": "uint256", "name": "approvedAt", "type": "uint256"},
-                    {"internalType": "bool", "name": "requiresApproval", "type": "bool"},
+                    {
+                        "internalType": "address",
+                        "name": "approvedBy",
+                        "type": "address",
+                    },
+                    {
+                        "internalType": "uint256",
+                        "name": "approvedAt",
+                        "type": "uint256",
+                    },
+                    {
+                        "internalType": "bool",
+                        "name": "requiresApproval",
+                        "type": "bool",
+                    },
                     {"internalType": "string", "name": "metadata", "type": "string"},
                     {"internalType": "bool", "name": "isSecured", "type": "bool"},
                     {
@@ -706,7 +754,11 @@ ACP_V2_ABI = [
     {
         "inputs": [
             {"internalType": "bytes32", "name": "role", "type": "bytes32"},
-            {"internalType": "address", "name": "callerConfirmation", "type": "address"},
+            {
+                "internalType": "address",
+                "name": "callerConfirmation",
+                "type": "address",
+            },
         ],
         "name": "renounceRole",
         "outputs": [],

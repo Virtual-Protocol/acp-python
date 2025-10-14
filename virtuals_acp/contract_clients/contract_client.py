@@ -34,10 +34,8 @@ class ACPContractClient(BaseAcpContractClient):
         bytes_len = bits // 8
         random_bytes = secrets.token_bytes(bytes_len)
         return int.from_bytes(random_bytes, byteorder="big")
-    
-    def _send_user_operation(
-        self, trx_data: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+
+    def _send_user_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         return self.alchemy_kit.handle_user_operation(trx_data)
 
     def get_job_id(
@@ -104,7 +102,9 @@ class ACPContractClient(BaseAcpContractClient):
                 tx_response, self.agent_wallet_address, provider_address
             )
 
-            self.set_budget_with_payment_token(job_id, budget_base_unit, payment_token_address)
+            self.set_budget_with_payment_token(
+                job_id, budget_base_unit, payment_token_address
+            )
 
             return {"tx_response": tx_response, "job_id": job_id}
         except Exception as e:

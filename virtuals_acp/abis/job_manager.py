@@ -254,7 +254,12 @@ JOB_MANAGER_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "bytes32", "name": "role", "type": "bytes32"},
+            {
+                "indexed": True,
+                "internalType": "bytes32",
+                "name": "role",
+                "type": "bytes32",
+            },
             {
                 "indexed": True,
                 "internalType": "bytes32",
@@ -274,7 +279,12 @@ JOB_MANAGER_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "bytes32", "name": "role", "type": "bytes32"},
+            {
+                "indexed": True,
+                "internalType": "bytes32",
+                "name": "role",
+                "type": "bytes32",
+            },
             {
                 "indexed": True,
                 "internalType": "address",
@@ -294,7 +304,12 @@ JOB_MANAGER_ABI = [
     {
         "anonymous": False,
         "inputs": [
-            {"indexed": True, "internalType": "bytes32", "name": "role", "type": "bytes32"},
+            {
+                "indexed": True,
+                "internalType": "bytes32",
+                "name": "role",
+                "type": "bytes32",
+            },
             {
                 "indexed": True,
                 "internalType": "address",
@@ -495,7 +510,11 @@ JOB_MANAGER_ABI = [
                     {"internalType": "uint256", "name": "expiredAt", "type": "uint256"},
                     {"internalType": "uint256", "name": "createdAt", "type": "uint256"},
                     {"internalType": "uint256", "name": "startedAt", "type": "uint256"},
-                    {"internalType": "uint256", "name": "completedAt", "type": "uint256"},
+                    {
+                        "internalType": "uint256",
+                        "name": "completedAt",
+                        "type": "uint256",
+                    },
                     {"internalType": "uint256", "name": "memoCount", "type": "uint256"},
                     {"internalType": "string", "name": "metadata", "type": "string"},
                     {
@@ -545,7 +564,11 @@ JOB_MANAGER_ABI = [
                     {"internalType": "uint256", "name": "expiredAt", "type": "uint256"},
                     {"internalType": "uint256", "name": "createdAt", "type": "uint256"},
                     {"internalType": "uint256", "name": "startedAt", "type": "uint256"},
-                    {"internalType": "uint256", "name": "completedAt", "type": "uint256"},
+                    {
+                        "internalType": "uint256",
+                        "name": "completedAt",
+                        "type": "uint256",
+                    },
                     {"internalType": "uint256", "name": "memoCount", "type": "uint256"},
                     {"internalType": "string", "name": "metadata", "type": "string"},
                     {
@@ -612,7 +635,11 @@ JOB_MANAGER_ABI = [
                     {"internalType": "uint256", "name": "expiredAt", "type": "uint256"},
                     {"internalType": "uint256", "name": "createdAt", "type": "uint256"},
                     {"internalType": "uint256", "name": "startedAt", "type": "uint256"},
-                    {"internalType": "uint256", "name": "completedAt", "type": "uint256"},
+                    {
+                        "internalType": "uint256",
+                        "name": "completedAt",
+                        "type": "uint256",
+                    },
                     {"internalType": "uint256", "name": "memoCount", "type": "uint256"},
                     {"internalType": "string", "name": "metadata", "type": "string"},
                     {
@@ -710,7 +737,11 @@ JOB_MANAGER_ABI = [
                 "name": "paymentToken",
                 "type": "address",
             },
-            {"internalType": "enum ACPTypes.JobPhase", "name": "phase", "type": "uint8"},
+            {
+                "internalType": "enum ACPTypes.JobPhase",
+                "name": "phase",
+                "type": "uint8",
+            },
             {
                 "internalType": "enum ACPTypes.JobStatus",
                 "name": "status",
@@ -756,7 +787,11 @@ JOB_MANAGER_ABI = [
     {
         "inputs": [
             {"internalType": "bytes32", "name": "role", "type": "bytes32"},
-            {"internalType": "address", "name": "callerConfirmation", "type": "address"},
+            {
+                "internalType": "address",
+                "name": "callerConfirmation",
+                "type": "address",
+            },
         ],
         "name": "renounceRole",
         "outputs": [],

@@ -29,17 +29,17 @@ class ACPMemoStatus(str, Enum):
 
 
 class MemoType(int, Enum):
-    MESSAGE = 0                    # Text message
-    CONTEXT_URL = 1                # URL for context
-    IMAGE_URL = 2                  # Image URL
-    VOICE_URL = 3                  # Voice/audio URL
-    OBJECT_URL = 4                 # Object/file URL
-    TXHASH = 5                     # Transaction hash reference
-    PAYABLE_REQUEST = 6            # Payment request
-    PAYABLE_TRANSFER = 7           # Direct payment transfer
-    PAYABLE_TRANSFER_ESCROW = 8    # Escrowed payment transfer
-    NOTIFICATION = 9               # Notification
-    PAYABLE_NOTIFICATION =  10     # Payable notification
+    MESSAGE = 0  # Text message
+    CONTEXT_URL = 1  # URL for context
+    IMAGE_URL = 2  # Image URL
+    VOICE_URL = 3  # Voice/audio URL
+    OBJECT_URL = 4  # Object/file URL
+    TXHASH = 5  # Transaction hash reference
+    PAYABLE_REQUEST = 6  # Payment request
+    PAYABLE_TRANSFER = 7  # Direct payment transfer
+    PAYABLE_TRANSFER_ESCROW = 8  # Escrowed payment transfer
+    NOTIFICATION = 9  # Notification
+    PAYABLE_NOTIFICATION = 10  # Payable notification
 
 
 class ACPJobPhase(int, Enum):

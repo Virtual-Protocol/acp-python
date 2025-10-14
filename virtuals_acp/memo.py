@@ -33,9 +33,7 @@ class ACPMemo(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def model_post_init(self, _):
-        self.structured_content = try_parse_json_model(
-            self.content, GenericPayload
-        )
+        self.structured_content = try_parse_json_model(self.content, GenericPayload)
 
         if self.payable_details:
             self.payable_details["amount"] = int(self.payable_details["amount"])

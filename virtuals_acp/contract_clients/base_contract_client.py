@@ -37,10 +37,14 @@ class BaseAcpContractClient(ABC):
             address=Web3.to_checksum_address(config.base_fare.contract_address),
             abi=self.abi,
         )
-        
+
         job_created_event_abi = next(
-            (item for item in ACP_ABI if item.get("type") == "event" and item.get("name") == "JobCreated"),
-            None
+            (
+                item
+                for item in ACP_ABI
+                if item.get("type") == "event" and item.get("name") == "JobCreated"
+            ),
+            None,
         )
 
         if not job_created_event_abi:
@@ -62,30 +66,26 @@ class BaseAcpContractClient(ABC):
         If no ABI is provided, defaults to the ACP contract ABI.
         """
         target_abi = abi or self.abi
-        target_address = Web3.to_checksum_address(contract_address or self.config.contract_address)
+        target_address = Web3.to_checksum_address(
+            contract_address or self.config.contract_address
+        )
 
         target_contract = self.w3.eth.contract(address=target_address, abi=target_abi)
         encoded_data = target_contract.encode_abi(method_name, args=args)
 
         return [{"to": target_address, "data": encoded_data}]
 
-
     @abstractmethod
     def _send_user_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         pass
 
     @abstractmethod
-    def get_job_id(
-        self,
-        hash: str,
-        client_address: str,
-        provider_address: str
-    ) -> int:
+    def get_job_id(self, hash: str, client_address: str, provider_address: str) -> int:
         """Abstract method to retrieve a job ID from a transaction hash and related addresses."""
         pass
 
     def _format_amount(self, amount: float) -> int:
-        return int(Decimal(str(amount)) * (10 ** self.config.base_fare.decimals))
+        return int(Decimal(str(amount)) * (10**self.config.base_fare.decimals))
 
     def create_job(
         self,
@@ -94,7 +94,7 @@ class BaseAcpContractClient(ABC):
         expired_at: datetime,
         payment_token_address: str,
         budget_base_unit: int,
-        metadata: str
+        metadata: str,
     ) -> Dict[str, Any]:
         data = self._build_user_operation(
             "createJob",
@@ -104,7 +104,7 @@ class BaseAcpContractClient(ABC):
                 math.floor(expired_at.timestamp()),
                 payment_token_address,
                 budget_base_unit,
-                metadata
+                metadata,
             ],
         )
         return self._send_user_operation(data)
@@ -171,7 +171,7 @@ class BaseAcpContractClient(ABC):
                 secured,
                 next_phase,
             ],
-            self.config.contract_address
+            self.config.contract_address,
         )
         return self._send_user_operation(data)
 
@@ -186,7 +186,7 @@ class BaseAcpContractClient(ABC):
         data = self._build_user_operation(
             "createMemo",
             [job_id, content, memo_type.value, is_secured, next_phase.value],
-            self.config.contract_address
+            self.config.contract_address,
         )
         return self._send_user_operation(data)
 
@@ -194,20 +194,19 @@ class BaseAcpContractClient(ABC):
         self, memo_id: int, is_approved: bool, reason: Optional[str] = ""
     ) -> Dict[str, Any]:
         data = self._build_user_operation(
-            "signMemo", 
-            [memo_id, is_approved, reason],
-            self.config.contract_address
+            "signMemo", [memo_id, is_approved, reason], self.config.contract_address
         )
         return self._send_user_operation(data)
 
     def set_budget_with_payment_token(
-        self, job_id: int, budget_base_unit: int, payment_token_address: Optional[str] = None
+        self,
+        job_id: int,
+        budget_base_unit: int,
+        payment_token_address: Optional[str] = None,
     ) -> Dict[str, Any]:
         token = payment_token_address or self.config.base_fare.contract_address
         data = self._build_user_operation(
-            "setBudgetWithPaymentToken",
-            [job_id, budget_base_unit, token],
-            token
+            "setBudgetWithPaymentToken", [job_id, budget_base_unit, token], token
         )
         return self._send_user_operation(data)
 
@@ -218,9 +217,7 @@ class BaseAcpContractClient(ABC):
         )
         # Build a user operation (single call)
         trx_data = self._build_user_operation(
-            method_name="deposit",
-            args=[],
-            contract_address=weth_contract.address
+            method_name="deposit", args=[], contract_address=weth_contract.address
         )
 
         # Add ETH value to send along with the deposit

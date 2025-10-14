@@ -24,15 +24,17 @@ class ACPContractClientV2(BaseAcpContractClient):
         self.account = Account.from_key(wallet_private_key)
         self.entity_id = entity_id
         self.alchemy_kit = AlchemyAccountKit(
-            config=config, 
-            agent_wallet_address=agent_wallet_address, 
-            entity_id=entity_id, 
-            owner_account=self.account, 
-            chain_id=config.chain_id
+            config=config,
+            agent_wallet_address=agent_wallet_address,
+            entity_id=entity_id,
+            owner_account=self.account,
+            chain_id=config.chain_id,
         )
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
 
-        def multicall_read(w3: Web3, contract_address: str, abi: list[str], calls: list[str]):
+        def multicall_read(
+            w3: Web3, contract_address: str, abi: list[str], calls: list[str]
+        ):
             contract = w3.eth.contract(address=contract_address, abi=abi)
             results = []
             for fn_name in calls:
@@ -47,7 +49,7 @@ class ACPContractClientV2(BaseAcpContractClient):
 
         if not all([job_manager, memo_manager, account_manager]):
             raise ACPError("Failed to fetch sub-manager contract addresses")
-        
+
         self.job_manager_address = Web3.to_checksum_address(job_manager)
 
         self.job_manager_contract = self.w3.eth.contract(
@@ -59,35 +61,36 @@ class ACPContractClientV2(BaseAcpContractClient):
         bytes_len = bits // 8
         random_bytes = secrets.token_bytes(bytes_len)
         return int.from_bytes(random_bytes, byteorder="big")
-    
-    def _send_user_operation(
-        self, trx_data: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+
+    def _send_user_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         return self.alchemy_kit.handle_user_operation(trx_data)
-    
+
     def get_job_id(
         self, response: Dict[str, Any], client_address: str, provider_address: str
     ) -> int:
         logs: List[Dict[str, Any]] = response.get("receipts", [])[0].get("logs", [])
 
         job_manager_logs = [
-            log for log in logs
+            log
+            for log in logs
             if log["address"].lower() == self.job_manager_address.lower()
         ]
 
         decoded_logs = []
         for log in job_manager_logs:
             try:
-                event = self.job_manager_contract.events.JobCreated().process_log({
-                    "topics": log["topics"],
-                    "data": log["data"],
-                    "address": log["address"],
-                    "logIndex": 0,
-                    "transactionIndex": 0,
-                    "transactionHash": "0x0",
-                    "blockHash": "0x0",
-                    "blockNumber": 0,
-                })
+                event = self.job_manager_contract.events.JobCreated().process_log(
+                    {
+                        "topics": log["topics"],
+                        "data": log["data"],
+                        "address": log["address"],
+                        "logIndex": 0,
+                        "transactionIndex": 0,
+                        "transactionHash": "0x0",
+                        "blockHash": "0x0",
+                        "blockNumber": 0,
+                    }
+                )
                 decoded_logs.append(event)
             except Exception:
                 continue

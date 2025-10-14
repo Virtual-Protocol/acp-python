@@ -156,7 +156,10 @@ class ACPJob(BaseModel):
     ) -> ACPMemo:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
-        if type == MemoType.PAYABLE_TRANSFER_ESCROW or type == MemoType.PAYABLE_TRANSFER:
+        if (
+            type == MemoType.PAYABLE_TRANSFER_ESCROW
+            or type == MemoType.PAYABLE_TRANSFER
+        ):
             self.acp_contract_client.approve_allowance(
                 amount.amount,
                 amount.fare.contract_address,
@@ -233,7 +236,10 @@ class ACPJob(BaseModel):
         )
 
     def accept(self, reason: Optional[str] = None):
-        if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
+        if (
+            self.latest_memo is None
+            or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
+        ):
             raise ValueError("No negotiation memo found")
         memo = self.latest_memo
         memo.sign(True, reason)
@@ -246,7 +252,10 @@ class ACPJob(BaseModel):
         )
 
     def reject(self, reason: Optional[str] = None):
-        if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
+        if (
+            self.latest_memo is None
+            or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
+        ):
             raise ValueError("No negotiation memo found")
         memo = self.latest_memo
         return self.acp_contract_client.sign_memo(
@@ -339,7 +348,7 @@ class ACPJob(BaseModel):
             reason = f"Job {self.id} delivery {'accepted' if accept else 'rejected'}"
 
         return self.acp_client.sign_memo(self.latest_memo.id, accept, reason)
-    
+
     def create_notification(self, content: str):
         return self.acp_contract_client.create_memo(
             job_id=self.id,

@@ -79,16 +79,17 @@ class ACPJobOffering(BaseModel):
         account = self.acp_client.get_by_client_and_provider(
             self.contract_client.agent_wallet_address,
             self.provider_address,
-            self.contract_client
+            self.contract_client,
         )
-        
+
         base_contract_addresses = {
             BASE_SEPOLIA_CONFIG.contract_address.lower(),
             BASE_MAINNET_CONFIG.contract_address.lower(),
         }
 
         use_simple_create = (
-            self.contract_client.config.contract_address.lower() in base_contract_addresses
+            self.contract_client.config.contract_address.lower()
+            in base_contract_addresses
             or not account
         )
 
@@ -101,10 +102,14 @@ class ACPJobOffering(BaseModel):
                 expired_at or datetime.utcnow(),
                 fare_amount.fare.contract_address,
                 fare_amount.amount,
-                ""
+                "",
             )
         else:
-            evaluator_address = Web3.to_checksum_address(evaluator_address) if evaluator_address else ZERO_ADDRESS
+            evaluator_address = (
+                Web3.to_checksum_address(evaluator_address)
+                if evaluator_address
+                else ZERO_ADDRESS
+            )
             response = self.contract_client.create_job_with_account(
                 account.id,
                 evaluator_address or self.contract_client.agent_wallet_address,

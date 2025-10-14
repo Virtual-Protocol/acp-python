@@ -63,16 +63,18 @@ class VirtualsACP:
             self.contract_clients = acp_contract_clients
         else:
             self.contract_clients = [acp_contract_clients]
-        
+
         if len(self.contract_clients) == 0:
             raise ACPError("ACP contract client is required")
-        
+
         # Validate all clients have the same agent wallet address
         first_agent_address = self.contract_clients[0].agent_wallet_address
         for client in self.contract_clients:
             if client.agent_wallet_address != first_agent_address:
-                raise ACPError("All contract clients must have the same agent wallet address")
-        
+                raise ACPError(
+                    "All contract clients must have the same agent wallet address"
+                )
+
         # Use the first client for common properties
         self.contract_client = self.contract_clients[0]
         self.agent_wallet_address = first_agent_address
@@ -112,11 +114,14 @@ class VirtualsACP:
         """Find contract client by contract address."""
         if not address:
             return self.contract_clients[0]
-        
+
         for client in self.contract_clients:
-            if hasattr(client, 'contract_address') and client.contract_address == address:
+            if (
+                hasattr(client, "contract_address")
+                and client.contract_address == address
+            ):
                 return client
-        
+
         raise ACPError("ACP contract client not found")
 
     def _default_on_evaluate(self, job: ACPJob) -> Tuple[bool, str]:
@@ -152,17 +157,26 @@ class VirtualsACP:
     def handle_new_task(self, data) -> None:
         memo_to_sign_id = data.get("memoToSign")
 
-        memos = [ACPMemo(
-            contract_client=self.contract_client_by_address(data.get("contractAddress")),
-            id=memo.get("id"),
-            type=MemoType(int(memo.get("memoType"))),
-            content=memo.get("content"),
-            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-            status=ACPMemoStatus(memo.get("status")),
-            signed_reason=memo.get("signedReason"),
-            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
-            payable_details=memo.get("payableDetails")
-        ) for memo in data["memos"]]
+        memos = [
+            ACPMemo(
+                contract_client=self.contract_client_by_address(
+                    data.get("contractAddress")
+                ),
+                id=memo.get("id"),
+                type=MemoType(int(memo.get("memoType"))),
+                content=memo.get("content"),
+                next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                status=ACPMemoStatus(memo.get("status")),
+                signed_reason=memo.get("signedReason"),
+                expiry=(
+                    datetime.fromtimestamp(int(memo["expiry"]))
+                    if memo.get("expiry")
+                    else None
+                ),
+                payable_details=memo.get("payableDetails"),
+            )
+            for memo in data["memos"]
+        ]
 
         memo_to_sign = (
             next((m for m in memos if int(m.id) == int(memo_to_sign_id)), None)
@@ -179,7 +193,9 @@ class VirtualsACP:
 
         job = ACPJob(
             acp_client=self,
-            contract_client=self.contract_client_by_address(data.get("contractAddress")),
+            contract_client=self.contract_client_by_address(
+                data.get("contractAddress")
+            ),
             id=data["id"],
             provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
@@ -196,17 +212,26 @@ class VirtualsACP:
             self.on_new_task(job, memo_to_sign)
 
     def handle_evaluate(self, data) -> None:
-        memos = [ACPMemo(
-            contract_client=self.contract_client_by_address(data.get("contractAddress")),
-            id=memo.get("id"),
-            type=MemoType(int(memo.get("memoType"))),
-            content=memo.get("content"),
-            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-            status=ACPMemoStatus(memo.get("status")),
-            signed_reason=memo.get("signedReason"),
-            expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
-            payable_details=memo.get("payableDetails")
-        ) for memo in data["memos"]]
+        memos = [
+            ACPMemo(
+                contract_client=self.contract_client_by_address(
+                    data.get("contractAddress")
+                ),
+                id=memo.get("id"),
+                type=MemoType(int(memo.get("memoType"))),
+                content=memo.get("content"),
+                next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                status=ACPMemoStatus(memo.get("status")),
+                signed_reason=memo.get("signedReason"),
+                expiry=(
+                    datetime.fromtimestamp(int(memo["expiry"]))
+                    if memo.get("expiry")
+                    else None
+                ),
+                payable_details=memo.get("payableDetails"),
+            )
+            for memo in data["memos"]
+        ]
 
         context = data["context"]
         if isinstance(context, str):
@@ -216,7 +241,9 @@ class VirtualsACP:
                 context = None
 
         job = ACPJob(
-            contract_client=self.contract_client_by_address(data.get("contractAddress")),
+            contract_client=self.contract_client_by_address(
+                data.get("contractAddress")
+            ),
             id=data["id"],
             provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
@@ -316,25 +343,29 @@ class VirtualsACP:
             data = response.json()
 
             agents_data = data.get("data", [])
-            
+
             # Filter agents by available contract addresses
             available_contract_addresses = [
                 client.contract_address.lower() for client in self.contract_clients
             ]
-            
+
             # Filter out self and agents not using our contract addresses
             filtered_agents = [
-                agent for agent in agents_data
+                agent
+                for agent in agents_data
                 if agent["walletAddress"].lower() != self.agent_address.lower()
-                and agent.get("contractAddress", "").lower() in available_contract_addresses
+                and agent.get("contractAddress", "").lower()
+                in available_contract_addresses
             ]
-            
+
             agents = []
             for agent_data in filtered_agents:
                 job_offerings = [
                     ACPJobOffering(
                         acp_client=self,
-                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
+                        contract_client=self.contract_client_by_address(
+                            data.get("contractAddress")
+                        ),
                         provider_address=agent_data["walletAddress"],
                         name=job["name"],
                         price=job["price"],
@@ -385,9 +416,7 @@ class VirtualsACP:
 
         # Lookup existing account between client and provider
         account = self.get_by_client_and_provider(
-            self.agent_address,
-            provider_address,
-            self.contract_client
+            self.agent_address, provider_address, self.contract_client
         )
 
         # Determine whether to call createJob or createJobWithAccount
@@ -397,18 +426,19 @@ class VirtualsACP:
         }
 
         use_simple_create = (
-            self.contract_client.config.contract_address.lower() in base_contract_addresses
+            self.contract_client.config.contract_address.lower()
+            in base_contract_addresses
             or not account
         )
 
         if use_simple_create:
             response = self.contract_client.create_job(
-                provider_address, 
-                eval_addr or self.wallet_address, 
+                provider_address,
+                eval_addr or self.wallet_address,
                 expired_at,
                 fare_amount.fare.contract_address,
                 fare_amount.amount,
-                ""
+                "",
             )
         else:
             response = self.contract_client.create_job_with_account(
@@ -416,7 +446,7 @@ class VirtualsACP:
                 eval_addr or self.wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
-                expired_at
+                expired_at,
             )
 
         job_id = self.contract_client.get_job_id(
@@ -446,20 +476,20 @@ class VirtualsACP:
         """Get account by client and provider addresses."""
         try:
             url = f"{self.acp_url}/accounts/client/{client_address}/provider/{provider_address}"
-            
+
             response = requests.get(url)
             if response.status_code == 404:
                 return None
-            
+
             response.raise_for_status()
             data = response.json()
-            
+
             if not data.get("data"):
                 return None
-                
+
             account_data = data["data"]
             contract_client = acp_contract_client or self.contract_clients[0]
-            
+
             return ACPAccount(
                 contract_client=contract_client,
                 id=account_data["id"],
@@ -480,17 +510,17 @@ class VirtualsACP:
         """Get account by job ID."""
         try:
             url = f"{self.acp_url}/api/accounts/job/{job_id}"
-            
+
             response = requests.get(url)
             response.raise_for_status()
             data = response.json()
-            
+
             if not data.get("data"):
                 return None
-                
+
             account_data = data["data"]
             contract_client = acp_contract_client or self.contract_clients[0]
-            
+
             return ACPAccount(
                 contract_client=contract_client,
                 account_id=account_data["id"],
@@ -501,7 +531,9 @@ class VirtualsACP:
         except requests.exceptions.RequestException as e:
             raise ACPApiError(f"Failed to get account by job id: {e}")
         except Exception as e:
-            raise ACPError(f"An unexpected error occurred while getting account by job id: {e}")
+            raise ACPError(
+                f"An unexpected error occurred while getting account by job id: {e}"
+            )
 
     def create_memo(self, job_id: int, content: str, next_phase: ACPJobPhase):
         return self.contract_client.create_memo(
@@ -520,9 +552,8 @@ class VirtualsACP:
     ):
         if type == MemoType.PAYABLE_TRANSFER_ESCROW:
             self.contract_manager.approve_allowance(
-                amount.amount,
-                amount.fare.contract_address
-        )
+                amount.amount, amount.fare.contract_address
+            )
 
         fee_amount = FareAmount(0, self.contract_manager.config.base_fare)
 
@@ -589,7 +620,7 @@ class VirtualsACP:
 
         self.contract_manager.approve_allowance(amount_base_unit.amount)
         self.contract_manager.sign_memo(memo_id, True, reason or "")
-        
+
         return self.contract_manager.create_memo(
             job_id,
             f"{reason if reason else f'Job {job_id} paid.'}",
@@ -731,11 +762,7 @@ class VirtualsACP:
 
     def reject_job(self, job_id: int, reason: Optional[str] = "") -> str:
         data = self.contract_manager.create_memo(
-            job_id,
-            f"{reason or ''}",
-            MemoType.MESSAGE,
-            False,
-            ACPJobPhase.REJECTED
+            job_id, f"{reason or ''}", MemoType.MESSAGE, False, ACPJobPhase.REJECTED
         )
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
         return tx_hash
@@ -770,17 +797,23 @@ class VirtualsACP:
             for job in data.get("data", []):
                 memos = []
                 for memo in job.get("memos", []):
-                    memos.append(ACPMemo(
-                        contract_client=self.contract_client,
-                        id=memo.get("id"),
-                        type=MemoType(int(memo.get("memoType"))),
-                        content=memo.get("content"),
-                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-                        status=ACPMemoStatus(memo.get("status")),
-                        signed_reason=memo.get("signedReason"),
-                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
-                        payable_details=memo.get("payableDetails")
-                    ))
+                    memos.append(
+                        ACPMemo(
+                            contract_client=self.contract_client,
+                            id=memo.get("id"),
+                            type=MemoType(int(memo.get("memoType"))),
+                            content=memo.get("content"),
+                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                            status=ACPMemoStatus(memo.get("status")),
+                            signed_reason=memo.get("signedReason"),
+                            expiry=(
+                                datetime.fromtimestamp(int(memo["expiry"]))
+                                if memo.get("expiry")
+                                else None
+                            ),
+                            payable_details=memo.get("payableDetails"),
+                        )
+                    )
 
                 context = job.get("context")
                 if isinstance(context, str):
@@ -791,7 +824,9 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
+                        contract_client=self.contract_client_by_address(
+                            data.get("contractAddress")
+                        ),
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
@@ -820,17 +855,23 @@ class VirtualsACP:
             for job in data.get("data", []):
                 memos = []
                 for memo in job.get("memos", []):
-                    memos.append(ACPMemo(
-                        contract_client=self.contract_client,
-                        id=memo.get("id"),
-                        type=MemoType(int(memo.get("memoType"))),
-                        content=memo.get("content"),
-                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-                        status=ACPMemoStatus(memo.get("status")),
-                        signed_reason=memo.get("signedReason"),
-                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
-                        payable_details=memo.get("payableDetails")
-                    ))
+                    memos.append(
+                        ACPMemo(
+                            contract_client=self.contract_client,
+                            id=memo.get("id"),
+                            type=MemoType(int(memo.get("memoType"))),
+                            content=memo.get("content"),
+                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                            status=ACPMemoStatus(memo.get("status")),
+                            signed_reason=memo.get("signedReason"),
+                            expiry=(
+                                datetime.fromtimestamp(int(memo["expiry"]))
+                                if memo.get("expiry")
+                                else None
+                            ),
+                            payable_details=memo.get("payableDetails"),
+                        )
+                    )
 
                 context = job.get("context")
                 if isinstance(context, str):
@@ -841,7 +882,9 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
+                        contract_client=self.contract_client_by_address(
+                            data.get("contractAddress")
+                        ),
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
@@ -870,17 +913,23 @@ class VirtualsACP:
             for job in data.get("data", []):
                 memos = []
                 for memo in job.get("memos", []):
-                    memos.append(ACPMemo(
-                        contract_client=self.contract_client,
-                        id=memo.get("id"),
-                        type=MemoType(int(memo.get("memoType"))),
-                        content=memo.get("content"),
-                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-                        status=ACPMemoStatus(memo.get("status")),
-                        signed_reason=memo.get("signedReason"),
-                        expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
-                        payable_details=memo.get("payableDetails")
-                    ))
+                    memos.append(
+                        ACPMemo(
+                            contract_client=self.contract_client,
+                            id=memo.get("id"),
+                            type=MemoType(int(memo.get("memoType"))),
+                            content=memo.get("content"),
+                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                            status=ACPMemoStatus(memo.get("status")),
+                            signed_reason=memo.get("signedReason"),
+                            expiry=(
+                                datetime.fromtimestamp(int(memo["expiry"]))
+                                if memo.get("expiry")
+                                else None
+                            ),
+                            payable_details=memo.get("payableDetails"),
+                        )
+                    )
 
                 context = job.get("context")
                 if isinstance(context, str):
@@ -891,7 +940,9 @@ class VirtualsACP:
 
                 jobs.append(
                     ACPJob(
-                        contract_client=self.contract_client_by_address(data.get("contractAddress")),
+                        contract_client=self.contract_client_by_address(
+                            data.get("contractAddress")
+                        ),
                         id=job.get("id"),
                         provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
@@ -921,17 +972,23 @@ class VirtualsACP:
 
             memos = []
             for memo in data.get("data", {}).get("memos", []):
-                memos.append(ACPMemo(
-                    contract_client=self.contract_client,
-                    id=memo.get("id"),
-                    type=MemoType(int(memo.get("memoType"))),
-                    content=memo.get("content"),
-                    next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-                    status=ACPMemoStatus(memo.get("status")),
-                    signed_reason=memo.get("signedReason"),
-                    expiry=datetime.fromtimestamp(int(memo["expiry"])) if memo.get("expiry") else None,
-                    payable_details=memo.get("payableDetails")
-                ))
+                memos.append(
+                    ACPMemo(
+                        contract_client=self.contract_client,
+                        id=memo.get("id"),
+                        type=MemoType(int(memo.get("memoType"))),
+                        content=memo.get("content"),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                        status=ACPMemoStatus(memo.get("status")),
+                        signed_reason=memo.get("signedReason"),
+                        expiry=(
+                            datetime.fromtimestamp(int(memo["expiry"]))
+                            if memo.get("expiry")
+                            else None
+                        ),
+                        payable_details=memo.get("payableDetails"),
+                    )
+                )
 
             context = data.get("data", {}).get("context")
             if isinstance(context, str):
@@ -941,7 +998,9 @@ class VirtualsACP:
                     context = None
 
             return ACPJob(
-                contract_client=self.contract_client_by_address(data.get("contractAddress")),
+                contract_client=self.contract_client_by_address(
+                    data.get("contractAddress")
+                ),
                 id=data.get("data", {}).get("id"),
                 provider_address=data.get("data", {}).get("providerAddress"),
                 client_address=data.get("data", {}).get("clientAddress"),
@@ -1004,7 +1063,9 @@ class VirtualsACP:
 
             offerings = [
                 ACPJobOffering(
-                    contract_client=self.contract_client_by_address(data.get("contractAddress")),
+                    contract_client=self.contract_client_by_address(
+                        data.get("contractAddress")
+                    ),
                     provider_address=agent_data["walletAddress"],
                     name=offering["name"],
                     price=offering["price"],
