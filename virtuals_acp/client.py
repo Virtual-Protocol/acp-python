@@ -126,7 +126,7 @@ class VirtualsACP:
 
     def _default_on_evaluate(self, job: ACPJob) -> Tuple[bool, str]:
         """Default handler for job evaluation events."""
-        return True, "Succesful"
+        job.evaluate(True, "Evaluated by default")
 
     def _on_room_joined(self, data):
         logger.info("Connected to room", data)  # Send acknowledgment back to server
@@ -241,9 +241,7 @@ class VirtualsACP:
                 context = None
 
         job = ACPJob(
-            contract_client=self.contract_client_by_address(
-                data.get("contractAddress")
-            ),
+            acp_client=self,
             id=data["id"],
             provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
@@ -551,13 +549,13 @@ class VirtualsACP:
         expired_at: datetime,
     ):
         if type == MemoType.PAYABLE_TRANSFER_ESCROW:
-            self.contract_manager.approve_allowance(
+            self.contract_client.approve_allowance(
                 amount.amount, amount.fare.contract_address
             )
 
-        fee_amount = FareAmount(0, self.contract_manager.config.base_fare)
+        fee_amount = FareAmount(0, self.contract_client.config.base_fare)
 
-        return self.contract_manager.create_payable_memo(
+        return self.contract_client.create_payable_memo(
             job_id,
             content,
             amount.amount,
@@ -579,7 +577,7 @@ class VirtualsACP:
         reason: Optional[str] = "",
     ) -> str:
         try:
-            data = self.contract_manager.sign_memo(memo_id, accept, reason or "")
+            data = self.contract_client.sign_memo(memo_id, accept, reason or "")
             tx_hash = data.get("receipts", [])[0].get("transactionHash")
             if not accept:
                 return tx_hash
@@ -587,7 +585,7 @@ class VirtualsACP:
             logger.info(
                 f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}"
             )
-            self.contract_manager.create_memo(
+            self.contract_client.create_memo(
                 job_id,
                 content or f"{reason or ''}",
                 MemoType.MESSAGE,
@@ -618,10 +616,10 @@ class VirtualsACP:
         reason: Optional[str] = "",
     ) -> Dict[str, Any]:
 
-        self.contract_manager.approve_allowance(amount_base_unit.amount)
-        self.contract_manager.sign_memo(memo_id, True, reason or "")
+        self.contract_client.approve_allowance(amount_base_unit.amount)
+        self.contract_client.sign_memo(memo_id, True, reason or "")
 
-        return self.contract_manager.create_memo(
+        return self.contract_client.create_memo(
             job_id,
             f"{reason if reason else f'Job {job_id} paid.'}",
             MemoType.MESSAGE,
@@ -642,7 +640,7 @@ class VirtualsACP:
     ) -> str:
         recipient = Web3.to_checksum_address(recipient)
 
-        data = self.contract_manager.create_payable_memo(
+        data = self.contract_client.create_payable_memo(
             job_id,
             json.dumps(reason.model_dump()),
             transfer_fare_amount.amount,
@@ -665,14 +663,14 @@ class VirtualsACP:
         reason: Optional[str] = "",
     ) -> str:
         if not accept:
-            data = self.contract_manager.sign_memo(memo_id, False, reason)
+            data = self.contract_client.sign_memo(memo_id, False, reason)
             tx_hash = data.get("receipts", [])[0].get("transactionHash")
             return tx_hash
 
         if amount > 0:
-            self.contract_manager.approve_allowance(amount)
+            self.contract_client.approve_allowance(amount)
 
-        data = self.contract_manager.sign_memo(memo_id, True, reason)
+        data = self.contract_client.sign_memo(memo_id, True, reason)
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
@@ -720,12 +718,12 @@ class VirtualsACP:
         )
 
         # Approve final amount
-        self.contract_manager.approve_allowance(
+        self.contract_client.approve_allowance(
             final_amount.amount,
             transfer_fare_amount.fare.contract_address,
         )
 
-        data = self.contract_manager.create_payable_memo(
+        data = self.contract_client.create_payable_memo(
             job_id,
             json.dumps(reason.model_dump()),
             transfer_fare_amount.amount,
@@ -743,7 +741,7 @@ class VirtualsACP:
     def send_message(
         self, job_id: int, message: GenericPayload[T], next_phase: ACPJobPhase
     ) -> str:
-        data = self.contract_manager.create_memo(
+        data = self.contract_client.create_memo(
             job_id,
             json.dumps(message.model_dump()),
             MemoType.MESSAGE,
@@ -756,12 +754,12 @@ class VirtualsACP:
     def respond_to_funds_transfer(
         self, memo_id: int, accept: bool, reason: Optional[str] = ""
     ):
-        data = self.contract_manager.sign_memo(memo_id, accept, reason)
+        data = self.contract_client.sign_memo(memo_id, accept, reason)
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
     def reject_job(self, job_id: int, reason: Optional[str] = "") -> str:
-        data = self.contract_manager.create_memo(
+        data = self.contract_client.create_memo(
             job_id, f"{reason or ''}", MemoType.MESSAGE, False, ACPJobPhase.REJECTED
         )
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
@@ -779,7 +777,7 @@ class VirtualsACP:
         return tx_hash
 
     def sign_memo(self, memo_id: int, accept: bool, reason: Optional[str] = "") -> str:
-        data = self.contract_manager.sign_memo(memo_id, accept, reason)
+        data = self.contract_client.sign_memo(memo_id, accept, reason)
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
