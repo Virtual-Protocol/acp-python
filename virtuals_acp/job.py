@@ -332,7 +332,48 @@ class ACPJob(BaseModel):
         ):
             raise ValueError("No transaction memo found")
 
-        return self.acp_client.deliver_job(self.id, deliverable)
+        return self.acp_contract_client.create_memo(
+            self.id,
+            prepare_payload(deliverable),
+            MemoType.MESSAGE,
+            True,
+            ACPJobPhase.COMPLETED
+        )
+
+    def deliver_payable(
+        self,
+        deliverable: DeliverablePayload,
+        amount: FareAmountBase,
+        expired_at: Optional[datetime] = None,
+    ):
+        if expired_at is None:
+            expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        if (
+            self.latest_memo is None
+            or self.latest_memo.next_phase != ACPJobPhase.EVALUATION
+        ):
+            raise ValueError("No transaction memo found")
+
+        self.acp_contract_client.approve_allowance(
+            amount.amount,
+            amount.fare.contract_address
+        )
+
+        fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
+
+        return self.acp_contract_client.create_payable_memo(
+            job_id=self.id,
+            content=prepare_payload(deliverable),
+            amount=amount.amount,
+            recipient=self.client_address,
+            fee_amount_base_unit=fee_amount.amount,
+            fee_type=FeeType.NO_FEE,
+            next_phase=ACPJobPhase.COMPLETED,
+            memo_type=MemoType.PAYABLE_TRANSFER,
+            expired_at=expired_at,
+            token=amount.fare.contract_address
+        )
 
     def evaluate(self, accept: bool, reason: Optional[str] = None):
         if (
@@ -359,12 +400,27 @@ class ACPJob(BaseModel):
         self,
         content: str,
         amount: FareAmountBase,
-        expired_at: datetime = ,
+        expired_at: Optional[datetime] = None,
     ):
+        if expired_at is None:
+            expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        self.acp_contract_client.approve_allowance(
+            amount.amount,
+            amount.fare.contract_address
+        )
+
+        fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
+
         return self.acp_contract_client.create_payable_memo(
             job_id=self.id,
             content=content,
-            memo_type=MemoType.NOTIFICATION,
-            is_secured=True,
+            amount=amount.amount,
+            recipient=self.client_address,
+            fee_amount_base_unit=fee_amount.amount,
+            fee_type=FeeType.NO_FEE,
             next_phase=ACPJobPhase.COMPLETED,
+            memo_type=MemoType.PAYABLE_NOTIFICATION,
+            expired_at=expired_at,
+            token=amount.fare.contract_address
         )
