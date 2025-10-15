@@ -25,7 +25,7 @@ from virtuals_acp.models import (
     ACPOnlineStatus,
     MemoType,
     IACPAgent,
-    IDeliverable,
+    DeliverablePayload,
     FeeType,
     GenericPayload,
     T,
@@ -43,6 +43,7 @@ from virtuals_acp.configs.configs import (
     BASE_SEPOLIA_CONFIG,
     BASE_MAINNET_CONFIG,
 )
+from virtuals_acp.utils import prepare_payload
 
 logging.basicConfig(
     level=logging.INFO,
@@ -605,10 +606,10 @@ class VirtualsACP:
         tx_hash = data.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
-    def deliver_job(self, job_id: int, deliverable: IDeliverable) -> str:
+    def deliver_job(self, job_id: int, deliverable: DeliverablePayload) -> str:
         data = self.contract_client.create_memo(
             job_id,
-            deliverable.model_dump_json(),
+            prepare_payload(deliverable),
             MemoType.OBJECT_URL,
             is_secured=True,
             next_phase=ACPJobPhase.COMPLETED,

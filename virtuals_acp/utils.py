@@ -1,7 +1,7 @@
 import functools
 import json
 import warnings
-from typing import Optional, Type
+from typing import Optional, Type, Union, Dict, Any
 
 from pydantic import ValidationError
 
@@ -21,6 +21,9 @@ def try_validate_model(data: dict, model: Type[T]) -> Optional[T]:
     except ValidationError:
         return None
 
+
+def prepare_payload(payload: Union[str, Dict[str, Any]]) -> str:
+    return payload if isinstance(payload, str) else json.dumps(payload)
 
 def deprecated(reason: str = "This function is deprecated and should not be used."):
     """Decorator to mark functions or methods as deprecated."""

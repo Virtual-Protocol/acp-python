@@ -5,33 +5,14 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import (
-    ACPJobPhase,
-    IACPAgent,
-    IDeliverable,
-    GenericPayload,
-    OpenPositionPayload,
-    PayloadType,
-    ClosePositionPayload,
-    PositionFulfilledPayload,
-    CloseJobAndWithdrawPayload,
-    FeeType,
-    MemoType,
-    UnfulfilledPositionPayload,
-    RequestClosePositionPayload,
-    NegotiationPayload,
-    T,
-)
-from virtuals_acp.utils import try_parse_json_model, deprecated
-from virtuals_acp.fare import Fare
+from virtuals_acp.models import (NegotiationPayload, ACPMemoStatus)
+from virtuals_acp.utils import try_parse_json_model, prepare_payload
 from virtuals_acp.models import (
     ACPJobPhase,
     MemoType,
     IACPAgent,
-    IDeliverable,
-    FeeType,
-    GenericPayload,
-    T,
+    DeliverablePayload,
+    FeeType
 )
 from virtuals_acp.fare import Fare, FareAmountBase, FareAmount
 
@@ -138,6 +119,26 @@ class ACPJob(BaseModel):
             None,
         )
         return memo.content if memo else None
+
+    @property
+    def rejection_reason(self) -> Optional[str]:
+        """Get the rejection reason from the rejected memo"""
+        request_memo = next(
+            (
+                m
+                for m in self.memos
+                if m.next_phase == ACPJobPhase.NEGOTIATION and m.status == ACPMemoStatus.REJECTED
+            ),
+            None
+        )
+        if request_memo:
+            return request_memo.signed_reason
+
+        fallback_memo = next(
+            (m for m in self.memos if m.next_phase == ACPJobPhase.REJECTED),
+            None
+        )
+        return fallback_memo.content if fallback_memo else None
 
     def create_requirement_memo(self, content: str) -> str:
         result = self.acp_contract_client.create_memo(
@@ -267,20 +268,39 @@ class ACPJob(BaseModel):
         return tx_hash
 
     def reject(self, reason: Optional[str] = ""):
-        if (
-            self.latest_memo is None
-            or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
-        ):
-            raise ValueError("No negotiation memo found")
-        memo = self.latest_memo
-        result = self.acp_contract_client.sign_memo(
-            memo.id,
-            False,
-            f"Job {self.id} rejected. {reason or ''}",
-        )
+        memo_content = f"Job {self.id} rejected. {reason or ''}"
+        if self.phase is ACPJobPhase.REQUEST:
+            if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
+                raise ValueError("No request memo found")
 
+            memo = self.latest_memo
+            result = self.acp_contract_client.sign_memo(
+                memo.id,
+                False,
+                memo_content
+            )
+            tx_hash = result.get("receipts", [])[0].get("transactionHash")
+            return tx_hash
+
+        result = self.acp_contract_client.create_memo(
+            self.id,
+            memo_content,
+            MemoType.MESSAGE,
+            True,
+            ACPJobPhase.REJECTED
+        )
         tx_hash = result.get("receipts", [])[0].get("transactionHash")
         return tx_hash
+
+    def respond(
+            self,
+            accept: bool,
+            reason: Optional[str] = "",
+    ) -> str:
+        if accept:
+            return self.accept(reason)
+
+        return self.reject(reason)
 
     @property
     def provider_agent(self) -> Optional["IACPAgent"]:
@@ -305,30 +325,7 @@ class ACPJob(BaseModel):
     def _get_memo_by_id(self, memo_id):
         return next((m for m in self.memos if m.id == memo_id), None)
 
-    def respond(
-        self,
-        accept: bool,
-        payload: Optional[GenericPayload[T]] = None,
-        reason: Optional[str] = None,
-    ) -> str:
-        if (
-            self.latest_memo is None
-            or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
-        ):
-            raise ValueError("No negotiation memo found")
-
-        if not reason:
-            reason = f"Job {self.id} {'accepted' if accept else 'rejected'}"
-
-        return self.acp_client.respond_to_job(
-            self.id,
-            self.latest_memo.id,
-            accept,
-            payload.model_dump_json() if payload else None,
-            reason,
-        )
-
-    def deliver(self, deliverable: IDeliverable):
+    def deliver(self, deliverable: DeliverablePayload):
         if (
             self.latest_memo is None
             or self.latest_memo.next_phase != ACPJobPhase.EVALUATION
@@ -351,6 +348,20 @@ class ACPJob(BaseModel):
 
     def create_notification(self, content: str):
         return self.acp_contract_client.create_memo(
+            job_id=self.id,
+            content=content,
+            memo_type=MemoType.NOTIFICATION,
+            is_secured=True,
+            next_phase=ACPJobPhase.COMPLETED,
+        )
+
+    def create_payable_notification(
+        self,
+        content: str,
+        amount: FareAmountBase,
+        expired_at: datetime = ,
+    ):
+        return self.acp_contract_client.create_payable_memo(
             job_id=self.id,
             content=content,
             memo_type=MemoType.NOTIFICATION,

@@ -22,8 +22,8 @@ class ACPJobOffering(BaseModel):
     provider_address: str
     name: str
     price: float
-    requirement: Optional[Dict[str, Any]] = None
-    deliverable: Optional[Dict[str, Any]] = None
+    requirement: Optional[Union[Dict[str, Any], str]] = None
+    deliverable: Optional[Union[Dict[str, Any], str]] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -60,10 +60,11 @@ class ACPJobOffering(BaseModel):
                     f"Invalid JSON in service requirement. Required format: {json.dumps(self.requirement, indent=2)}"
                 )
 
-            try:
-                validate(instance=service_requirement, schema=self.requirement)
-            except ValidationError as e:
-                raise ValueError(f"Invalid service requirement: {str(e)}")
+            if isinstance(self.requirement, dict):
+                try:
+                    validate(instance=service_requirement, schema=self.requirement)
+                except ValidationError as e:
+                    raise ValueError(f"Invalid service requirement: {str(e)}")
 
         final_service_requirement: Dict[str, Any] = {"name": self.name}
 

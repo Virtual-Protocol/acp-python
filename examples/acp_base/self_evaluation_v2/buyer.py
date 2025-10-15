@@ -65,7 +65,7 @@ def buyer():
 
     # Browse available agents based on a keyword
     relevant_agents = acp_client.browse_agents(
-        keyword="agency",
+        keyword="<your-filter-agent-keyword>",
         sort_by=[ACPAgentSort.SUCCESSFUL_JOB_COUNT],
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,

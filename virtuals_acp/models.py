@@ -85,10 +85,8 @@ class ACPOnlineStatus(str, Enum):
     ALL = "all"
 
 
-class IDeliverable(BaseModel):
-    type: str
-    value: Union[str, dict]
-
+DeliverablePayload = Union[str, Dict[str, Any]]
+IDeliverable = DeliverablePayload  # Deprecated: use DeliverablePayload instead
 
 @dataclass
 class IACPAgent:

@@ -8,7 +8,7 @@ from virtuals_acp.memo import ACPMemo
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
-from virtuals_acp.models import ACPJobPhase, IDeliverable
+from virtuals_acp.models import ACPJobPhase
 from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 
 # Configure logging
@@ -51,10 +51,10 @@ def seller():
                 logger.info(f"Job {job.id} rejected")
                 return
 
-            deliverable = IDeliverable(
-                type="url",
-                value="https://example.com",
-            )
+            deliverable = {
+                "type": "url",
+                "value": "https://example.com"
+            }
             logger.info(f"Delivering job {job.id} with deliverable {deliverable}")
             job.deliver(deliverable)
             logger.info(f"Job {job.id} delivered")

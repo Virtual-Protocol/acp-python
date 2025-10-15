@@ -11,7 +11,7 @@ from virtuals_acp.memo import ACPMemo, MemoType
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
-from virtuals_acp.models import ACPJobPhase, IDeliverable
+from virtuals_acp.models import ACPJobPhase
 from virtuals_acp.configs.configs import BASE_MAINNET_CONFIG_V2
 from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 from virtuals_acp.fare import FareAmount, FareAmountBase, Fare
@@ -93,7 +93,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
             outcomes = [outcomes]
 
         if len(outcomes) < 2:
-            return job.deliver(IDeliverable(type="message", value="Market creation failed: need >=2 outcomes"))
+            return job.deliver("Market creation failed: need >=2 outcomes")
 
         liquidity = float(job.requirement.get("liquidity", 0))
         per_outcome_liquidity = liquidity / len(outcomes)
@@ -108,7 +108,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
             outcome_pools=outcome_pools,
         )
 
-        return job.create_requirement_payable_memo(
+        return job.create_payable_requirement(
             "Provide initial liquidity to create market",
             MemoType.PAYABLE_REQUEST,
             FareAmount(liquidity, config.base_fare),
@@ -119,7 +119,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         logger.info(f"Accepts bet placement request | requirement={job.requirement}")
         memo_to_sign.sign(True, "Accepts bet placement")
 
-        return job.create_requirement_payable_memo(
+        return job.create_payable_requirement(
             f"Send {job.requirement['amount']} {job.requirement.get('token','USDC')} to place bet",
             MemoType.PAYABLE_REQUEST,
             FareAmount(float(job.requirement["amount"]), config.base_fare),
@@ -129,7 +129,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
     if job_name == JobName.CLOSE_BET:
         logger.info(f"Accepts close bet request | requirement={job.requirement}")
         memo_to_sign.sign(True, "Accepts bet closing")
-        return job.create_requirement_memo("Betting phase will be closed for this market")
+        return job.create_requirement("Betting phase will be closed for this market")
 
 
 def handle_task_transaction(job: ACPJob):
@@ -142,7 +142,7 @@ def handle_task_transaction(job: ACPJob):
     if job_name == JobName.CREATE_MARKET:
         market_id = _derive_market_id(job.requirement["question"])
         logger.info(f"Market created: {markets[market_id].question} | id={market_id}")
-        return job.deliver(IDeliverable(type="message", value=f"Market created with market id {market_id}"))
+        return job.deliver("Market created with market id {market_id}")
 
     if job_name == JobName.PLACE_BET:
         market_id = job.requirement["marketId"]
@@ -150,32 +150,32 @@ def handle_task_transaction(job: ACPJob):
         amount = float(job.requirement["amount"])
 
         if market_id not in markets:
-            return job.deliver(IDeliverable(type="message", value="Bet failed: market not found"))
+            return job.deliver("Bet failed: market not found")
 
         market = markets[market_id]
         if market.closed:
-            return job.deliver(IDeliverable(type="message", value="Bet failed: market is closed"))
+            return job.deliver("Bet failed: market is closed")
 
         if outcome not in market.outcomes:
-            return job.deliver(IDeliverable(type="message", value="Bet failed: invalid outcome"))
+            return job.deliver("Bet failed: invalid outcome")
 
         market.bets.append(Bet(outcome=outcome, amount=amount))
         market.outcome_pools[outcome] += amount
         logger.info(f"Bet placed: Bet {amount} on {outcome} in {market_id}")
 
-        return job.deliver(IDeliverable(type="message", value=f"Bet recorded!"))
+        return job.deliver("Bet recorded")
 
     if job_name == JobName.CLOSE_BET:
         market_id = job.requirement["marketId"]
 
         if market_id not in markets:
-            return job.deliver(IDeliverable(type="message", value="Close bet failed: market not found"))
+            return job.deliver("Close bet failed: market not found")
 
         market = markets[market_id]
         market.closed = True
         logger.info(f"Betting closed for market {market_id}")
 
-        return job.deliver(IDeliverable(type="message", value=f"Betting closed for market {market_id}"))
+        return job.deliver(f"Betting closed for market {market_id}")
 
 
 def seller():
