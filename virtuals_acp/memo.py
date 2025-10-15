@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, Type, Dict, List
+from typing import TYPE_CHECKING, Optional, Type, Dict, List, Any
 
 from pydantic import BaseModel, ConfigDict
 
@@ -13,40 +13,44 @@ from virtuals_acp.models import (
 )
 from virtuals_acp.utils import try_parse_json_model, try_validate_model
 
+if TYPE_CHECKING:
+    from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
+
 
 class ACPMemo(BaseModel):
+    contract_client: "BaseAcpContractClient"
     id: int
     type: MemoType
     content: str
-    next_phase: Optional[ACPJobPhase] = None
+    next_phase: ACPJobPhase
     status: ACPMemoStatus
     signed_reason: Optional[str] = None
     expiry: Optional[datetime] = None
+    payable_details: Optional[Dict[str, Any]] = None
+
     structured_content: Optional[GenericPayload] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    def __init__(self, **data):
-        super().__init__(**data)
-        self.structured_content = try_parse_json_model(
-            self.content, GenericPayload[Dict]
-        )
+    def model_post_init(self, _):
+        self.structured_content = try_parse_json_model(self.content, GenericPayload)
+
+        if self.payable_details:
+            self.payable_details["amount"] = int(self.payable_details["amount"])
+            self.payable_details["feeAmount"] = int(self.payable_details["feeAmount"])
 
     def __str__(self):
-        return f"AcpMemo({self.model_dump(exclude={'structured_content'})})"
+        return f"AcpMemo({self.model_dump(exclude={'payable_details'})})"
 
     @property
     def payload_type(self) -> Optional[PayloadType]:
         if self.structured_content is not None:
             return self.structured_content.type
 
-    def get_data_as(self, model: Type[T]) -> Optional[T | List[T]]:
-        if self.structured_content is None:
-            return None
+    def create(self, job_id: int, is_secured: bool = True):
+        return self.contract_client.create_memo(
+            job_id, self.content, self.type, is_secured, self.next_phase
+        )
 
-        data = self.structured_content.data
-        if isinstance(data, list):
-            validated = [try_validate_model(i, model) for i in data]
-            return validated[0] if len(validated) == 1 else validated
-        else:
-            return try_validate_model(data, model)
+    def sign(self, approved: bool, reason: str | None = None):
+        return self.contract_client.sign_memo(self.id, approved, reason)

@@ -14,12 +14,11 @@ from typing import (
 )
 from enum import Enum
 
-from pydantic import Field, BaseModel, ConfigDict
-from pydantic.aliases import AliasChoices
+from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
 if TYPE_CHECKING:
-    from virtuals_acp.offering import ACPJobOffering
+    from virtuals_acp.job_offering import ACPJobOffering, ACPResourceOffering
 
 
 class ACPMemoStatus(str, Enum):
@@ -29,19 +28,21 @@ class ACPMemoStatus(str, Enum):
     EXPIRED = "EXPIRED"
 
 
-class MemoType(Enum):
-    MESSAGE = 0
-    CONTEXT_URL = 1
-    IMAGE_URL = 2
-    VOICE_URL = 3
-    OBJECT_URL = 4
-    TXHASH = 5
-    PAYABLE_REQUEST = 6
-    PAYABLE_TRANSFER = 7
-    PAYABLE_TRANSFER_ESCROW = 8
+class MemoType(int, Enum):
+    MESSAGE = 0  # Text message
+    CONTEXT_URL = 1  # URL for context
+    IMAGE_URL = 2  # Image URL
+    VOICE_URL = 3  # Voice/audio URL
+    OBJECT_URL = 4  # Object/file URL
+    TXHASH = 5  # Transaction hash reference
+    PAYABLE_REQUEST = 6  # Payment request
+    PAYABLE_TRANSFER = 7  # Direct payment transfer
+    PAYABLE_TRANSFER_ESCROW = 8  # Escrowed payment transfer
+    NOTIFICATION = 9  # Notification
+    PAYABLE_NOTIFICATION = 10  # Payable notification
 
 
-class ACPJobPhase(Enum):
+class ACPJobPhase(int, Enum):
     REQUEST = 0
     NEGOTIATION = 1
     TRANSACTION = 2
@@ -49,18 +50,17 @@ class ACPJobPhase(Enum):
     COMPLETED = 4
     REJECTED = 5
     EXPIRED = 6
+    UNDEFINED = 999
 
     @classmethod
-    def from_value(cls, value: str | None):
-        if value is None:
-            return None
+    def from_value(cls, value: str):
         try:
             return cls(value)
         except ValueError:
-            return None
+            return cls.UNDEFINED
 
 
-class FeeType(Enum):
+class FeeType(int, Enum):
     NO_FEE = 0
     IMMEDIATE_FEE = 1
     DEFERRED_FEE = 2
@@ -85,10 +85,8 @@ class ACPOnlineStatus(str, Enum):
     ALL = "all"
 
 
-class IDeliverable(BaseModel):
-    type: str
-    value: Union[str, dict]
-
+DeliverablePayload = Union[str, Dict[str, Any]]
+IDeliverable = DeliverablePayload  # Deprecated: use DeliverablePayload instead
 
 @dataclass
 class IACPAgent:
@@ -96,7 +94,8 @@ class IACPAgent:
     name: str
     description: str
     wallet_address: str  # Checksummed address
-    offerings: List["ACPJobOffering"] = field(default_factory=list)
+    job_offerings: List["ACPJobOffering"] = field(default_factory=list)
+    resources: List["ACPResourceOffering"] = field(default_factory=list)
     twitter_handle: Optional[str] = None
     # Full fields from TS for completeness, though browse_agent returns a subset
     document_id: Optional[str] = None
@@ -148,12 +147,9 @@ class GenericPayload(PayloadModel, Generic[T]):
 
 class NegotiationPayload(PayloadModel):
     name: Optional[str] = None
-    service_requirement: Optional[Union[str, Dict[str, Any]]] = Field(
-        default=None,
-        validation_alias=AliasChoices(
-            "serviceRequirement", "service_requirement", "message"
-        ),
-    )
+    requirement: Optional[Union[str, Dict[str, Any]]] = None
+    service_name: Optional[str] = None
+    service_requirement: Optional[Dict[str, Any]] = None
     model_config = ConfigDict(extra="allow")
 
 
