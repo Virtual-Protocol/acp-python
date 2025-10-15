@@ -140,7 +140,7 @@ class ACPJob(BaseModel):
         )
         return fallback_memo.content if fallback_memo else None
 
-    def create_requirement_memo(self, content: str) -> str:
+    def create_requirement(self, content: str) -> str:
         result = self.acp_contract_client.create_memo(
             self.id,
             content,
@@ -152,7 +152,7 @@ class ACPJob(BaseModel):
         tx_hash = result.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
-    def create_requirement_payable_memo(
+    def create_payable_requirement(
         self,
         content: str,
         type: MemoType,
