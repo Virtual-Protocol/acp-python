@@ -365,7 +365,7 @@ class ACPJob(BaseModel):
         return self.acp_contract_client.create_payable_memo(
             job_id=self.id,
             content=prepare_payload(deliverable),
-            amount=amount.amount,
+            amount_base_unit=amount.amount,
             recipient=self.client_address,
             fee_amount_base_unit=fee_amount.amount,
             fee_type=FeeType.NO_FEE,
@@ -415,7 +415,7 @@ class ACPJob(BaseModel):
         return self.acp_contract_client.create_payable_memo(
             job_id=self.id,
             content=content,
-            amount=amount.amount,
+            amount_base_unit=amount.amount,
             recipient=self.client_address,
             fee_amount_base_unit=fee_amount.amount,
             fee_type=FeeType.NO_FEE,

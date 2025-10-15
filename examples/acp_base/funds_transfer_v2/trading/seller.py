@@ -2,7 +2,7 @@ import threading
 import logging
 import hashlib
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from enum import Enum
 from dotenv import load_dotenv
 
@@ -10,7 +10,7 @@ from virtuals_acp.memo import ACPMemo, MemoType
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
-from virtuals_acp.models import ACPJobPhase, TPSLConfig
+from virtuals_acp.models import ACPJobPhase
 from virtuals_acp.configs.configs import BASE_MAINNET_CONFIG_V2
 from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 from virtuals_acp.fare import FareAmount, Fare
@@ -34,8 +34,8 @@ class JobName(str, Enum):
 class Position:
     symbol: str
     amount: float
-    tp: Optional[TPSLConfig] = None
-    sl: Optional[TPSLConfig] = None
+    tp: Dict[str, float]
+    sl: Dict[str, float]
 
 @dataclass
 class ClientWallet:
@@ -55,29 +55,30 @@ def get_client_wallet(address: str) -> ClientWallet:
     return clients[derived]
 
 def prompt_tp_sl_action(job: ACPJob, wallet: ClientWallet):
-    logger.info(f"\n[Wallet] Current positions: {wallet.positions}")
+    logger.info(wallet)
     positions = [p for p in wallet.positions if p.amount > 0]
     if not positions:
-        logger.info("No active positions for TP/SL simulation.")
         return
 
-    logger.info("\nAvailable actions:\n1. Hit TP\n2. Hit SL")
-    selection = input("Select an action (enter 1 or 2): ").strip()
+    print("\nAvailable actions:\n1. Hit TP\n2. Hit SL")
+    selection = input("\nSelect an action (enter 1 or 2): ").strip()
     action = "TP" if selection == "1" else "SL" if selection == "2" else None
 
     if action:
         symbol = input("Token symbol to close: ").strip()
         position = next((p for p in wallet.positions if p.symbol.lower() == symbol.lower()), None)
         if position and position.amount > 0:
-            logger.info(f"{symbol} position hits {action}, sending remaining funds back to buyer.")
-            closing_amount = close_position(wallet, symbol)
-            multiplier = (
-                1 + (position.tp.percentage / 100.0) if action == "TP" else 1 - (position.sl.percentage / 100.0)
-            )
-            total_amount = closing_amount * multiplier
+            logger.info(f"{position.symbol} position hits {action}, sending remaining funds back to buyer.")
+            closing_amount = close_position(wallet, position.symbol)
             job.create_payable_notification(
-                f"{symbol} position has hit {action}. Closed {symbol} position with txn hash 0x0f60a30d...",
-                FareAmount(total_amount, config.base_fare),
+                f"{symbol} position has hit {action}. Closed {symbol} position with txn hash 0x0f60a30d66f1f3d21bad63e4e53e59d94ae286104fe8ea98f28425821edbca1b",
+                FareAmount(
+                    closing_amount * (
+                        (1 + ((position.tp.get("percentage") or 0) / 100)) if action == "TP"
+                        else (1 - ((position.sl.get("percentage") or 0) / 100))
+                    ),
+                    config.base_fare
+                ),
             )
             logger.info(f"{symbol} position funds sent back to buyer.")
             logger.info(wallet)
@@ -155,7 +156,7 @@ def handle_task_transaction(job: ACPJob):
         return
 
     if job_name == JobName.OPEN_POSITION:
-        adjust_position(wallet, job.requirement.get("symbol"), float(job.requirement.get("amount", 0)))
+        open_position(wallet, job.requirement)
         logger.info(f"Opening position: {job.requirement}")
         job.deliver("Opened position with txn 0x71c038a47fd90069f133e991c4f19093e37bef26ca5c78398b9c99687395a97a")
         logger.info("Position opened")
@@ -188,12 +189,19 @@ def handle_task_transaction(job: ACPJob):
     else:
         logger.warning(f"[handle_task_transaction] Unsupported job name | job_id={job_id}, job_name={job_name}")
 
-def adjust_position(wallet: ClientWallet, symbol: str, delta: float) -> None:
-    pos = next((p for p in wallet.positions if p.symbol == symbol), None)
+def open_position(wallet: ClientWallet, payload: dict[str, Any]) -> None:
+    pos = next((p for p in wallet.positions if p.symbol == payload.get("symbol")), None)
     if pos:
-        pos.amount += delta
+        pos.amount += payload.get("amount")
     else:
-        wallet.positions.append(Position(symbol=symbol, amount=delta))
+        wallet.positions.append(
+            Position(
+                symbol=payload.get("symbol"),
+                amount=payload.get("amount"),
+                tp=payload.get("tp"),
+                sl=payload.get("sl")
+            )
+        )
 
 def close_position(wallet: ClientWallet, symbol: str) -> Optional[float]:
     pos = next((p for p in wallet.positions if p.symbol == symbol), None)
