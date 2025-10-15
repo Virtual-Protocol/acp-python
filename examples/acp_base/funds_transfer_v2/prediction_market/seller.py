@@ -85,7 +85,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
 
     if job_name == JobName.CREATE_MARKET:
         logger.info(f"Accepts create market request | requirement={job.requirement}")
-        memo_to_sign.sign(True, "Accepts market creation")
+        job.respond(True, "Accepts market creation")
 
         market_id = _derive_market_id(job.requirement["question"])
         outcomes = job.requirement.get("outcomes", [])
@@ -117,7 +117,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
 
     if job_name == JobName.PLACE_BET:
         logger.info(f"Accepts bet placement request | requirement={job.requirement}")
-        memo_to_sign.sign(True, "Accepts bet placement")
+        job.respond(True, "Accepts bet placement")
 
         return job.create_payable_requirement(
             f"Send {job.requirement['amount']} {job.requirement.get('token','USDC')} to place bet",
@@ -128,7 +128,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
 
     if job_name == JobName.CLOSE_BET:
         logger.info(f"Accepts close bet request | requirement={job.requirement}")
-        memo_to_sign.sign(True, "Accepts bet closing")
+        job.respond(True, "Accepts bet closing")
         return job.create_requirement("Betting phase will be closed for this market")
 
 

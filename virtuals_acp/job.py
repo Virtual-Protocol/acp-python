@@ -255,15 +255,7 @@ class ACPJob(BaseModel):
             raise ValueError("No negotiation memo found")
         memo = self.latest_memo
 
-        memo.sign(True, reason)
-
-        result = self.acp_contract_client.create_memo(
-            self.id,
-            f"Job {self.id} accepted. {reason or ''}",
-            MemoType.MESSAGE,
-            True,
-            ACPJobPhase.TRANSACTION,
-        )
+        result = memo.sign(True, reason)
         tx_hash = result.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
