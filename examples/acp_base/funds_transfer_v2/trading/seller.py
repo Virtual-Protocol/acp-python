@@ -55,37 +55,44 @@ def get_client_wallet(address: str) -> ClientWallet:
     return clients[derived]
 
 def prompt_tp_sl_action(job: ACPJob, wallet: ClientWallet):
-    logger.info(wallet)
+    logger.info(f"Wallet: {wallet}")
     positions = [p for p in wallet.positions if p.amount > 0]
     if not positions:
         return
 
-    print("\nAvailable actions:\n1. Hit TP\n2. Hit SL")
-    selection = input("\nSelect an action (enter 1 or 2): ").strip()
-    action = "TP" if selection == "1" else "SL" if selection == "2" else None
+    action = None
+    while action not in ("TP", "SL"):
+        print("\nAvailable actions:\n1. Hit TP\n2. Hit SL")
+        selection = input("\nSelect an action (enter 1 or 2): ").strip()
+        if selection == "1":
+            action = "TP"
+        elif selection == "2":
+            action = "SL"
+        else:
+            logger.warning("Invalid selection. Please try again.")
 
-    if action:
+    position = None
+    while position is None:
         symbol = input("Token symbol to close: ").strip()
         position = next((p for p in wallet.positions if p.symbol.lower() == symbol.lower()), None)
-        if position and position.amount > 0:
-            logger.info(f"{position.symbol} position hits {action}, sending remaining funds back to buyer.")
-            closing_amount = close_position(wallet, position.symbol)
-            job.create_payable_notification(
-                f"{symbol} position has hit {action}. Closed {symbol} position with txn hash 0x0f60a30d66f1f3d21bad63e4e53e59d94ae286104fe8ea98f28425821edbca1b",
-                FareAmount(
-                    closing_amount * (
-                        (1 + ((position.tp.get("percentage") or 0) / 100)) if action == "TP"
-                        else (1 - ((position.sl.get("percentage") or 0) / 100))
-                    ),
-                    config.base_fare
-                ),
-            )
-            logger.info(f"{position.symbol} position funds sent back to buyer.")
-            logger.info(wallet)
-        else:
-            logger.warning("Invalid token symbol or position amount is zero.")
-    else:
-        logger.warning("Invalid selection. Please try again.")
+        if not position or position.amount <= 0:
+            logger.warning("Invalid token symbol or position amount is zero. Please try again.")
+            position = None
+
+    logger.info(f"{position.symbol} position hits {action}, sending remaining funds back to buyer.")
+    closing_amount = close_position(wallet, position.symbol)
+    job.create_payable_notification(
+        f"{position.symbol} position has hit {action}. Closed {position.symbol} position with txn hash 0x0f60a30d66f1f3d21bad63e4e53e59d94ae286104fe8ea98f28425821edbca1b",
+        FareAmount(
+            closing_amount * (
+                (1 + ((position.tp.get("percentage") or 0) / 100)) if action == "TP"
+                else (1 - ((position.sl.get("percentage") or 0) / 100))
+            ),
+            config.base_fare
+        ),
+    )
+    logger.info(f"{position.symbol} position funds sent back to buyer.")
+    logger.info(f"Wallet: {wallet}")
 
 def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None) -> None:
     job_id, job_phase, job_name = job.id, job.phase, job.name
@@ -173,7 +180,7 @@ def handle_task_transaction(job: ACPJob):
             FareAmount(closing_amount, config.base_fare),
         )
         logger.info("Closing amount returned")
-        logger.info(wallet)
+        logger.info(f"Wallet: {wallet}")
 
     if job_name == JobName.SWAP_TOKEN:
         to_contract = job.requirement.get("toContractAddress")

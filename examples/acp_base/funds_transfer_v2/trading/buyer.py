@@ -169,7 +169,6 @@ def main():
 
         try:
             answer = input("\nSelect an action (enter the number): ").strip()
-            logger.info("Initiating job...")
             selected_index = int(answer)
         except ValueError:
             logger.info("Invalid input. Please enter a number.")
@@ -180,6 +179,7 @@ def main():
         )
 
         if selected_action:
+            logger.info("Initiating job...")
             current_job_id = selected_action["action"]()
             logger.info(f"Job {current_job_id} initiated")
         else:
