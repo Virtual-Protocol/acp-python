@@ -114,7 +114,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         logger.info(f"Accepts position opening request | requirement={job.requirement}")
         job.respond(True, "Accepts position opening")
         amount = float(job.requirement.get("amount", 0))
-        return job.create_requirement_payable_memo(
+        return job.create_payable_requirement(
             "Send me USDC to open position",
             MemoType.PAYABLE_REQUEST,
             FareAmount(amount, config.base_fare),
@@ -127,18 +127,20 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         position = next((p for p in wallet.positions if p.symbol == symbol), None)
         position_is_valid = position is not None and position.amount > 0
         logger.info(f'{"Accepts" if position_is_valid else "Rejects"} position closing request | requirement={job.requirement}')
-        return job.respond(
-            position_is_valid,
-            f"{'Accepts' if position_is_valid else 'Rejects'} position closing. "
-            + (f"Please make payment to close {symbol} position." if position_is_valid else "Position is invalid.")
-        )
+        if position_is_valid:
+            response = f"Accepts position closing. Please make payment to close {symbol} position."
+        else:
+            response = "Rejects position closing. Position is invalid."
+
+        job.respond(position_is_valid, response)
+        return job.create_requirement(response)
 
     if job_name == JobName.SWAP_TOKEN:
         logger.info(f"Accepts token swapping request | requirement={job.requirement}")
         job.respond(True, "Accepts token swapping request")
         amount = float(job.requirement.get("amount", 0))
         from_contract = job.requirement.get("fromContractAddress")
-        return job.create_requirement_payable_memo(
+        return job.create_payable_requirement(
             f"Send me {job.requirement.get('fromSymbol', 'USDC')} to swap to {job.requirement.get('toSymbol', 'VIRTUAL')}",
             MemoType.PAYABLE_REQUEST,
             FareAmount(amount, Fare.from_contract_address(from_contract, config)),
