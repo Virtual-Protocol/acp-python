@@ -80,7 +80,7 @@ def prompt_tp_sl_action(job: ACPJob, wallet: ClientWallet):
                     config.base_fare
                 ),
             )
-            logger.info(f"{symbol} position funds sent back to buyer.")
+            logger.info(f"{position.symbol} position funds sent back to buyer.")
             logger.info(wallet)
         else:
             logger.warning("Invalid token symbol or position amount is zero.")

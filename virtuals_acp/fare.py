@@ -55,6 +55,15 @@ class FareAmountBase(ABC):
         self.amount = amount
         self.fare = fare
 
+    def __repr__(self) -> str:
+        return (
+            f"<FareAmount amount={self.amount} "
+            f"token={self.fare.contract_address} "
+            f"decimals={self.fare.decimals}>"
+        )
+
+    __str__ = __repr__
+
     @abstractmethod
     def add(self, other: "FareAmountBase") -> "FareAmountBase":
         pass
