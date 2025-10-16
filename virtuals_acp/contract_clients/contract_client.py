@@ -105,7 +105,7 @@ class ACPContractClient(BaseAcpContractClient):
                 job_id, budget_base_unit, payment_token_address
             )
 
-            return {"tx_response": tx_response, "job_id": job_id}
+            return tx_response
         except Exception as e:
             raise ACPError("Failed to create job", e)
 
