@@ -216,7 +216,7 @@ class BaseAcpContractClient(ABC):
     ) -> Dict[str, Any]:
         token = payment_token_address or self.config.base_fare.contract_address
         data = self._build_user_operation(
-            "setBudgetWithPaymentToken", [job_id, budget_base_unit, token], token
+            "setBudgetWithPaymentToken", [job_id, budget_base_unit, token]
         )
         return self._send_user_operation(data)
 

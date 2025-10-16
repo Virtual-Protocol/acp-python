@@ -35,10 +35,12 @@ def seller():
         ):
             response = True
             logger.info(f"Responding to job {job.id} with requirement: {job.requirement}")
-            job.respond(response)
-            logger.info(f"Job {job.id} responded with {response}")
             if response:
+                job.accept("Job requirement matches agent capability")
                 job.create_requirement(f"Job {job.id} accepted, please make payment to proceed")
+            else:
+                job.reject("Job requirement does not meet agent capability")
+            logger.info(f"Job {job.id} responded with {response}")
 
         elif (
             job.phase == ACPJobPhase.TRANSACTION

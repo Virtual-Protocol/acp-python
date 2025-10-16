@@ -247,19 +247,20 @@ class ACPJob(BaseModel):
         tx_hash = result.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
-    def accept(self, reason: Optional[str] = "") -> str:
+    def accept(self, reason: Optional[str] = None) -> str:
+        memo_content = f"Job {self.id} accepted. {reason or ''}"
         if (
             self.latest_memo is None
             or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
         ):
-            raise ValueError("No negotiation memo found")
+            raise ValueError("No request memo found")
         memo = self.latest_memo
 
-        result = memo.sign(True, reason)
+        result = memo.sign(True, memo_content)
         tx_hash = result.get("receipts", [])[0].get("transactionHash")
         return tx_hash
 
-    def reject(self, reason: Optional[str] = ""):
+    def reject(self, reason: Optional[str] = None):
         memo_content = f"Job {self.id} rejected. {reason or ''}"
         if self.phase is ACPJobPhase.REQUEST:
             if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
@@ -287,12 +288,14 @@ class ACPJob(BaseModel):
     def respond(
             self,
             accept: bool,
-            reason: Optional[str] = "",
+            reason: Optional[str] = None,
     ) -> str:
+        memo_content = f"{reason or f"Job {self.id} {"accepted" if accept else "rejected"}."}"
         if accept:
-            return self.accept(reason)
+            self.accept(memo_content)
+            return self.create_requirement(memo_content)
 
-        return self.reject(reason)
+        return self.reject(memo_content)
 
     @property
     def provider_agent(self) -> Optional["IACPAgent"]:
