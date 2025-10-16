@@ -341,13 +341,15 @@ class VirtualsACP:
 
             agents = []
             for agent_data in filtered_agents:
+                contract_client = self.contract_client_by_address(
+                    agent_data.get("contractAddress")
+                )
+                provider_address = agent_data.get("providerAddress")
                 job_offerings = [
                     ACPJobOffering(
                         acp_client=self,
-                        contract_client=self.contract_client_by_address(
-                            data.get("contractAddress")
-                        ),
-                        provider_address=agent_data["walletAddress"],
+                        contract_client=contract_client,
+                        provider_address=provider_address,
                         name=job["name"],
                         price=job["price"],
                         requirement=job.get("requirement", None),
