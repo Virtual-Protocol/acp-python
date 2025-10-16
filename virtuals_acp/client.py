@@ -905,9 +905,9 @@ class VirtualsACP:
                     provider_address=agent_data["walletAddress"],
                     name=offering["name"],
                     price=offering["price"],
-                    requirement=offering.get("requirementSchema", None),
+                    requirement=offering.get("requirement", None),
                 )
-                for offering in agent_data.get("offerings", [])
+                for offering in agent_data.get("jobs", [])
             ]
 
             resources = [
