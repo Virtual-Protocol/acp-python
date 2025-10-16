@@ -33,9 +33,12 @@ def seller():
             and memo_to_sign is not None
             and memo_to_sign.next_phase == ACPJobPhase.NEGOTIATION
         ):
-            logger.info(f"Responding to job {job.id}")
-            job.respond(True)
-            logger.info(f"Job {job.id} responded")
+            response = True
+            logger.info(f"Responding to job {job.id} with requirement: {job.requirement}")
+            job.respond(response)
+            logger.info(f"Job {job.id} responded with {response}")
+            if response:
+                job.create_requirement(f"Job {job.id} accepted, please make payment to proceed")
 
         elif (
             job.phase == ACPJobPhase.TRANSACTION
