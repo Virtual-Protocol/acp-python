@@ -28,7 +28,7 @@ class ACPJob(BaseModel):
     evaluator_address: str
     contract_address: Optional[str] = None
     price: float
-    price_token_address: str
+    price_token_address: Optional[str] = None
     memos: List[ACPMemo] = Field(default_factory=list)
     phase: ACPJobPhase
     context: Dict[str, Any] | None
