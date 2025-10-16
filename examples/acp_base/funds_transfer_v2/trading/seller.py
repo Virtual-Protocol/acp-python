@@ -119,7 +119,7 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
 
     if job_name == JobName.OPEN_POSITION:
         logger.info(f"Accepts position opening request | requirement={job.requirement}")
-        job.respond(True, "Accepts position opening")
+        job.accept("Accepts position opening")
         amount = float(job.requirement.get("amount", 0))
         return job.create_payable_requirement(
             "Send me USDC to open position",
@@ -136,15 +136,15 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         logger.info(f'{"Accepts" if position_is_valid else "Rejects"} position closing request | requirement={job.requirement}')
         if position_is_valid:
             response = f"Accepts position closing. Please make payment to close {symbol} position."
+            job.accept(response)
+            return job.create_requirement(response)
         else:
             response = "Rejects position closing. Position is invalid."
-
-        job.respond(position_is_valid, response)
-        return job.create_requirement(response)
+            return job.reject(response)
 
     if job_name == JobName.SWAP_TOKEN:
         logger.info(f"Accepts token swapping request | requirement={job.requirement}")
-        job.respond(True, "Accepts token swapping request")
+        job.accept("Accepts token swapping request")
         amount = float(job.requirement.get("amount", 0))
         from_contract = job.requirement.get("fromContractAddress")
         return job.create_payable_requirement(
