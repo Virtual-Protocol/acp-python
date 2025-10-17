@@ -138,7 +138,6 @@ class ACPContractClient(BaseAcpContractClient):
                     memo_type.value,
                     next_phase.value,
                     math.floor(expired_at.timestamp()),
-                    secured,
                 ],
             )
 
