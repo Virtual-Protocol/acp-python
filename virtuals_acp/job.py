@@ -290,7 +290,7 @@ class ACPJob(BaseModel):
             accept: bool,
             reason: Optional[str] = None,
     ) -> str:
-        memo_content = f"{reason or f"Job {self.id} {"accepted" if accept else "rejected"}."}"
+        memo_content = f"Job {self.id} {'accepted' if accept else 'rejected'}. {reason or ''}"
         if accept:
             self.accept(memo_content)
             return self.create_requirement(memo_content)
