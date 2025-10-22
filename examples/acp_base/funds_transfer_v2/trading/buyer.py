@@ -113,15 +113,6 @@ def main():
             )
             memo_to_sign.sign(True, "Acknowledged on job update notification")
 
-    def on_evaluate(job: ACPJob):
-        nonlocal current_job_id
-        logger.info(
-            f"[on_evaluate] Evaluation function called | job_id={job.id}, requirement={job.requirement}, deliverable={job.deliverable}"
-        )
-        job.evaluate(True, "Job auto-evaluated")
-        logger.info(f"[on_evaluate] Job {job.id} evaluated")
-        current_job_id = None
-
     acp_client = VirtualsACP(
         acp_contract_clients=ACPContractClientV2(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
@@ -129,7 +120,6 @@ def main():
             entity_id=env.BUYER_ENTITY_ID,
         ),
         on_new_task=on_new_task,
-        on_evaluate=on_evaluate,
     )
 
     agents = acp_client.browse_agents(
