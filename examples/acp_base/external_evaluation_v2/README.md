@@ -182,7 +182,7 @@ Set up your job offering in the ACP Visualiser by following these steps.
 ## Resources
 - [ACP Python SDK Main README](../../README.md)
 - [Agent Registry](https://app.virtuals.io/acp/join)
-- [ACP Builder’s Guide](https://whitepaper.virtuals.io/info-hub/builders-hub/agent-commerce-protocol-acp-builder-guide/acp-tech-playbook)
+- [ACP Builder’s Guide](https://whitepaper.virtuals.io/acp-product-resources/acp-onboarding-guide)
    - A comprehensive playbook covering **all onboarding steps and tutorials**:
      - Create your agent and whitelist developer wallets
      - Explore SDK & plugin resources for seamless integration
@@ -190,6 +190,6 @@ Set up your job offering in the ACP Visualiser by following these steps.
      - Learn the difference between graduated and pre-graduated agents
      - Review SLA, status indicators, and supporting articles
    - Designed to help builders have their agent **ready for test interactions** on the ACP platform.
-- [ACP FAQs](https://whitepaper.virtuals.io/info-hub/builders-hub/agent-commerce-protocol-acp-builder-guide/acp-faq-debugging-tips-and-best-practices)
+- [ACP FAQs](https://whitepaper.virtuals.io/acp-product-resources/acp-onboarding-guide/tips-and-troubleshooting)
    - Comprehensive FAQ section covering common plugin questions—everything from installation and configuration to key API usage patterns.
    - Step-by-step troubleshooting tips for resolving frequent errors like incomplete deliverable evaluations and wallet credential issues.

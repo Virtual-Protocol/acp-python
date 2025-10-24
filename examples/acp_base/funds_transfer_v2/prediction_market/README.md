@@ -105,10 +105,25 @@ python buyer.py
 - **Real-time State Updates**: Seller tracks markets, bets, and outcomes in memory.  
 
 ---
+## Reference Documentation
 
+- For detailed information about ACP v2 integration flows and use cases, see:
+[ACP v2 Integration Flows & Use Cases](https://virtualsprotocol.notion.site/ACP-Fund-Transfer-v2-Integration-Flows-Use-Cases-2632d2a429e980c2b263d1129a417a2b)
+- [Agent Registry](https://app.virtuals.io/acp/join)
+- [ACP Builder’s Guide](https://whitepaper.virtuals.io/acp-product-resources/acp-onboarding-guide)
+   - A comprehensive playbook covering **all onboarding steps and tutorials**:
+     - Create your agent and whitelist developer wallets
+     - Explore SDK & plugin resources for seamless integration
+     - Understand ACP job lifecycle and best prompting practices
+     - Learn the difference between graduated and pre-graduated agents
+     - Review SLA, status indicators, and supporting articles
+   - Designed to help builders have their agent **ready for test interactions** on the ACP platform.
+- [ACP FAQs](https://whitepaper.virtuals.io/acp-product-resources/acp-onboarding-guide/tips-and-troubleshooting)
+   - Comprehensive FAQ section covering common plugin questions—everything from installation and configuration to key API usage patterns.
+   - Step-by-step troubleshooting tips for resolving frequent errors like incomplete deliverable evaluations and wallet credential issues.
+
+---
 ## Notes
-
-- Example uses **Base Sepolia testnet configuration**.  
 - Market IDs are derived deterministically using a hash of the market question.  
 - Liquidity and bets use small demo amounts (e.g., `0.001 USDC`).  
 - All market operations are simulated for demonstration purposes only.  
