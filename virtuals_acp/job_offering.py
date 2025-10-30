@@ -5,7 +5,7 @@ from pydantic import BaseModel, field_validator, ConfigDict
 from jsonschema import ValidationError, validate
 from virtuals_acp.fare import FareAmount
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
-from virtuals_acp.models import ACPJobPhase, MemoType
+from virtuals_acp.models import ACPJobPhase, MemoType, PriceType
 from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG
 from web3 import Web3
 
@@ -22,6 +22,7 @@ class ACPJobOffering(BaseModel):
     provider_address: str
     name: str
     price: float
+    price_type: PriceType = PriceType.FIXED
     requirement: Optional[Union[Dict[str, Any], str]] = None
     deliverable: Optional[Union[Dict[str, Any], str]] = None
 
@@ -66,15 +67,18 @@ class ACPJobOffering(BaseModel):
                 except ValidationError as e:
                     raise ValueError(f"Invalid service requirement: {str(e)}")
 
-        final_service_requirement: Dict[str, Any] = {"name": self.name}
-
-        if isinstance(service_requirement, str):
-            final_service_requirement["requirement"] = service_requirement
-        else:
-            final_service_requirement["requirement"] = service_requirement
+        final_service_requirement: Dict[str, Any] = {
+            "name": self.name,
+            "requirement": service_requirement,
+            "priceValue": self.price,
+            "priceType": self.price_type,
+        }
 
         # Prepare fare amount based on this offering's price and contract's base fare
-        fare_amount = FareAmount(self.price, self.contract_client.config.base_fare)
+        fare_amount = FareAmount(
+            self.price if self.price_type == PriceType.FIXED else 0,
+            self.contract_client.config.base_fare
+        )
 
         # Lookup existing account between client and provider
         account = self.acp_client.get_by_client_and_provider(

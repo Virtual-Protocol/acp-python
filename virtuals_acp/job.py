@@ -1,11 +1,11 @@
 from datetime import datetime, timezone, timedelta
-from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union
+from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union, Literal
 
 from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import (NegotiationPayload, ACPMemoStatus)
+from virtuals_acp.models import (NegotiationPayload, ACPMemoStatus, PriceType)
 from virtuals_acp.utils import try_parse_json_model, prepare_payload, get_txn_hash_from_response
 from virtuals_acp.models import (
     ACPJobPhase,
@@ -23,21 +23,23 @@ if TYPE_CHECKING:
 class ACPJob(BaseModel):
     acp_client: "VirtualsACP"
     id: int
-    client_address: str
     provider_address: str
+    client_address: str
     evaluator_address: str
+    contract_address: Optional[str] = None
     price: float
     price_token_address: Optional[str] = None
     memos: List[ACPMemo] = Field(default_factory=list)
     phase: ACPJobPhase
     context: Dict[str, Any] | None
-    contract_address: Optional[str] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _base_fare: Optional[Fare] = None
-    _name: Optional[str] = None
-    _requirement: Optional[Union[str, Dict[str, Any]]] = None
+    _base_fare: Fare
+    _name: str
+    _requirement: Union[str, Dict[str, Any]]
+    _price_type: PriceType
+    _price_value: float
 
     def model_post_init(self, __context: Any) -> None:
         if self.acp_client:
@@ -59,19 +61,32 @@ class ACPJob(BaseModel):
             return None
 
         content_obj = try_parse_json_model(memo.content, NegotiationPayload)
-        if content_obj:
-            self._requirement = (
-                content_obj.service_requirement or content_obj.requirement
-            )
-            self._name = content_obj.service_name or content_obj.name
+
+        if not content_obj:
+            return None
+
+        self._requirement = (
+            content_obj.service_requirement or content_obj.requirement
+        )
+        self._name = content_obj.service_name or content_obj.name
+        self._price_type = content_obj.price_type or PriceType.FIXED
+        self._price_value = content_obj.price_value or self.price
 
     @property
-    def requirement(self) -> Optional[Union[str, Dict[str, Any]]]:
+    def requirement(self) -> Union[str, Dict[str, Any]]:
         return self._requirement
 
     @property
-    def name(self) -> Optional[str]:
+    def name(self) -> str:
         return self._name
+
+    @property
+    def price_type(self) -> PriceType:
+        return self._price_type
+
+    @property
+    def price_value(self) -> float:
+        return self._price_value
 
     def __str__(self):
         return (
@@ -159,7 +174,10 @@ class ACPJob(BaseModel):
     def create_payable_requirement(
         self,
         content: str,
-        type: MemoType,
+        type: Literal[
+            MemoType.PAYABLE_REQUEST,
+            MemoType.PAYABLE_TRANSFER_ESCROW
+        ],
         amount: FareAmountBase,
         recipient: str,
         expired_at: Optional[datetime] = None,
@@ -168,10 +186,7 @@ class ACPJob(BaseModel):
 
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
-        if (
-            type == MemoType.PAYABLE_TRANSFER_ESCROW
-            or type == MemoType.PAYABLE_TRANSFER
-        ):
+        if type == MemoType.PAYABLE_TRANSFER_ESCROW:
             operations.append(
                 self.acp_contract_client.approve_allowance(
                     amount.amount,
@@ -179,7 +194,12 @@ class ACPJob(BaseModel):
                 )
             )
 
-        fee_amount = FareAmount(0, self.base_fare)
+        if self._price_type == PriceType.PERCENTAGE:
+            fee_amount = int(self.price_value * 10000)
+            fee_type = FeeType.PERCENTAGE_FEE
+        else:
+            fee_amount = (FareAmount(0, self.base_fare)).amount
+            fee_type = FeeType.NO_FEE
 
         operations.append(
             self.acp_contract_client.create_payable_memo(
@@ -187,8 +207,8 @@ class ACPJob(BaseModel):
                 content,
                 amount.amount,
                 recipient,
-                fee_amount.amount,
-                FeeType.NO_FEE,
+                fee_amount,
+                fee_type,
                 ACPJobPhase.TRANSACTION,
                 type,
                 expired_at,
@@ -205,11 +225,11 @@ class ACPJob(BaseModel):
         )
 
         if not memo:
-            raise Exception("No transaction memo found")
+            raise Exception("No negotiation memo found")
 
         operations: List[Dict[str, Any]] = []
-        base_fare_amount = FareAmount(self.price, self.base_fare)
 
+        base_fare_amount = FareAmount(self.price, self.base_fare)
         if memo.payable_details:
             transfer_amount = FareAmountBase.from_contract_address(
                 memo.payable_details["amount"],
