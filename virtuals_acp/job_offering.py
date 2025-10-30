@@ -1,11 +1,11 @@
 from datetime import datetime, timezone, timedelta
 import json
-from typing import Any, Dict, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, Optional, Union, TYPE_CHECKING, List
 from pydantic import BaseModel, field_validator, ConfigDict
 from jsonschema import ValidationError, validate
 from virtuals_acp.fare import FareAmount
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
-from virtuals_acp.models import ACPJobPhase, MemoType
+from virtuals_acp.models import ACPJobPhase, MemoType, OperationPayload
 from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG, BASE_SEPOLIA_ACP_X402_CONFIG
 from virtuals_acp.constants import USDC_TOKEN_ADDRESS
 from web3 import Web3
@@ -99,11 +99,10 @@ class ACPJobOffering(BaseModel):
         usdc_token_address = USDC_TOKEN_ADDRESS[chain_id]
         is_usdc_payment_token = usdc_token_address == fare_amount.fare.contract_address
 
-        create_job_payload: Dict[str, Any] = {}
         if use_simple_create or not account:
             # If the contract has x402_config and USDC is used, call create_job_with_x402
             if getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token:
-                create_job_payload = self.contract_client.create_job_with_x402(
+                create_job_operation = self.contract_client.create_job_with_x402(
                     self.provider_address,
                     evaluator_address or getattr(self.contract_client, "wallet_address", self.contract_client.agent_wallet_address),
                     expired_at,
@@ -112,7 +111,7 @@ class ACPJobOffering(BaseModel):
                     "",
                 )
             else:
-                create_job_payload = self.contract_client.create_job(
+                create_job_operation = self.contract_client.create_job(
                     self.provider_address,
                     evaluator_address or getattr(self.contract_client, "wallet_address", self.contract_client.agent_wallet_address),
                     expired_at,
@@ -126,16 +125,16 @@ class ACPJobOffering(BaseModel):
                 if evaluator_address
                 else ZERO_ADDRESS
             )
-            create_job_payload = self.contract_client.create_job_with_account(
+            create_job_operation = self.contract_client.create_job_with_account(
                 account.id,
                 evaluator_address or self.contract_client.agent_wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
                 expired_at or datetime.utcnow(),
             )
-            
-        response = create_job_payload
-        
+
+        response = self.contract_client.handle_operation([create_job_operation])
+
         job_id = self.contract_client.get_job_id(
             response,
             self.contract_client.agent_wallet_address,
@@ -146,13 +145,27 @@ class ACPJobOffering(BaseModel):
             job_id, fare_amount.amount, fare_amount.fare.contract_address
         )
 
-        self.contract_client.create_memo(
+        operations: List[OperationPayload] = []
+        
+        operation = self.contract_client.set_budget_with_payment_token(
             job_id,
-            json.dumps(final_service_requirement),
-            MemoType.MESSAGE,
-            True,
-            ACPJobPhase.NEGOTIATION,
+            fare_amount.amount,
+            fare_amount.fare.contract_address,
         )
+        
+        if operation:
+            operations.append(operation)
+
+        operations.append(
+            self.contract_client.create_memo(
+                job_id,
+                json.dumps(final_service_requirement),
+                MemoType.MESSAGE,
+                True,
+                ACPJobPhase.NEGOTIATION,
+            )
+        )
+        self.contract_client.handle_operation(operations)
 
         return job_id
 

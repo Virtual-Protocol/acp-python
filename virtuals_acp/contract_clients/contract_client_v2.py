@@ -9,6 +9,7 @@ from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG_V2
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
+from virtuals_acp.models import OperationPayload
 
 
 class ACPContractClientV2(BaseAcpContractClient):
@@ -64,7 +65,7 @@ class ACPContractClientV2(BaseAcpContractClient):
         random_bytes = secrets.token_bytes(bytes_len)
         return int.from_bytes(random_bytes, byteorder="big")
 
-    def _send_user_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def handle_operation(self, trx_data: List[OperationPayload]) -> Dict[str, Any]:
         return self.alchemy_kit.handle_user_operation(trx_data)
 
     def get_job_id(

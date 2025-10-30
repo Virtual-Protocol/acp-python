@@ -18,7 +18,7 @@ from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
-from virtuals_acp.models import ACPJobPhase, MemoType, FeeType, AcpJobX402PaymentDetails,X402PayableRequest,X402Payment,X402PayableRequirements
+from virtuals_acp.models import ACPJobPhase, MemoType, FeeType, AcpJobX402PaymentDetails,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload
 from virtuals_acp.constants import X402_AUTHORIZATION_TYPES, VERIFYING_CONTRACT_ADDRESS
 from virtuals_acp.abis.flat_token_v2_abi import FIAT_TOKEN_V2_ABI
 from virtuals_acp.utils import safe_base64_encode
@@ -46,7 +46,7 @@ class ACPContractClient(BaseAcpContractClient):
         random_bytes = secrets.token_bytes(bytes_len)
         return int.from_bytes(random_bytes, byteorder="big")
 
-    def _send_user_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def handle_operation(self, trx_data: List[OperationPayload]) -> Dict[str, Any]:
         return self.alchemy_kit.handle_user_operation(trx_data)
 
     def get_job_id(
@@ -99,25 +99,38 @@ class ACPContractClient(BaseAcpContractClient):
         payment_token_address: str,
         budget_base_unit: int,
         metadata: str = "",
-    ) -> Dict[str, Any]:
+    ) -> OperationPayload:
         try:
             provider_address = Web3.to_checksum_address(provider_address)
             evaluator_address = Web3.to_checksum_address(evaluator_address)
             expire_timestamp = math.floor(expire_at.timestamp())
 
-            data = self._build_user_operation(
+            operation = self._build_user_operation(
                 "createJob", [provider_address, evaluator_address, expire_timestamp]
             )
-            tx_response = self._send_user_operation(data)
             
-            # Handle budget in job offering -> initiate_job
-            # self.set_budget_with_payment_token(
-            #     job_id, budget_base_unit, payment_token_address
-            # )
-
-            return tx_response
+            return OperationPayload(
+                data=operation["data"],
+                contractAddress=operation['to'],
+            )
         except Exception as e:
             raise ACPError("Failed to create job", e)
+
+    def set_budget_with_payment_token(
+            self,
+            job_id: int,
+            budget_base_unit: int,
+            payment_token_address: Optional[str] = None,
+    ) -> OperationPayload:
+        token = payment_token_address or self.config.base_fare.contract_address
+        operation = self._build_user_operation(
+            "setBudgetWithPaymentToken", [job_id, budget_base_unit, token]
+        )
+
+        return OperationPayload(
+            data=operation["data"],
+            contractAddress=operation['to'],
+        )
 
     def create_payable_memo(
         self,
@@ -132,10 +145,10 @@ class ACPContractClient(BaseAcpContractClient):
         expired_at: datetime,
         token: Optional[str] = None,
         secured: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> OperationPayload:
         try:
             token_address = token or self.config.base_fare.contract_address
-            data = self._build_user_operation(
+            operation = self._build_user_operation(
                 "createPayableMemo",
                 [
                     job_id,
@@ -150,15 +163,17 @@ class ACPContractClient(BaseAcpContractClient):
                     math.floor(expired_at.timestamp()),
                 ],
             )
-
-            return self._send_user_operation(data)
+            
+            return OperationPayload(
+                data=operation["data"],
+                contractAddress=operation['to'],
+            )
         except Exception as e:
             raise ACPError("Failed to create payable memo", e)
 
     def create_job_with_account(
         self,
         account_id: int,
-        provider_address: str,
         evaluator_address: str,
         budget_base_unit: int,
         payment_token_address: str,
@@ -177,9 +192,9 @@ class ACPContractClient(BaseAcpContractClient):
         payment_token_address: str,
         budget_base_unit: int,
         metadata: str,
-    ) -> Dict[str, Any]:
+    ) -> OperationPayload:
         try:
-            data = self._build_user_operation(
+            operation = self._build_user_operation(
                 "createJobWithX402",
                 [
                     Web3.to_checksum_address(provider_address),
@@ -187,19 +202,23 @@ class ACPContractClient(BaseAcpContractClient):
                     math.floor(expire_at.timestamp()),
                 ],
             )
-            payload = {
-                "data": data,
-                "contractAddress": self.config.contract_address,
-            }
-            response = self._send_user_operation(data)
             
-            return response
+            return OperationPayload(
+                data=operation["data"],
+                contractAddress=operation['to'],
+            )
         except Exception as e:
-            raise ACPError("Failed to create job", e)
+            raise ACPError("Failed to create job", e)   
 
     def get_x402_payment_details(self, job_id: int) -> AcpJobX402PaymentDetails:
         """Get X402 payment details for a job."""
         try:
+            x402_config = self.config.x402_config
+            if not x402_config or not getattr(x402_config, 'url', None):
+                return AcpJobX402PaymentDetails(
+                    is_x402=False,
+                    is_budget_received=False
+            )
             # Call the contract function
             result = self.contract.functions.x402PaymentDetails(job_id).call()
             

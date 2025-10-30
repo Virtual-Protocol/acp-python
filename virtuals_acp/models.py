@@ -258,3 +258,20 @@ class X402Payment(PayloadModel):
     encodedPayment: str
     nonce: str
 
+class OperationPayload(PayloadModel):
+    data: str  # Should start with '0x'
+    contractAddress: str  # Address as str
+    value: Optional[int] = None
+
+    def to_dict(self):
+        return {
+            "data": self.data,
+            "contractAddress": self.contractAddress,
+            "value": self.value,
+        }
+
+    def to_json(self):
+        import json
+        return json.dumps(self.to_dict())
+    
+
