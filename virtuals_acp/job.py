@@ -272,25 +272,25 @@ class ACPJob(BaseModel):
 
     def accept(self, reason: Optional[str] = None) -> str:
         memo_content = f"Job {self.id} accepted. {reason or ''}"
+        latest_memo = self.latest_memo
         if (
-            self.latest_memo is None
-            or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION
+            latest_memo is None
+            or latest_memo.next_phase != ACPJobPhase.NEGOTIATION
         ):
             raise ValueError("No request memo found")
-        memo = self.latest_memo
 
-        return memo.sign(True, memo_content)
+        return latest_memo.sign(True, memo_content)
 
     def reject(self, reason: Optional[str] = None) -> str:
         memo_content = f"Job {self.id} rejected. {reason or ''}"
+        latest_memo = self.latest_memo
         operations: List[Dict[str, Any]] = []
 
         if self.phase is ACPJobPhase.REQUEST:
-            if self.latest_memo is None or self.latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
+            if latest_memo is None or latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
                 raise ValueError("No request memo found")
 
-            memo = self.latest_memo
-            return memo.sign(False, memo_content)
+            return latest_memo.sign(False, memo_content)
 
         operations.append(
             self.acp_contract_client.create_memo(
@@ -305,10 +305,48 @@ class ACPJob(BaseModel):
         response = self.acp_contract_client.handle_operation(operations)
         return get_txn_hash_from_response(response)
 
+    def reject_payable(
+        self,
+        reason: Optional[str],
+        amount: FareAmountBase,
+        expired_at: Optional[datetime] = None
+    ) -> str:
+        if expired_at is None:
+            expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+
+        memo_content = f"Job {self.id} rejected. {reason or ''}"
+        fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
+        operations: List[Dict[str, Any]] = []
+
+        operations.append(
+            self.acp_contract_client.approve_allowance(
+                amount.amount,
+                amount.fare.contract_address
+            )
+        )
+
+        operations.append(
+            self.acp_contract_client.create_payable_memo(
+                job_id=self.id,
+                content=memo_content,
+                amount_base_unit=amount.amount,
+                recipient=self.client_address,
+                fee_amount_base_unit=fee_amount.amount,
+                fee_type=FeeType.NO_FEE,
+                next_phase=ACPJobPhase.REJECTED,
+                memo_type=MemoType.PAYABLE_TRANSFER,
+                expired_at=expired_at,
+                token=amount.fare.contract_address
+            )
+        )
+
+        response = self.acp_contract_client.handle_operation(operations)
+        return get_txn_hash_from_response(response)
+
     def respond(
-            self,
-            accept: bool,
-            reason: Optional[str] = None,
+        self,
+        accept: bool,
+        reason: Optional[str] = None,
     ) -> str:
         memo_content = f"Job {self.id} {'accepted' if accept else 'rejected'}. {reason or ''}"
         if accept:
