@@ -3,6 +3,8 @@ from typing import Literal, Optional, Union, List, Dict, Any
 from virtuals_acp.fare import Fare
 from virtuals_acp.abis.abi import ACP_ABI
 from virtuals_acp.abis.abi_v2 import ACP_V2_ABI
+from virtuals_acp.abis.acp_x402_abi import ACP_X402_ABI
+from virtuals_acp.models import X402Config
 
 ChainEnv = Literal["base-sepolia", "base"]
 
@@ -20,6 +22,7 @@ class ACPContractConfig:
         alchemy_policy_id: str,
         abi: List[Dict[str, Any]],
         rpc_endpoint: Optional[str] = None,
+        x402_config : Optional[X402Config] = None,
     ):
         self.chain = chain
         self.rpc_url = rpc_url
@@ -31,6 +34,7 @@ class ACPContractConfig:
         self.alchemy_policy_id = alchemy_policy_id
         self.abi = abi
         self.rpc_endpoint = rpc_endpoint
+        self.x402_config = x402_config
 
 
 BASE_SEPOLIA_CONFIG = ACPContractConfig(
@@ -45,6 +49,21 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
     abi=ACP_ABI,
 )
 
+BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
+    chain="base-sepolia",
+    rpc_url="https://sepolia.base.org",
+    chain_id=84532,
+    contract_address="0x8Db6B1c839Fc8f6bd35777E194677B67b4D51928",
+    base_fare=Fare("0x036CbD53842c5426634e7929541eC2318f3dCF7e", 6),
+    alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
+    alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
+    acp_api_url="https://acpx.virtuals.gg/api",
+    abi=ACP_X402_ABI,
+    x402_config=X402Config(
+        url="https://dev-acp-x402.virtuals.io",
+    )
+)
+
 BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     chain="base-sepolia",
     rpc_url="https://sepolia.base.org",
@@ -56,6 +75,8 @@ BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     acp_api_url="https://acpx.virtuals.gg/api",
     abi=ACP_V2_ABI,
 )
+
+
 
 BASE_MAINNET_CONFIG = ACPContractConfig(
     chain="base",
@@ -80,6 +101,8 @@ BASE_MAINNET_CONFIG_V2 = ACPContractConfig(
     acp_api_url="https://acpx.virtuals.io/api",
     abi=ACP_V2_ABI,
 )
+
+
 
 DEFAULT_CONFIG = BASE_MAINNET_CONFIG_V2
 # Or: DEFAULT_CONFIG = BASE_SEPOLIA_CONFIG

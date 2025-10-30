@@ -2,6 +2,7 @@ import functools
 import json
 import warnings
 from typing import Optional, Type, Union, Dict, Any
+import base64
 
 from pydantic import ValidationError
 
@@ -41,3 +42,10 @@ def deprecated(reason: str = "This function is deprecated and should not be used
         return wrapped
 
     return decorator
+
+def safe_base64_encode(data: Union[str, bytes]) -> str:
+    if isinstance(data, str):
+        data_bytes = data.encode("utf-8")
+    else:
+        data_bytes = data
+    return base64.b64encode(data_bytes).decode("utf-8")

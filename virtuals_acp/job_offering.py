@@ -6,7 +6,8 @@ from jsonschema import ValidationError, validate
 from virtuals_acp.fare import FareAmount
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.models import ACPJobPhase, MemoType
-from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG
+from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG, BASE_SEPOLIA_ACP_X402_CONFIG
+from virtuals_acp.constants import USDC_TOKEN_ADDRESS
 from web3 import Web3
 
 
@@ -85,6 +86,7 @@ class ACPJobOffering(BaseModel):
 
         base_contract_addresses = {
             BASE_SEPOLIA_CONFIG.contract_address.lower(),
+            BASE_SEPOLIA_ACP_X402_CONFIG.contract_address.lower(),
             BASE_MAINNET_CONFIG.contract_address.lower(),
         }
 
@@ -92,34 +94,56 @@ class ACPJobOffering(BaseModel):
             self.contract_client.config.contract_address.lower()
             in base_contract_addresses
         )
+        
+        chain_id = self.contract_client.config.chain_id
+        usdc_token_address = USDC_TOKEN_ADDRESS[chain_id]
+        is_usdc_payment_token = usdc_token_address == fare_amount.fare.contract_address
 
+        create_job_payload: Dict[str, Any] = {}
         if use_simple_create or not account:
-            response = self.contract_client.create_job(
-                self.provider_address,
-                evaluator_address or self.contract_client.agent_wallet_address,
-                expired_at or datetime.utcnow(),
-                fare_amount.fare.contract_address,
-                fare_amount.amount,
-                "",
-            )
+            # If the contract has x402_config and USDC is used, call create_job_with_x402
+            if getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token:
+                create_job_payload = self.contract_client.create_job_with_x402(
+                    self.provider_address,
+                    evaluator_address or getattr(self.contract_client, "wallet_address", self.contract_client.agent_wallet_address),
+                    expired_at,
+                    fare_amount.fare.contract_address,
+                    fare_amount.amount,
+                    "",
+                )
+            else:
+                create_job_payload = self.contract_client.create_job(
+                    self.provider_address,
+                    evaluator_address or getattr(self.contract_client, "wallet_address", self.contract_client.agent_wallet_address),
+                    expired_at,
+                    fare_amount.fare.contract_address,
+                    fare_amount.amount,
+                    "",
+                )
         else:
             evaluator_address = (
                 Web3.to_checksum_address(evaluator_address)
                 if evaluator_address
                 else ZERO_ADDRESS
             )
-            response = self.contract_client.create_job_with_account(
+            create_job_payload = self.contract_client.create_job_with_account(
                 account.id,
                 evaluator_address or self.contract_client.agent_wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
                 expired_at or datetime.utcnow(),
             )
-
+            
+        response = create_job_payload
+        
         job_id = self.contract_client.get_job_id(
             response,
             self.contract_client.agent_wallet_address,
             self.provider_address,
+        )
+        
+        self.contract_client.set_budget_with_payment_token(
+            job_id, fare_amount.amount, fare_amount.fare.contract_address
         )
 
         self.contract_client.create_memo(

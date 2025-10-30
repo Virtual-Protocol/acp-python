@@ -1,11 +1,12 @@
 from datetime import datetime, timezone, timedelta
+import time
 from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union
 
 from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import (NegotiationPayload, ACPMemoStatus)
+from virtuals_acp.models import (NegotiationPayload, ACPMemoStatus, X402PayableRequest, X402PayableRequirements)
 from virtuals_acp.utils import try_parse_json_model, prepare_payload
 from virtuals_acp.models import (
     ACPJobPhase,
@@ -196,6 +197,10 @@ class ACPJob(BaseModel):
 
         if not memo:
             raise Exception("No transaction memo found")
+        
+        x402PaymentDetails = self.acp_contract_client.get_x402_payment_details(self.id)
+        if x402PaymentDetails.is_x402:
+            self.perform_x402_payment(self.price)
 
         base_fare_amount = FareAmount(self.price, self.base_fare)
 
@@ -419,3 +424,59 @@ class ACPJob(BaseModel):
             expired_at=expired_at,
             token=amount.fare.contract_address
         )
+        
+    def perform_x402_payment(self, budget: float):
+        payment_url = "/acp-budget"
+
+        # Perform X402 request to get payment requirements
+        x402_payable_requirements =  self.acp_contract_client.perform_x402_request(
+            payment_url, str(budget)
+        )
+
+        if not x402_payable_requirements.get("isPaymentRequired"):
+            return
+
+        accepts = x402_payable_requirements["data"].get("accepts", [])
+        if not accepts:
+            raise Exception("No X402 payment requirements found")
+
+        requirement = accepts[0]
+        
+        x402_payment = self.acp_contract_client.generate_x402_payment(
+            X402PayableRequest(
+                to=requirement["payTo"],
+                value=requirement["maxAmountRequired"],
+                maxTimeoutSeconds=requirement["maxTimeoutSeconds"],
+                asset=requirement["asset"],
+            ),
+            X402PayableRequirements.model_validate(x402_payable_requirements["data"])
+        )
+        encoded_payment = x402_payment.encodedPayment
+        nonce = x402_payment.nonce
+
+        self.acp_contract_client.update_job_x402_nonce(self.id, str(nonce))
+
+        x402_response = self.acp_contract_client.perform_x402_request(
+            payment_url, str(budget), encoded_payment
+        )
+        
+        if x402_response.get("isPaymentRequired"):
+            raise Exception("X402 payment failed")
+
+        wait_ms = 2000
+        max_wait_ms = 30000  # max 30 seconds of polling
+        iteration_count = 0
+        max_iterations = 10
+
+        while True:
+            x402_payment_details = self.acp_contract_client.get_x402_payment_details(self.id)
+            if getattr(x402_payment_details, "is_budget_received", False):
+                break
+
+            iteration_count += 1
+            if iteration_count >= max_iterations:
+                raise Exception("X402 payment timed out")
+            time.sleep(wait_ms / 1000.0)
+            wait_ms = min(wait_ms * 2, max_wait_ms)
+        
+    

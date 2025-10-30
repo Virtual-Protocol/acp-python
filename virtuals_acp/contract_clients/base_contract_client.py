@@ -5,6 +5,7 @@ import math
 from typing import Dict, Any, Optional, List, cast
 
 from eth_typing import ABIEvent
+import requests
 from web3 import Web3
 from web3.contract import Contract
 from eth_utils.abi import event_abi_to_log_topic
@@ -13,7 +14,7 @@ from virtuals_acp.abis.erc20_abi import ERC20_ABI
 from virtuals_acp.abis.weth_abi import WETH_ABI
 from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.exceptions import ACPError
-from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
+from virtuals_acp.models import ACPJobPhase, MemoType, FeeType, AcpJobX402PaymentDetails,X402PayableRequest,X402Payment,X402PayableRequirements
 
 
 class BaseAcpContractClient(ABC):
@@ -25,6 +26,7 @@ class BaseAcpContractClient(ABC):
         self.chain = config.chain
         self.abi = config.abi
         self.contract_address = Web3.to_checksum_address(config.contract_address)
+        
 
         if not self.w3.is_connected():
             raise ConnectionError(f"Failed to connect to RPC: {config.rpc_url}")
@@ -238,3 +240,88 @@ class BaseAcpContractClient(ABC):
 
         # Send the user operation through Alchemy/Session key client
         return self._send_user_operation(trx_data)
+    
+    def create_job_with_x402(
+        self,
+        provider_address: str,
+        evaluator_address: str,
+        expired_at: datetime,
+        payment_token_address: str,
+        budget_base_unit: int,
+        metadata: str,
+    ) -> Dict[str, Any]:
+        """
+        Build the payload for createJobWithX402 operation.
+        """
+        try:
+            # Convert datetime to Unix timestamp
+            expired_at_timestamp = int(expired_at.timestamp())
+            data = self._build_user_operation(
+                "createJobWithX402",
+                [
+                    Web3.to_checksum_address(provider_address),
+                    Web3.to_checksum_address(evaluator_address),
+                    expired_at_timestamp,
+                    Web3.to_checksum_address(payment_token_address),
+                    budget_base_unit,
+                    metadata,
+                ],
+            )
+           
+            tx_response = self._send_user_operation(data)
+            return tx_response
+        except Exception as e:
+            raise ACPError("Failed to create job", e)
+        
+    def get_x402_payment_details(self, job_id: int) -> AcpJobX402PaymentDetails:
+        """Get X402 payment details for a job."""
+        try:
+            # Call the contract function
+            result = self.contract.functions.x402PaymentDetails(job_id).call()
+            
+            return AcpJobX402PaymentDetails(
+                is_x402=result[0],
+                is_budget_received=result[1]
+            )
+        except Exception as e:
+            raise ACPError("Failed to get X402 payment details", e)
+    
+    def update_job_x402_nonce(self, job_id: int, nonce: str) -> Dict[str, Any]:
+        raise NotImplementedError("update_job_x402_nonce is not implemented.")
+    
+    def generate_x402_payment(self, payable_request: X402PayableRequest, requirements: X402PayableRequirements) -> X402Payment:
+        raise NotImplementedError("generate_x402_payment is not implemented.")
+    
+    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> dict:
+        base_url = self.config.x402_config.url if self.config.x402_config else None
+
+        if not base_url:
+            raise ACPError("X402 URL not configured")
+
+        headers = {}
+        if signature:
+            headers["x-payment"] = signature
+        if budget:
+            headers["x-budget"] = budget
+
+        try:
+            response = requests.get(f"{base_url}{url}", headers=headers)
+            if response.status_code == 402:
+                try:
+                    data = response.json()
+                except Exception:
+                    data = {}
+                return {
+                    "isPaymentRequired": True,
+                    "data": data
+                }
+            else:
+                response.raise_for_status()
+                data = response.json()
+                return {
+                    "isPaymentRequired": False,
+                    "data": data
+                }
+        except Exception as e:
+            raise ACPError("Failed to perform X402 request", e)
+

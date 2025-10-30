@@ -108,3 +108,20 @@ class ACPContractClientV2(BaseAcpContractClient):
             )
 
         return int(created_job_log["args"]["jobId"])
+    
+    def update_job_x402_nonce(self, job_id: int, nonce: str) -> str:
+            """
+            Not implemented yet for contract_client_v2.
+            """
+            raise NotImplementedError("update_job_x402_nonce is not implemented.")
+
+    def generate_x402_payment(
+            self, 
+            payable_request,  # X402PayableRequest type expected
+            requirements      # X402PayableRequirements type expected
+        ):
+            """
+            Not implemented yet for contract_client_v2.
+            """
+            raise NotImplementedError("generate_x402_payment is not implemented.")
+
