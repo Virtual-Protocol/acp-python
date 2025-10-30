@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, timedelta
 import json
-from typing import Any, Dict, Optional, Union, TYPE_CHECKING
+from typing import Any, Dict, Optional, Union, TYPE_CHECKING, List
 from pydantic import BaseModel, field_validator, ConfigDict
 from jsonschema import ValidationError, validate
 from virtuals_acp.fare import FareAmount
@@ -94,7 +94,7 @@ class ACPJobOffering(BaseModel):
         )
 
         if use_simple_create or not account:
-            response = self.contract_client.create_job(
+            create_job_operation = self.contract_client.create_job(
                 self.provider_address,
                 evaluator_address or self.contract_client.agent_wallet_address,
                 expired_at or datetime.utcnow(),
@@ -108,7 +108,7 @@ class ACPJobOffering(BaseModel):
                 if evaluator_address
                 else ZERO_ADDRESS
             )
-            response = self.contract_client.create_job_with_account(
+            create_job_operation = self.contract_client.create_job_with_account(
                 account.id,
                 evaluator_address or self.contract_client.agent_wallet_address,
                 fare_amount.amount,
@@ -116,19 +116,37 @@ class ACPJobOffering(BaseModel):
                 expired_at or datetime.utcnow(),
             )
 
+        response = self.contract_client.handle_operation([create_job_operation])
+
         job_id = self.contract_client.get_job_id(
             response,
             self.contract_client.agent_wallet_address,
             self.provider_address,
         )
 
-        self.contract_client.create_memo(
-            job_id,
-            json.dumps(final_service_requirement),
-            MemoType.MESSAGE,
-            True,
-            ACPJobPhase.NEGOTIATION,
+        operations: List[Dict[str, Any]] = []
+
+        set_budget_with_payment_token_operation = (
+            self.contract_client.set_budget_with_payment_token(
+                job_id,
+                fare_amount.amount,
+                fare_amount.fare.contract_address,
+            )
         )
+
+        if set_budget_with_payment_token_operation:
+            operations.append(set_budget_with_payment_token_operation)
+
+        operations.append(
+            self.contract_client.create_memo(
+                job_id,
+                json.dumps(final_service_requirement),
+                MemoType.MESSAGE,
+                True,
+                ACPJobPhase.NEGOTIATION,
+            )
+        )
+        self.contract_client.handle_operation(operations)
 
         return job_id
 

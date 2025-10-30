@@ -34,7 +34,7 @@ class ACPContractClient(BaseAcpContractClient):
         random_bytes = secrets.token_bytes(bytes_len)
         return int.from_bytes(random_bytes, byteorder="big")
 
-    def _send_user_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def handle_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         return self.alchemy_kit.handle_user_operation(trx_data)
 
     def get_job_id(
@@ -93,21 +93,22 @@ class ACPContractClient(BaseAcpContractClient):
             evaluator_address = Web3.to_checksum_address(evaluator_address)
             expire_timestamp = math.floor(expire_at.timestamp())
 
-            data = self._build_user_operation(
+            return self._build_user_operation(
                 "createJob", [provider_address, evaluator_address, expire_timestamp]
             )
-            tx_response = self._send_user_operation(data)
-            job_id = self.get_job_id(
-                tx_response, self.agent_wallet_address, provider_address
-            )
-
-            self.set_budget_with_payment_token(
-                job_id, budget_base_unit, payment_token_address
-            )
-
-            return tx_response
         except Exception as e:
             raise ACPError("Failed to create job", e)
+
+    def set_budget_with_payment_token(
+            self,
+            job_id: int,
+            budget_base_unit: int,
+            payment_token_address: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        token = payment_token_address or self.config.base_fare.contract_address
+        return self._build_user_operation(
+            "setBudgetWithPaymentToken", [job_id, budget_base_unit, token]
+        )
 
     def create_payable_memo(
         self,
@@ -125,7 +126,7 @@ class ACPContractClient(BaseAcpContractClient):
     ) -> Dict[str, Any]:
         try:
             token_address = token or self.config.base_fare.contract_address
-            data = self._build_user_operation(
+            return self._build_user_operation(
                 "createPayableMemo",
                 [
                     job_id,
@@ -140,15 +141,12 @@ class ACPContractClient(BaseAcpContractClient):
                     math.floor(expired_at.timestamp()),
                 ],
             )
-
-            return self._send_user_operation(data)
         except Exception as e:
             raise ACPError("Failed to create payable memo", e)
 
     def create_job_with_account(
         self,
         account_id: int,
-        provider_address: str,
         evaluator_address: str,
         budget_base_unit: int,
         payment_token_address: str,
