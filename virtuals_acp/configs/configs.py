@@ -113,7 +113,7 @@ BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
     acp_api_url="https://acpx.virtuals.io/api",
     abi=ACP_X402_ABI,
     x402_config=X402Config(
-        url="https://acp-402.virtuals.io",
+        url="https://acp-x402.virtuals.io",
     )
 )
 
