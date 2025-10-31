@@ -100,7 +100,7 @@ class BaseAcpContractClient(ABC):
 
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def create_job(
@@ -127,7 +127,7 @@ class BaseAcpContractClient(ABC):
 
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def create_job_with_account(
@@ -151,7 +151,7 @@ class BaseAcpContractClient(ABC):
         
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def approve_allowance(
@@ -168,7 +168,7 @@ class BaseAcpContractClient(ABC):
         
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def create_payable_memo(
@@ -205,7 +205,7 @@ class BaseAcpContractClient(ABC):
         
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def create_memo(
@@ -224,7 +224,7 @@ class BaseAcpContractClient(ABC):
         
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def sign_memo(
@@ -236,7 +236,7 @@ class BaseAcpContractClient(ABC):
 
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def set_budget_with_payment_token(
@@ -262,7 +262,7 @@ class BaseAcpContractClient(ABC):
         
         operation = OperationPayload(
             data=trx_data["data"],
-            contractAddress=trx_data["to"],
+            to=trx_data["to"],
             value=amount_base_unit,
         )
         
@@ -297,7 +297,7 @@ class BaseAcpContractClient(ABC):
             
             operation = OperationPayload(
                 data=operation["data"],
-                contractAddress=operation["to"],
+                to=operation["to"],
             )
             
             return operation

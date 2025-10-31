@@ -260,13 +260,13 @@ class X402Payment(PayloadModel):
 
 class OperationPayload(PayloadModel):
     data: str  # Should start with '0x'
-    contractAddress: str  # Address as str
+    to: str  # Address as str
     value: Optional[int] = None
 
     def to_dict(self):
         return {
             "data": self.data,
-            "contractAddress": self.contractAddress,
+            "to": self.to,
             "value": self.value,
         }
 

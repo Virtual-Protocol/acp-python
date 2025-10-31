@@ -191,24 +191,24 @@ class AlchemyAccountKit:
         payload =[]
       
         # TODO : call interface should support alchemy params and not follow node version
-        for call in calls:
-            if (call.value is None):
-                payload.append({
-                    "to": call.contractAddress,
-                    "data": call.data,
-                })
-            else:
-                payload.append({
-                    "to": call.contractAddress,
-                    "data": call.data,
-                    "value": call.value,
-                })
+        # for call in calls:
+        #     if (call.value is None):
+        #         payload.append({
+        #             "to": call.contractAddress,
+        #             "data": call.data,
+        #         })
+        #     else:
+        #         payload.append({
+        #             "to": call.contractAddress,
+        #             "data": call.data,
+        #             "value": call.value,
+        #         })
             
 
         params = {
             "from": self.account_address,
             "chainId": to_hex(self.chain_id),
-            "calls": payload,
+            "calls": calls,
             "capabilities": final_capabilities,
         }
         

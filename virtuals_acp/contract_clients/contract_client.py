@@ -111,7 +111,7 @@ class ACPContractClient(BaseAcpContractClient):
             
             return OperationPayload(
                 data=operation["data"],
-                contractAddress=operation['to'],
+                to=operation['to'],
             )
         except Exception as e:
             raise ACPError("Failed to create job", e)
@@ -129,7 +129,7 @@ class ACPContractClient(BaseAcpContractClient):
 
         return OperationPayload(
             data=operation["data"],
-            contractAddress=operation['to'],
+            to=operation['to'],
         )
 
     def create_payable_memo(
@@ -166,7 +166,7 @@ class ACPContractClient(BaseAcpContractClient):
             
             return OperationPayload(
                 data=operation["data"],
-                contractAddress=operation['to'],
+                to=operation['to'],
             )
         except Exception as e:
             raise ACPError("Failed to create payable memo", e)
@@ -205,7 +205,7 @@ class ACPContractClient(BaseAcpContractClient):
             
             return OperationPayload(
                 data=operation["data"],
-                contractAddress=operation['to'],
+                to=operation['to'],
             )
         except Exception as e:
             raise ACPError("Failed to create job", e)   
