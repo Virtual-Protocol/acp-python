@@ -30,10 +30,7 @@ def seller():
             and memo_to_sign.next_phase == ACPJobPhase.EVALUATION
         ):
             print(f"Delivering job {job.id}")
-            deliverable = {
-                "type": "url",
-                "value": "https://example.com"
-            }
+            deliverable = {"type": "url", "value": "https://example.com"}
             job.deliver(deliverable)
         elif job.phase == ACPJobPhase.COMPLETED:
             print("Job completed", job)
@@ -48,7 +45,7 @@ def seller():
         raise Exception("SELLER_AGENT_WALLET_ADDRESS is not set")
 
     # Initialize the ACP client
-    
+
     acp_client = VirtualsACP(
         acp_contract_clients=ACPContractClient(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
