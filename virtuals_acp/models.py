@@ -151,13 +151,13 @@ class GenericPayload(PayloadModel, Generic[T]):
     data: T | List[T]
 
 
-class NegotiationPayload(PayloadModel):
+class RequestPayload(PayloadModel):
     name: Optional[str] = None
     requirement: Optional[Union[str, Dict[str, Any]]] = None
     service_name: Optional[str] = None
     service_requirement: Optional[Dict[str, Any]] = None
-    price_type: PriceType
-    price_value: float
+    price_type: PriceType = PriceType.FIXED
+    price_value: Optional[float] = None
     model_config = ConfigDict(extra="allow")
 
 
