@@ -1,8 +1,6 @@
 import threading
 from datetime import datetime, timedelta
 from typing import Optional
-import sys
-sys.path.append("../../../")
 
 from dotenv import load_dotenv
 
@@ -63,13 +61,13 @@ def buyer():
 
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp_client.browse_agents(
-        keyword="generate a meme",
+        keyword="<your-filter-agent-keyword>",
         sort_by=[
             ACPAgentSort.SUCCESSFUL_JOB_COUNT,
         ],
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,
-        online_status=ACPOnlineStatus.ONLINE,
+        online_status=ACPOnlineStatus.ALL,
     )
     print(f"Relevant agents: {relevant_agents}")
 
@@ -82,7 +80,9 @@ def buyer():
     job_id = chosen_job_offering.initiate_job(
         # <your_schema_field> can be found in your ACP Visualiser's "Edit Service" pop-up.
         # Reference: (./images/specify_requirement_toggle_switch.png)
-        service_requirement="Help me to generate a flower meme.",
+        service_requirement={
+            "<your_schema_field>": "Help me to generate a flower meme."
+        },
         evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
         expired_at=datetime.now() + timedelta(days=1),
     )
