@@ -1,6 +1,7 @@
 from typing import Any, Dict
 import json
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
+from virtuals_acp.models import OperationPayload
 
 
 class ACPAccount:
@@ -18,9 +19,9 @@ class ACPAccount:
         self.provider_address = provider_address
         self.metadata = metadata
 
-    def update_metadata(self, metadata: Dict[str, Any]) -> str:
+    def update_metadata(self, metadata: Dict[str, Any]) -> OperationPayload:
         result = self.contract_client.update_account_metadata(
             self.id,
             json.dumps(metadata),
         )
-        return result.get("receipts", [])[0].get("transactionHash")
+        return result

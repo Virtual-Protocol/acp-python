@@ -52,7 +52,7 @@ class ACPMemo(BaseModel):
             job_id, self.content, self.type, is_secured, self.next_phase
         )
 
-    def sign(self, approved: bool, reason: str | None = None) -> str:
+    def sign(self, approved: bool, reason: str | None = None) -> str | None:
         operation = self.contract_client.sign_memo(self.id, approved, reason)
         response = self.contract_client.handle_operation([operation])
         return get_txn_hash_from_response(response)

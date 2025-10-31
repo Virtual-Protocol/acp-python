@@ -274,4 +274,43 @@ class OperationPayload(PayloadModel):
         import json
         return json.dumps(self.to_dict())
     
+class OffChainJob(PayloadModel):
+    id: int
+    documentId: str
+    txHash: str  # Address as str
+    clientId: int
+    providerId: int
+    budget: float
+    createdAt: str
+    updatedAt: str
+    publishedAt: str
+    locale: Optional[str] = None
+    clientAddress: str
+    providerAddress: str
+    evaluators: List[str]
+    budgetTxHash: Optional[str] = None
+    phase: str  # AcpJobPhases as str (define separately if available)
+    agentIdPair: str
+    onChainJobId: str
+    summary: str
+    userOpHash: Optional[str] = None
+    amountClaimed: float
+    context: Optional[Dict[str, Any]] = None
+    expiry: str
+    refundRetryTimes: int
+    additionalFees: float
+    budgetTokenAddress: str
+    budgetUSD: float
+    amountClaimedUSD: Optional[float] = None
+    additionalFeesUSD: Optional[float] = None
+    contractAddress: str
+    accountId: Optional[int] = None
+    x402Nonce: str
+
+class X402PaymentResponse(PayloadModel):
+    isPaymentRequired: bool
+    data: X402PayableRequirements
+
+
+    
 

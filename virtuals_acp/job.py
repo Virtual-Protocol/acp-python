@@ -275,7 +275,7 @@ class ACPJob(BaseModel):
         response = self.acp_contract_client.handle_operation(operations)
         return get_txn_hash_from_response(response)
 
-    def accept(self, reason: Optional[str] = None) -> str:
+    def accept(self, reason: Optional[str] = None) -> str | None:
         memo_content = f"Job {self.id} accepted. {reason or ''}"
         latest_memo = self.latest_memo
         if (
@@ -514,10 +514,10 @@ class ACPJob(BaseModel):
             payment_url, str(budget)
         )
 
-        if not x402_payable_requirements.get("isPaymentRequired"):
+        if not x402_payable_requirements.isPaymentRequired:
             return
 
-        accepts = x402_payable_requirements["data"].get("accepts", [])
+        accepts = x402_payable_requirements.data.accepts
         if not accepts:
             raise Exception("No X402 payment requirements found")
 
@@ -525,12 +525,12 @@ class ACPJob(BaseModel):
         
         x402_payment = self.acp_contract_client.generate_x402_payment(
             X402PayableRequest(
-                to=requirement["payTo"],
-                value=requirement["maxAmountRequired"],
-                maxTimeoutSeconds=requirement["maxTimeoutSeconds"],
-                asset=requirement["asset"],
+                to=requirement.payTo,
+                value=int(requirement.maxAmountRequired),
+                maxTimeoutSeconds=requirement.maxTimeoutSeconds,
+                asset=requirement.asset,
             ),
-            X402PayableRequirements.model_validate(x402_payable_requirements["data"])
+            X402PayableRequirements.model_validate(x402_payable_requirements.data)
         )
         encoded_payment = x402_payment.encodedPayment
         nonce = x402_payment.nonce
@@ -541,7 +541,7 @@ class ACPJob(BaseModel):
             payment_url, str(budget), encoded_payment
         )
         
-        if x402_response.get("isPaymentRequired"):
+        if x402_response.isPaymentRequired:
             raise Exception("X402 payment failed")
 
         wait_ms = 2000
@@ -551,7 +551,7 @@ class ACPJob(BaseModel):
 
         while True:
             x402_payment_details = self.acp_contract_client.get_x402_payment_details(self.id)
-            if getattr(x402_payment_details, "is_budget_received", False):
+            if x402_payment_details.is_budget_received:
                 break
 
             iteration_count += 1

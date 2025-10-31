@@ -14,7 +14,7 @@ from virtuals_acp.abis.erc20_abi import ERC20_ABI
 from virtuals_acp.abis.weth_abi import WETH_ABI
 from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.exceptions import ACPError
-from virtuals_acp.models import ACPJobPhase, MemoType, FeeType, AcpJobX402PaymentDetails,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload
+from virtuals_acp.models import ACPJobPhase, MemoType, FeeType, AcpJobX402PaymentDetails,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload, OffChainJob,X402PaymentResponse
 
 
 class BaseAcpContractClient(ABC):
@@ -302,7 +302,7 @@ class BaseAcpContractClient(ABC):
             
             return operation
         except Exception as e:
-            raise ACPError("Failed to create job", e)
+            raise ACPError("Failed to create job with x402", e)
         
     def get_x402_payment_details(self, job_id: int) -> AcpJobX402PaymentDetails:
         """Get X402 payment details for a job."""
@@ -324,42 +324,17 @@ class BaseAcpContractClient(ABC):
         except Exception as e:
             raise ACPError("Failed to get X402 payment details", e)
     
-    def update_job_x402_nonce(self, job_id: int, nonce: str) -> Dict[str, Any]:
-        raise NotImplementedError("update_job_x402_nonce is not implemented.")
+    @abstractmethod
+    def update_job_x402_nonce(self, job_id: int, nonce: str) -> OffChainJob:
+        """Abstract method to update the X402 nonce for a job."""
+        pass
     
+    @abstractmethod
     def generate_x402_payment(self, payable_request: X402PayableRequest, requirements: X402PayableRequirements) -> X402Payment:
-        raise NotImplementedError("generate_x402_payment is not implemented.")
-    
-    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> dict:
-        base_url = self.config.x402_config.url if self.config.x402_config else None
+        """Abstract method to generate an X402 payment."""
+        pass
 
-        if not base_url:
-            raise ACPError("X402 URL not configured")
-
-        headers = {}
-        if signature:
-            headers["x-payment"] = signature
-        if budget:
-            headers["x-budget"] = budget
-
-        try:
-            response = requests.get(f"{base_url}{url}", headers=headers)
-            if response.status_code == 402:
-                try:
-                    data = response.json()
-                except Exception:
-                    data = {}
-                return {
-                    "isPaymentRequired": True,
-                    "data": data
-                }
-            else:
-                response.raise_for_status()
-                data = response.json()
-                return {
-                    "isPaymentRequired": False,
-                    "data": data
-                }
-        except Exception as e:
-            raise ACPError("Failed to perform X402 request", e)
-
+    @abstractmethod
+    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> X402PaymentResponse:
+        """Abstract method to perform an X402 request."""
+        pass
