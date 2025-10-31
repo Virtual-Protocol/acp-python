@@ -11,7 +11,7 @@ from virtuals_acp.models import (
     T,
     ACPMemoStatus,
 )
-from virtuals_acp.utils import try_parse_json_model, try_validate_model
+from virtuals_acp.utils import try_parse_json_model, try_validate_model, get_txn_hash_from_response
 
 if TYPE_CHECKING:
     from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
@@ -52,5 +52,7 @@ class ACPMemo(BaseModel):
             job_id, self.content, self.type, is_secured, self.next_phase
         )
 
-    def sign(self, approved: bool, reason: str | None = None):
-        return self.contract_client.sign_memo(self.id, approved, reason)
+    def sign(self, approved: bool, reason: str | None = None) -> str:
+        operation = self.contract_client.sign_memo(self.id, approved, reason)
+        response = self.contract_client.handle_operation([operation])
+        return get_txn_hash_from_response(response)

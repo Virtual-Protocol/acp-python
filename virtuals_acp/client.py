@@ -344,7 +344,7 @@ class VirtualsACP:
                 contract_client = self.contract_client_by_address(
                     agent_data.get("contractAddress")
                 )
-                provider_address = agent_data.get("providerAddress")
+                provider_address = agent_data.get("walletAddress")
                 job_offerings = [
                     ACPJobOffering(
                         acp_client=self,

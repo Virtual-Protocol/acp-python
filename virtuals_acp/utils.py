@@ -8,6 +8,13 @@ from pydantic import ValidationError
 from virtuals_acp.models import T
 
 
+def get_txn_hash_from_response(response: Dict[str, Any]) -> Optional[str]:
+    try:
+        return response.get("receipts", [])[0].get("transactionHash")
+    except (IndexError, AttributeError):
+        return None
+
+
 def try_parse_json_model(content: str, model: Type[T]) -> Optional[T]:
     try:
         return model.model_validate_json(content)

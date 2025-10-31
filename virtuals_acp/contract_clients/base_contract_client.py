@@ -61,7 +61,7 @@ class BaseAcpContractClient(ABC):
         args: List[Any],
         contract_address: Optional[str] = None,
         abi: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         Build a single-call user operation to invoke a contract method.
         If no ABI is provided, defaults to the ACP contract ABI.
@@ -74,10 +74,10 @@ class BaseAcpContractClient(ABC):
         target_contract = self.w3.eth.contract(address=target_address, abi=target_abi)
         encoded_data = target_contract.encode_abi(method_name, args=args)
 
-        return [{"to": target_address, "data": encoded_data}]
+        return {"to": target_address, "data": encoded_data}
 
     @abstractmethod
-    def _send_user_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def handle_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         pass
 
     @abstractmethod
@@ -91,12 +91,11 @@ class BaseAcpContractClient(ABC):
         return int(Decimal(str(amount)) * (10**self.config.base_fare.decimals))
 
     def update_account_metadata(self, account_id: int, metadata: str) -> Dict[str, Any]:
-        data = self._build_user_operation(
+        return self._build_user_operation(
             "updateAccountMetadata",
             [account_id, metadata],
             self.config.contract_address,
         )
-        return self._send_user_operation(data)
 
     def create_job(
         self,
@@ -107,7 +106,7 @@ class BaseAcpContractClient(ABC):
         budget_base_unit: int,
         metadata: str,
     ) -> Dict[str, Any]:
-        data = self._build_user_operation(
+        return self._build_user_operation(
             "createJob",
             [
                 Web3.to_checksum_address(provider_address),
@@ -118,7 +117,6 @@ class BaseAcpContractClient(ABC):
                 metadata,
             ],
         )
-        return self._send_user_operation(data)
 
     def create_job_with_account(
         self,
@@ -128,7 +126,7 @@ class BaseAcpContractClient(ABC):
         payment_token_address: str,
         expired_at: datetime,
     ) -> Dict[str, Any]:
-        data = self._build_user_operation(
+        return self._build_user_operation(
             "createJobWithAccount",
             [
                 account_id,
@@ -138,20 +136,18 @@ class BaseAcpContractClient(ABC):
                 math.floor(expired_at.timestamp()),
             ],
         )
-        return self._send_user_operation(data)
 
     def approve_allowance(
         self,
         amount_base_unit: int,
         payment_token_address: Optional[str] = None,
     ) -> Dict[str, Any]:
-        data = self._build_user_operation(
+        return self._build_user_operation(
             "approve",
             [self.config.contract_address, amount_base_unit],
             contract_address=payment_token_address,
             abi=ERC20_ABI,
         )
-        return self._send_user_operation(data)
 
     def create_payable_memo(
         self,
@@ -167,7 +163,7 @@ class BaseAcpContractClient(ABC):
         token: Optional[str] = None,
         secured: bool = True,
     ) -> Dict[str, Any]:
-        data = self._build_user_operation(
+        return self._build_user_operation(
             "createPayableMemo",
             [
                 job_id,
@@ -184,7 +180,6 @@ class BaseAcpContractClient(ABC):
             ],
             self.config.contract_address,
         )
-        return self._send_user_operation(data)
 
     def create_memo(
         self,
@@ -194,32 +189,26 @@ class BaseAcpContractClient(ABC):
         is_secured: bool,
         next_phase: ACPJobPhase,
     ) -> Dict[str, Any]:
-        data = self._build_user_operation(
+        return self._build_user_operation(
             "createMemo",
             [job_id, content, memo_type.value, is_secured, next_phase.value],
             self.config.contract_address,
         )
-        return self._send_user_operation(data)
 
     def sign_memo(
         self, memo_id: int, is_approved: bool, reason: Optional[str] = ""
     ) -> Dict[str, Any]:
-        data = self._build_user_operation(
+        return self._build_user_operation(
             "signMemo", [memo_id, is_approved, reason], self.config.contract_address
         )
-        return self._send_user_operation(data)
 
     def set_budget_with_payment_token(
         self,
         job_id: int,
         budget_base_unit: int,
         payment_token_address: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        token = payment_token_address or self.config.base_fare.contract_address
-        data = self._build_user_operation(
-            "setBudgetWithPaymentToken", [job_id, budget_base_unit, token]
-        )
-        return self._send_user_operation(data)
+    ) -> Optional[Dict[str, Any]]:
+        return None
 
     def wrap_eth(self, amount_base_unit: int) -> Dict[str, Any]:
         weth_contract = self.w3.eth.contract(
@@ -237,4 +226,4 @@ class BaseAcpContractClient(ABC):
         trx_data[0]["value"] = hex(amount_base_unit)
 
         # Send the user operation through Alchemy/Session key client
-        return self._send_user_operation(trx_data)
+        return trx_data
