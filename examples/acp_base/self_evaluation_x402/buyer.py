@@ -1,8 +1,6 @@
 import threading
 from datetime import datetime, timedelta
 from typing import Optional
-import sys
-sys.path.append("../../../")
 
 from dotenv import load_dotenv
 
@@ -17,7 +15,7 @@ from virtuals_acp.models import (
     ACPGraduationStatus,
     ACPOnlineStatus,
 )
-from virtuals_acp.configs.configs import BASE_SEPOLIA_ACP_X402_CONFIG, BASE_SEPOLIA_CONFIG
+from virtuals_acp.configs.configs import BASE_SEPOLIA_ACP_X402_CONFIG
 
 load_dotenv(override=True)
 
@@ -84,7 +82,8 @@ def buyer():
         # Reference: (./images/specify_requirement_toggle_switch.png)
         service_requirement={
             "<your_schema_field>": "Help me to generate a flower meme."
-        },        evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
+        },
+        evaluator_address=env.BUYER_AGENT_WALLET_ADDRESS,
         expired_at=datetime.now() + timedelta(days=1),
     )
 
