@@ -9,6 +9,7 @@ from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG_V2
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
+from virtuals_acp.models import OperationPayload
 
 
 class ACPContractClientV2(BaseAcpContractClient):
@@ -64,7 +65,7 @@ class ACPContractClientV2(BaseAcpContractClient):
         random_bytes = secrets.token_bytes(bytes_len)
         return int.from_bytes(random_bytes, byteorder="big")
 
-    def handle_operation(self, trx_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def handle_operation(self, trx_data: List[OperationPayload]) -> Dict[str, Any]:
         return self.alchemy_kit.handle_user_operation(trx_data)
 
     def get_job_id(
@@ -108,3 +109,20 @@ class ACPContractClientV2(BaseAcpContractClient):
             )
 
         return int(created_job_log["args"]["jobId"])
+    
+    def update_job_x402_nonce(self, job_id: int, nonce: str) -> str:
+            """
+            Not implemented yet for contract_client_v2.
+            """
+            raise NotImplementedError("update_job_x402_nonce is not implemented.")
+
+    def generate_x402_payment(
+            self, 
+            payable_request,  # X402PayableRequest type expected
+            requirements      # X402PayableRequirements type expected
+        ):
+            """
+            Not implemented yet for contract_client_v2.
+            """
+            raise NotImplementedError("generate_x402_payment is not implemented.")
+

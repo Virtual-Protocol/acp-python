@@ -2,6 +2,7 @@ import functools
 import json
 import warnings
 from typing import Optional, Type, Union, Dict, Any
+import base64
 
 from pydantic import ValidationError
 
@@ -12,6 +13,7 @@ def get_txn_hash_from_response(response: Dict[str, Any]) -> Optional[str]:
     try:
         return response.get("receipts", [])[0].get("transactionHash")
     except (IndexError, AttributeError):
+        print(f"Error getting transaction hash from response: {response}")
         return None
 
 
@@ -48,3 +50,10 @@ def deprecated(reason: str = "This function is deprecated and should not be used
         return wrapped
 
     return decorator
+
+def safe_base64_encode(data: Union[str, bytes]) -> str:
+    if isinstance(data, str):
+        data_bytes = data.encode("utf-8")
+    else:
+        data_bytes = data
+    return base64.b64encode(data_bytes).decode("utf-8")

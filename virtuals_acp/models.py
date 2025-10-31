@@ -218,3 +218,60 @@ class CloseJobAndWithdrawPayload(PayloadModel):
 
 class RequestClosePositionPayload(PayloadModel):
     position_id: int
+
+class AcpJobX402PaymentDetails(PayloadModel):
+    is_x402: bool
+    is_budget_received: bool
+    
+class X402Config(PayloadModel):
+    url : str
+
+class X402RequirementExtra(PayloadModel):
+    name: str
+    version: str
+
+class X402Requirement(PayloadModel):
+    scheme: str
+    network: str
+    maxAmountRequired: str
+    resource: str
+    description: str
+    mimeType: str
+    payTo: str   # Address as str
+    maxTimeoutSeconds: int
+    asset: str   # Address as str
+    extra: X402RequirementExtra
+    outputSchema: Any
+
+class X402PayableRequirements(PayloadModel):
+    x402Version: int
+    error: str
+    accepts: List[X402Requirement]
+
+class X402PayableRequest(PayloadModel):
+    to: str       # Address as str
+    value: int
+    maxTimeoutSeconds: int
+    asset: str    # Address as str
+
+class X402Payment(PayloadModel):
+    encodedPayment: str
+    nonce: str
+
+class OperationPayload(PayloadModel):
+    data: str  # Should start with '0x'
+    to: str  # Address as str
+    value: Optional[int] = None
+
+    def to_dict(self):
+        return {
+            "data": self.data,
+            "to": self.to,
+            "value": self.value,
+        }
+
+    def to_json(self):
+        import json
+        return json.dumps(self.to_dict())
+    
+

@@ -414,7 +414,7 @@ class VirtualsACP:
         )
 
         if use_simple_create or not account:
-            response = self.contract_client.create_job(
+            operation = self.contract_client.create_job(
                 provider_address,
                 eval_addr or self.wallet_address,
                 expired_at,
@@ -423,13 +423,15 @@ class VirtualsACP:
                 "",
             )
         else:
-            response = self.contract_client.create_job_with_account(
+            operation = self.contract_client.create_job_with_account(
                 account.id,
                 eval_addr or self.wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
                 expired_at,
             )
+            
+            response = self.contract_client.handle_operation([operation])
 
         job_id = self.contract_client.get_job_id(
             response, self.agent_address, provider_address
@@ -516,113 +518,6 @@ class VirtualsACP:
             raise ACPError(
                 f"An unexpected error occurred while getting account by job id: {e}"
             )
-
-    def create_memo(self, job_id: int, content: str, next_phase: ACPJobPhase):
-        return self.contract_client.create_memo(
-            job_id, content, MemoType.MESSAGE, False, next_phase
-        )
-
-    def create_payable_memo(
-        self,
-        job_id: int,
-        content: str,
-        amount: FareAmountBase,
-        recipient: str,
-        next_phase: ACPJobPhase,
-        type: Literal[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER_ESCROW],
-        expired_at: datetime,
-    ):
-        if type == MemoType.PAYABLE_TRANSFER_ESCROW:
-            self.contract_client.approve_allowance(
-                amount.amount, amount.fare.contract_address
-            )
-
-        fee_amount = FareAmount(0, self.contract_client.config.base_fare)
-
-        return self.contract_client.create_payable_memo(
-            job_id,
-            content,
-            amount.amount,
-            recipient,
-            fee_amount.amount,
-            FeeType.NO_FEE,
-            next_phase,
-            type,
-            expired_at,
-            amount.fare.contract_address,
-        )
-
-    def respond_to_job(
-        self,
-        job_id: int,
-        memo_id: int,
-        accept: bool,
-        content: Optional[str],
-        reason: Optional[str] = "",
-    ) -> str:
-        try:
-            data = self.contract_client.sign_memo(memo_id, accept, reason or "")
-            tx_hash = data.get("receipts", [])[0].get("transactionHash")
-            if not accept:
-                return tx_hash
-
-            logger.info(
-                f"Responding to job {job_id} with memo {memo_id} and accept {accept} and reason {reason}"
-            )
-            self.contract_client.create_memo(
-                job_id,
-                content or f"{reason or ''}",
-                MemoType.MESSAGE,
-                is_secured=False,
-                next_phase=ACPJobPhase.TRANSACTION,
-            )
-            return tx_hash
-        except Exception as e:
-            logger.warning(f"Error in respond_to_job_memo: {e}")
-            raise
-
-    def send_message(
-        self, job_id: int, message: GenericPayload[T], next_phase: ACPJobPhase
-    ) -> str:
-        data = self.contract_client.create_memo(
-            job_id,
-            json.dumps(message.model_dump()),
-            MemoType.MESSAGE,
-            False,
-            next_phase,
-        )
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
-
-    def respond_to_funds_transfer(
-        self, memo_id: int, accept: bool, reason: Optional[str] = ""
-    ):
-        data = self.contract_client.sign_memo(memo_id, accept, reason)
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
-
-    def reject_job(self, job_id: int, reason: Optional[str] = "") -> str:
-        data = self.contract_client.create_memo(
-            job_id, f"{reason or ''}", MemoType.MESSAGE, False, ACPJobPhase.REJECTED
-        )
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
-
-    def deliver_job(self, job_id: int, deliverable: DeliverablePayload) -> str:
-        data = self.contract_client.create_memo(
-            job_id,
-            prepare_payload(deliverable),
-            MemoType.OBJECT_URL,
-            is_secured=True,
-            next_phase=ACPJobPhase.COMPLETED,
-        )
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
-
-    def sign_memo(self, memo_id: int, accept: bool, reason: Optional[str] = "") -> str:
-        data = self.contract_client.sign_memo(memo_id, accept, reason)
-        tx_hash = data.get("receipts", [])[0].get("transactionHash")
-        return tx_hash
 
     def get_active_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
         url = f"{self.acp_api_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={pageSize}"

@@ -12,6 +12,7 @@ from eth_account.messages import encode_defunct
 
 
 from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, ACPContractConfig
+from virtuals_acp.models import OperationPayload
 
 MAX_RETRIES = 10
 
@@ -171,7 +172,7 @@ class AlchemyAccountKit:
         return "0x" + hex_str
 
     def prepare_calls(
-        self, calls: List[Dict[str, str]], capabilities: Optional[Dict[str, Any]] = None
+        self, calls: List[OperationPayload], capabilities: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         if not self.account_address:
             raise ValueError("Must request account first")
@@ -186,14 +187,14 @@ class AlchemyAccountKit:
 
         if capabilities:
             final_capabilities.update(capabilities)
-
+            
         params = {
             "from": self.account_address,
             "chainId": to_hex(self.chain_id),
             "calls": calls,
             "capabilities": final_capabilities,
         }
-
+        
         return self.rpc_client.wallet_prepare_calls(params)
 
     def send_prepared_calls(
@@ -201,6 +202,7 @@ class AlchemyAccountKit:
     ) -> Dict[str, Any]:
         if not self.permissions_context:
             raise ValueError("Must create session first")
+        
 
         # Sign the prepare calls result using the session key
         prepare_calls_signature_request_data = prepare_calls_result["signatureRequest"]
@@ -248,7 +250,7 @@ class AlchemyAccountKit:
             time.sleep(0.1 * (MAX_RETRIES - retries))
 
     def handle_user_operation(
-        self, calls: List[Dict[str, str]], capabilities: Dict[str, Any] = {}
+        self, calls: List[OperationPayload], capabilities: Dict[str, Any] = {}
     ) -> Dict[str, Any]:
         retries = MAX_RETRIES
         while True:
