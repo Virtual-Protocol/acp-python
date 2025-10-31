@@ -188,10 +188,26 @@ class AlchemyAccountKit:
         if capabilities:
             final_capabilities.update(capabilities)
             
+        payload = []
+            
+         #TODO can be improve, rather then looping it, debug why passing in calls into params give error   
+        for call in calls:
+            if (call.value is None):
+                payload.append({
+                    "to": call.to,
+                    "data": call.data,
+                })
+            else:
+                payload.append({
+                    "to": call.to,
+                    "data": call.data,
+                    "value": call.value,
+                })
+            
         params = {
             "from": self.account_address,
             "chainId": to_hex(self.chain_id),
-            "calls": calls,
+            "calls": payload,
             "capabilities": final_capabilities,
         }
         

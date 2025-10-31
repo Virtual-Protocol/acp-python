@@ -13,6 +13,7 @@ from virtuals_acp.models import (
     X402PayableRequirements,
     X402Payment,
     OffChainJob,
+    X402PaymentResponse,
 )
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.configs.configs import ACPContractConfig
@@ -26,7 +27,7 @@ from virtuals_acp.utils import safe_base64_encode
 
 
 class ACPX402:
-    def __init__(self, config: ACPContractConfig, session_key_client, public_client):
+    def __init__(self, config: ACPContractConfig, session_key_client, public_client, agent_wallet_address: str, entity_id: int):
         """
         config: ACPContractConfig
         session_key_client: a client capable of signing messages and typed data
@@ -35,6 +36,8 @@ class ACPX402:
         self.config = config
         self.session_key_client = session_key_client
         self.public_client = public_client
+        self.agent_wallet_address = agent_wallet_address
+        self.entity_id = entity_id
 
     def sign_update_job_nonce_message(self, job_id: int, nonce: str) -> str:
         message = f"{job_id}-{nonce}"
@@ -45,30 +48,37 @@ class ACPX402:
             raise ACPError("Failed to sign update job X402 nonce message", e)
 
     def update_job_nonce(self, job_id: int, nonce: str) -> OffChainJob:
+        """Update job X402 nonce."""
         try:
-            api_url = f"{self.config.acp_api_url}/api/jobs/{job_id}/x402-nonce"
-            signature = self.sign_update_job_nonce_message(job_id, nonce)
+            api_url = f"{self.config.acp_api_url}/jobs/{job_id}/x402-nonce"
+            message = f"{job_id}-{nonce}"
 
+            # Use eth_account.messages.encode_defunct to encode the message as an EIP-191 message (Ethereum signed message)
+            eth_message = encode_defunct(text=message)
+            signature = self.session_key_client.sign_message(eth_message)
+            
             headers = {
-                "x-signature": signature,
+                "x-signature": "0x" + signature.signature.hex(),
                 "x-nonce": nonce,
                 "Content-Type": "application/json",
             }
+            
             payload = {
                 "data": {
                     "nonce": nonce
                 }
             }
-            response = requests.post(api_url, headers=headers, json=payload)
-
-            if not response.ok:
-                raise ACPError("Failed to update job X402 nonce", response.text)
-
-            acp_job = response.json()
             
-            return acp_job
-        except Exception as error:
-            raise ACPError("Failed to update job X402 nonce", error)
+            response = requests.post(api_url, headers=headers, json=payload)
+            
+            if not response.ok:
+                raise ACPError(
+                    "Failed to update job X402 nonce",
+                    response.text
+                )
+            return response.json()
+        except Exception as e:
+            raise ACPError("Failed to update job X402 nonce", e)
 
     def generate_payment(self, payable_request: X402PayableRequest, requirements: X402PayableRequirements) -> X402Payment:
         try:
@@ -76,7 +86,7 @@ class ACPX402:
             time_now = int(time.time())
             valid_after = str(time_now)
             valid_before = str(time_now + requirements.accepts[0].maxTimeoutSeconds)
-
+            
             # Get token name and version using multicall but python not supported
             usdc_contract_instance = self.public_client.eth.contract(
                 address=usdc_contract,
@@ -96,7 +106,7 @@ class ACPX402:
             nonce = "0x" + nonce_bytes.hex()
 
             message = {
-                "from": self.session_key_client.agent_wallet_address,
+                "from": self.agent_wallet_address,
                 "to": payable_request.to,
                 "value": str(payable_request.value),
                 "validAfter": valid_after,
@@ -131,7 +141,7 @@ class ACPX402:
                 "domain": {
                     "chainId": int(self.config.chain_id),
                     "verifyingContract": VERIFYING_CONTRACT_ADDRESS,
-                    "salt": "0x" + "00" * 12 + self.session_key_client.agent_wallet_address[2:],  # Assuming account_address is '0x...'
+                    "salt": "0x" + "00" * 12 + self.agent_wallet_address[2:],  # Assuming account_address is '0x...'
                 },
                 "types": {
                     "ReplaySafeHash": [{"name": "hash", "type": "bytes32"}]
@@ -151,7 +161,7 @@ class ACPX402:
             if not raw_signature.startswith("0x"):
                 raw_signature = "0x" + raw_signature
                 
-            final_signature = self.pack_1271_eoa_signature(raw_signature, self.session_key_client.entity_id)
+            final_signature = self.pack_1271_eoa_signature(raw_signature, self.entity_id)
 
 
             payload = {
@@ -174,10 +184,10 @@ class ACPX402:
         except Exception as error:
             raise ACPError("Failed to generate X402 payment", error)
 
-    def perform_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> dict:
+    def perform_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> Dict[str, Any]:
         base_url = self.config.x402_config.url if self.config.x402_config else None
 
-        if not base_url or not getattr(base_url, "url", None):
+        if not base_url:
             raise ACPError("X402 URL not configured")
         
         try:
@@ -188,11 +198,8 @@ class ACPX402:
                 headers["x-budget"] = str(budget)
 
             res = requests.get(f"{base_url}{url}", headers=headers)
-            if res.status_code == HTTP_STATUS_CODES_X402[402]:
-                try:
-                    data = res.json()                    
-                except Exception:
-                    data = {}
+            if res.status_code == HTTP_STATUS_CODES_X402["Payment Required"]:
+                data = res.json()                    
                 return {
                     "isPaymentRequired": True,
                     "data": data

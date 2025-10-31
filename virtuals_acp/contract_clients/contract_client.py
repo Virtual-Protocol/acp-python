@@ -10,7 +10,7 @@ from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
-from virtuals_acp.models import ACPJobPhase, MemoType, FeeType,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload, OffChainJob
+from virtuals_acp.models import ACPJobPhase, MemoType, FeeType,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload, OffChainJob,X402PaymentResponse
 from virtuals_acp.x402 import ACPX402
 
 
@@ -28,7 +28,7 @@ class ACPContractClient(BaseAcpContractClient):
         self.alchemy_kit = AlchemyAccountKit(
             config, agent_wallet_address, entity_id, self.account, config.chain_id
         )
-        self.x402 = ACPX402(config, self.account, self.w3)
+        self.x402 = ACPX402(config, self.account, self.w3, self.agent_wallet_address, self.entity_id)
         
     def _get_random_nonce(self, bits: int = 152) -> int:
         """Generate a random bigint nonce."""
@@ -219,7 +219,7 @@ class ACPContractClient(BaseAcpContractClient):
             raise ACPError("Failed to generate X402 payment", e)
         
         
-    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> dict:
+    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> Dict[str, Any]:
         try:
             return self.x402.perform_request(url, budget, signature)
         except Exception as e:

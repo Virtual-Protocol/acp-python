@@ -251,7 +251,6 @@ class VirtualsACP:
     def _connect_socket(self) -> None:
         """Connect to the socket server with appropriate authentication."""
         headers_data = {
-            "x-sdk-version": version("virtuals_acp"),
             "x-sdk-language": "python",
             "x-contract-address": self.contract_clients[0].contract_address,
         }

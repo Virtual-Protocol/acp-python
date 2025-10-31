@@ -513,11 +513,11 @@ class ACPJob(BaseModel):
         x402_payable_requirements =  self.acp_contract_client.perform_x402_request(
             payment_url, str(budget)
         )
-
-        if not x402_payable_requirements.isPaymentRequired:
+        
+        if not x402_payable_requirements.get("isPaymentRequired"):
             return
 
-        accepts = x402_payable_requirements.data.accepts
+        accepts = x402_payable_requirements["data"].get("accepts", [])
         if not accepts:
             raise Exception("No X402 payment requirements found")
 
@@ -525,12 +525,12 @@ class ACPJob(BaseModel):
         
         x402_payment = self.acp_contract_client.generate_x402_payment(
             X402PayableRequest(
-                to=requirement.payTo,
-                value=int(requirement.maxAmountRequired),
-                maxTimeoutSeconds=requirement.maxTimeoutSeconds,
-                asset=requirement.asset,
+                to=requirement["payTo"],
+                value=int(requirement["maxAmountRequired"]),
+                maxTimeoutSeconds=requirement["maxTimeoutSeconds"],
+                asset=requirement["asset"],
             ),
-            X402PayableRequirements.model_validate(x402_payable_requirements.data)
+            X402PayableRequirements.model_validate(x402_payable_requirements["data"])
         )
         encoded_payment = x402_payment.encodedPayment
         nonce = x402_payment.nonce
@@ -541,7 +541,7 @@ class ACPJob(BaseModel):
             payment_url, str(budget), encoded_payment
         )
         
-        if x402_response.isPaymentRequired:
+        if x402_response.get("isPaymentRequired"):
             raise Exception("X402 payment failed")
 
         wait_ms = 2000

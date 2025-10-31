@@ -335,6 +335,6 @@ class BaseAcpContractClient(ABC):
         pass
 
     @abstractmethod
-    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> X402PaymentResponse:
+    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> Dict[str, Any]:
         """Abstract method to perform an X402 request."""
         pass
