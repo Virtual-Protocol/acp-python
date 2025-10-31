@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional
 from eth_account.messages import encode_defunct
 
 
-from virtuals_acp.constants import VERIFYING_CONTRACT_ADDRESS, X402_AUTHORIZATION_TYPES
+from virtuals_acp.constants import HTTP_STATUS_CODES_X402, VERIFYING_CONTRACT_ADDRESS, X402_AUTHORIZATION_TYPES
 from virtuals_acp.models import (
     X402PayableRequest,
     X402PayableRequirements,
@@ -188,7 +188,7 @@ class ACPX402:
                 headers["x-budget"] = str(budget)
 
             res = requests.get(f"{base_url}{url}", headers=headers)
-            if res.status_code == 402:
+            if res.status_code == HTTP_STATUS_CODES_X402[402]:
                 try:
                     data = res.json()                    
                 except Exception:
