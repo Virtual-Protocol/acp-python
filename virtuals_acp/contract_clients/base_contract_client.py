@@ -11,6 +11,7 @@ from eth_utils.abi import event_abi_to_log_topic
 
 from virtuals_acp.abis.erc20_abi import ERC20_ABI
 from virtuals_acp.abis.weth_abi import WETH_ABI
+from virtuals_acp.fare import WETH_FARE
 from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType
@@ -211,7 +212,7 @@ class BaseAcpContractClient(ABC):
 
     def wrap_eth(self, amount_base_unit: int) -> Dict[str, Any]:
         weth_contract = self.w3.eth.contract(
-            address=Web3.to_checksum_address(self.config.base_fare.contract_address),
+            address=Web3.to_checksum_address(WETH_FARE.contract_address),
             abi=WETH_ABI,
         )
         # Build a user operation (single call)
@@ -222,8 +223,7 @@ class BaseAcpContractClient(ABC):
             abi=WETH_ABI,
         )
 
-        # Add ETH value to send along with the deposit
-        trx_data["value"] = amount_base_unit
+        trx_data[0]["value"] = hex(amount_base_unit)
 
         # Send the user operation through Alchemy/Session key client
         return trx_data
