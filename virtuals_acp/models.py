@@ -64,6 +64,12 @@ class FeeType(int, Enum):
     NO_FEE = 0
     IMMEDIATE_FEE = 1
     DEFERRED_FEE = 2
+    PERCENTAGE_FEE = 3
+
+
+class PriceType(str, Enum):
+    FIXED = "fixed"
+    PERCENTAGE = "percentage"
 
 
 class ACPAgentSort(str, Enum):
@@ -145,11 +151,13 @@ class GenericPayload(PayloadModel, Generic[T]):
     data: T | List[T]
 
 
-class NegotiationPayload(PayloadModel):
+class RequestPayload(PayloadModel):
     name: Optional[str] = None
     requirement: Optional[Union[str, Dict[str, Any]]] = None
     service_name: Optional[str] = None
     service_requirement: Optional[Dict[str, Any]] = None
+    price_type: PriceType = PriceType.FIXED
+    price_value: Optional[float] = None
     model_config = ConfigDict(extra="allow")
 
 
