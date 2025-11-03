@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import (NegotiationPayload, ACPMemoStatus, PriceType)
+from virtuals_acp.models import (RequestPayload, ACPMemoStatus, PriceType)
 from virtuals_acp.utils import try_parse_json_model, prepare_payload, get_txn_hash_from_response
 from virtuals_acp.models import (
     ACPJobPhase,
@@ -60,7 +60,7 @@ class ACPJob(BaseModel):
         if not memo.content:
             return None
 
-        content_obj = try_parse_json_model(memo.content, NegotiationPayload)
+        content_obj = try_parse_json_model(memo.content, RequestPayload)
 
         if not content_obj:
             return None
