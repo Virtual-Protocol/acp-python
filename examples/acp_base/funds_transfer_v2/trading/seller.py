@@ -25,7 +25,7 @@ logger = logging.getLogger("FundsSellerAgent")
 load_dotenv(override=True)
 
 config = BASE_MAINNET_CONFIG_V2
-REJECT_AND_REFUND = True # flag to trigger job.reject_payable use cases
+REJECT_AND_REFUND = False # flag to trigger job.reject_payable use cases
 
 class JobName(str, Enum):
     OPEN_POSITION = "open_position"
@@ -168,7 +168,8 @@ def handle_task_transaction(job: ACPJob):
 
     if job_name == JobName.OPEN_POSITION:
         if REJECT_AND_REFUND: # to cater cases where a reject and refund is needed (ie: internal server error)
-            reason = f"Internal server error handling ${job.requirement.get("symbol")} trades"
+            print(job.requirement)
+            reason = f"Internal server error handling {job.requirement.get('symbol')} trades"
             logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
             job.reject_payable(
                 reason,
@@ -199,7 +200,7 @@ def handle_task_transaction(job: ACPJob):
 
     if job_name == JobName.SWAP_TOKEN:
         if REJECT_AND_REFUND: # to cater cases where a reject and refund is needed (ie: internal server error)
-            reason = f"Internal server error handling ${job.requirement.get("fromSymbol")} swaps"
+            reason = f"Internal server error handling ${job.requirement.get('fromSymbol')} swaps"
             logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
             from_amount = FareAmount(
                 job.requirement.get("amount"),
