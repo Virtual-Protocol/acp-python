@@ -64,7 +64,7 @@ def prompt_tp_sl_action(job: ACPJob, wallet: ClientWallet):
 
     action = None
     while action not in ("TP", "SL"):
-        print("\nAvailable actions:\n1. Hit TP\n2. Hit SL")
+        logger.info("\nAvailable actions:\n1. Hit TP\n2. Hit SL")
         selection = input("\nSelect an action (enter 1 or 2): ").strip()
         if selection == "1":
             action = "TP"
@@ -168,7 +168,6 @@ def handle_task_transaction(job: ACPJob):
 
     if job_name == JobName.OPEN_POSITION:
         if REJECT_AND_REFUND: # to cater cases where a reject and refund is needed (ie: internal server error)
-            print(job.requirement)
             reason = f"Internal server error handling {job.requirement.get('symbol')} trades"
             logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
             job.reject_payable(
