@@ -256,7 +256,8 @@ class X402PayableRequest(PayloadModel):
 
 class X402Payment(PayloadModel):
     encodedPayment: str
-    nonce: str
+    message: Dict[str, Any]
+    signature: str
 
 class OperationPayload(PayloadModel):
     data: str  # Should start with '0x'

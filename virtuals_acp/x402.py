@@ -1,6 +1,5 @@
 import time
 import requests
-import base64
 import json
 import secrets
 from typing import Any, Dict, Optional
@@ -13,7 +12,6 @@ from virtuals_acp.models import (
     X402PayableRequirements,
     X402Payment,
     OffChainJob,
-    X402PaymentResponse,
 )
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.configs.configs import ACPContractConfig
@@ -178,7 +176,8 @@ class ACPX402:
 
             return X402Payment(
                 encodedPayment=encoded_payment,
-                nonce=nonce
+                message=message,
+                signature=final_signature
             )
 
         except Exception as error:
@@ -196,8 +195,9 @@ class ACPX402:
                 headers["x-payment"] = signature
             if budget:
                 headers["x-budget"] = str(budget)
-
+                
             res = requests.get(f"{base_url}{url}", headers=headers)
+            
             if res.status_code == HTTP_STATUS_CODES_X402["Payment Required"]:
                 data = res.json()                    
                 return {

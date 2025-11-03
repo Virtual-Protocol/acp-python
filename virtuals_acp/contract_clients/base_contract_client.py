@@ -11,6 +11,7 @@ from web3.contract import Contract
 from eth_utils.abi import event_abi_to_log_topic
 
 from virtuals_acp.abis.erc20_abi import ERC20_ABI
+from virtuals_acp.abis.flat_token_v2_abi import FIAT_TOKEN_V2_ABI
 from virtuals_acp.abis.weth_abi import WETH_ABI
 from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.exceptions import ACPError
@@ -338,3 +339,42 @@ class BaseAcpContractClient(ABC):
     def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> Dict[str, Any]:
         """Abstract method to perform an X402 request."""
         pass
+    
+    def submit_transfer_with_authorization(
+        self,
+        from_address: str,
+        to_address: str,
+        value: int,
+        valid_after: int,
+        valid_before: int,
+        nonce: str,
+        signature: str
+    ) -> List[OperationPayload]:
+        try:
+            contract = self.w3.eth.contract(
+                address=self.config.base_fare.contract_address,
+                abi=FIAT_TOKEN_V2_ABI
+            )
+      
+            data = contract.encode_abi(
+                "transferWithAuthorization",
+                args=[
+                    from_address,
+                    to_address,
+                    value,
+                    valid_after,
+                    valid_before,
+                    nonce,
+                    signature
+                ],
+            )
+
+            payload = OperationPayload(
+                data=data,
+                to=self.config.base_fare.contract_address
+            )
+            return [payload]
+
+        except Exception as error:
+            from virtuals_acp.exceptions import ACPError
+            raise ACPError("Failed to submit TransferWithAuthorization", error)
