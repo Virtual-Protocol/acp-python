@@ -13,6 +13,7 @@ from eth_utils.abi import event_abi_to_log_topic
 from virtuals_acp.abis.erc20_abi import ERC20_ABI
 from virtuals_acp.abis.flat_token_v2_abi import FIAT_TOKEN_V2_ABI
 from virtuals_acp.abis.weth_abi import WETH_ABI
+from virtuals_acp.fare import WETH_FARE
 from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.models import ACPJobPhase, MemoType, FeeType, AcpJobX402PaymentDetails,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload, OffChainJob,X402PaymentResponse
@@ -250,7 +251,7 @@ class BaseAcpContractClient(ABC):
 
     def wrap_eth(self, amount_base_unit: int) -> OperationPayload:
         weth_contract = self.w3.eth.contract(
-            address=Web3.to_checksum_address(self.config.base_fare.contract_address),
+            address=Web3.to_checksum_address(WETH_FARE.contract_address),
             abi=WETH_ABI,
         )
         # Build a user operation (single call)

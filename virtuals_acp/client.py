@@ -841,3 +841,4 @@ class VirtualsACP:
 ACPJob.model_rebuild()
 ACPMemo.model_rebuild()
 ACPJobOffering.model_rebuild()
+ACPResourceOffering.model_rebuild()

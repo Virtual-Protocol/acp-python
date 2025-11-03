@@ -177,3 +177,5 @@ class ACPResourceOffering(BaseModel):
     url: str
     parameters: Optional[Dict[str, Any]]
     id: int
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
