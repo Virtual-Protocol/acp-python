@@ -34,6 +34,7 @@ def try_validate_model(data: dict, model: Type[T]) -> Optional[T]:
 def prepare_payload(payload: Union[str, Dict[str, Any]]) -> str:
     return payload if isinstance(payload, str) else json.dumps(payload)
 
+
 def deprecated(reason: str = "This function is deprecated and should not be used."):
     """Decorator to mark functions or methods as deprecated."""
 
@@ -50,6 +51,7 @@ def deprecated(reason: str = "This function is deprecated and should not be used
         return wrapped
 
     return decorator
+
 
 def safe_base64_encode(data: Union[str, bytes]) -> str:
     if isinstance(data, str):

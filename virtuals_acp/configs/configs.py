@@ -22,7 +22,7 @@ class ACPContractConfig:
         alchemy_policy_id: str,
         abi: List[Dict[str, Any]],
         rpc_endpoint: Optional[str] = None,
-        x402_config : Optional[X402Config] = None,
+        x402_config: Optional[X402Config] = None,
     ):
         self.chain = chain
         self.rpc_url = rpc_url
@@ -61,7 +61,7 @@ BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
     abi=ACP_X402_ABI,
     x402_config=X402Config(
         url="https://dev-acp-x402.virtuals.io",
-    )
+    ),
 )
 
 BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
@@ -75,7 +75,6 @@ BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     acp_api_url="https://acpx.virtuals.gg/api",
     abi=ACP_V2_ABI,
 )
-
 
 
 BASE_MAINNET_CONFIG = ACPContractConfig(
@@ -114,9 +113,8 @@ BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
     abi=ACP_X402_ABI,
     x402_config=X402Config(
         url="https://acp-x402.virtuals.io",
-    )
+    ),
 )
-
 
 
 DEFAULT_CONFIG = BASE_MAINNET_CONFIG_V2

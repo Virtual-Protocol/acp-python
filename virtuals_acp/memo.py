@@ -11,7 +11,11 @@ from virtuals_acp.models import (
     T,
     ACPMemoStatus,
 )
-from virtuals_acp.utils import try_parse_json_model, try_validate_model, get_txn_hash_from_response
+from virtuals_acp.utils import (
+    try_parse_json_model,
+    try_validate_model,
+    get_txn_hash_from_response,
+)
 
 if TYPE_CHECKING:
     from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
