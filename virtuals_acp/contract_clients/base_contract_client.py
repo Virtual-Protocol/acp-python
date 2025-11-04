@@ -16,7 +16,18 @@ from virtuals_acp.abis.weth_abi import WETH_ABI
 from virtuals_acp.fare import WETH_FARE
 from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.exceptions import ACPError
-from virtuals_acp.models import ACPJobPhase, MemoType, FeeType, AcpJobX402PaymentDetails,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload, OffChainJob,X402PaymentResponse
+from virtuals_acp.models import (
+    ACPJobPhase,
+    MemoType,
+    FeeType,
+    AcpJobX402PaymentDetails,
+    X402PayableRequest,
+    X402Payment,
+    X402PayableRequirements,
+    OperationPayload,
+    OffChainJob,
+    X402PaymentResponse,
+)
 
 
 class BaseAcpContractClient(ABC):
@@ -28,7 +39,6 @@ class BaseAcpContractClient(ABC):
         self.chain = config.chain
         self.abi = config.abi
         self.contract_address = Web3.to_checksum_address(config.contract_address)
-        
 
         if not self.w3.is_connected():
             raise ConnectionError(f"Failed to connect to RPC: {config.rpc_url}")
@@ -93,7 +103,9 @@ class BaseAcpContractClient(ABC):
     def _format_amount(self, amount: float) -> int:
         return int(Decimal(str(amount)) * (10**self.config.base_fare.decimals))
 
-    def update_account_metadata(self, account_id: int, metadata: str) -> OperationPayload:
+    def update_account_metadata(
+        self, account_id: int, metadata: str
+    ) -> OperationPayload:
         operation = self._build_user_operation(
             "updateAccountMetadata",
             [account_id, metadata],
@@ -102,7 +114,7 @@ class BaseAcpContractClient(ABC):
 
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def create_job(
@@ -129,7 +141,7 @@ class BaseAcpContractClient(ABC):
 
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def create_job_with_account(
@@ -150,10 +162,10 @@ class BaseAcpContractClient(ABC):
                 math.floor(expired_at.timestamp()),
             ],
         )
-        
+
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def approve_allowance(
@@ -167,10 +179,10 @@ class BaseAcpContractClient(ABC):
             contract_address=payment_token_address,
             abi=ERC20_ABI,
         )
-        
+
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def create_payable_memo(
@@ -204,10 +216,10 @@ class BaseAcpContractClient(ABC):
             ],
             self.config.contract_address,
         )
-        
+
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def create_memo(
@@ -223,10 +235,10 @@ class BaseAcpContractClient(ABC):
             [job_id, content, memo_type.value, is_secured, next_phase.value],
             self.config.contract_address,
         )
-        
+
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def sign_memo(
@@ -238,7 +250,7 @@ class BaseAcpContractClient(ABC):
 
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def set_budget_with_payment_token(
@@ -261,15 +273,15 @@ class BaseAcpContractClient(ABC):
             contract_address=weth_contract.address,
             abi=WETH_ABI,
         )
-        
+
         operation = OperationPayload(
             data=trx_data["data"],
             to=trx_data["to"],
             value=amount_base_unit,
         )
-        
+
         return operation
-    
+
     def create_job_with_x402(
         self,
         provider_address: str,
@@ -296,51 +308,51 @@ class BaseAcpContractClient(ABC):
                     metadata,
                 ],
             )
-            
+
             operation = OperationPayload(
                 data=operation["data"],
                 to=operation["to"],
             )
-            
+
             return operation
         except Exception as e:
             raise ACPError("Failed to create job with x402", e)
-        
+
     def get_x402_payment_details(self, job_id: int) -> AcpJobX402PaymentDetails:
         """Get X402 payment details for a job."""
         try:
             x402_config = self.config.x402_config
-            if not x402_config or not getattr(x402_config, 'url', None):
-                return AcpJobX402PaymentDetails(
-                    is_x402=False,
-                    is_budget_received=False
-            )
-            
+            if not x402_config or not getattr(x402_config, "url", None):
+                return AcpJobX402PaymentDetails(is_x402=False, is_budget_received=False)
+
             # Call the contract function
             result = self.contract.functions.x402PaymentDetails(job_id).call()
-            
+
             return AcpJobX402PaymentDetails(
-                is_x402=result[0],
-                is_budget_received=result[1]
+                is_x402=result[0], is_budget_received=result[1]
             )
         except Exception as e:
             raise ACPError("Failed to get X402 payment details", e)
-    
+
     @abstractmethod
     def update_job_x402_nonce(self, job_id: int, nonce: str) -> OffChainJob:
         """Abstract method to update the X402 nonce for a job."""
         pass
-    
+
     @abstractmethod
-    def generate_x402_payment(self, payable_request: X402PayableRequest, requirements: X402PayableRequirements) -> X402Payment:
+    def generate_x402_payment(
+        self, payable_request: X402PayableRequest, requirements: X402PayableRequirements
+    ) -> X402Payment:
         """Abstract method to generate an X402 payment."""
         pass
 
     @abstractmethod
-    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> Dict[str, Any]:
+    def perform_x402_request(
+        self, url: str, budget: Optional[str] = None, signature: Optional[str] = None
+    ) -> Dict[str, Any]:
         """Abstract method to perform an X402 request."""
         pass
-    
+
     def submit_transfer_with_authorization(
         self,
         from_address: str,
@@ -349,14 +361,13 @@ class BaseAcpContractClient(ABC):
         valid_after: int,
         valid_before: int,
         nonce: str,
-        signature: str
+        signature: str,
     ) -> List[OperationPayload]:
         try:
             contract = self.w3.eth.contract(
-                address=self.config.base_fare.contract_address,
-                abi=FIAT_TOKEN_V2_ABI
+                address=self.config.base_fare.contract_address, abi=FIAT_TOKEN_V2_ABI
             )
-      
+
             data = contract.encode_abi(
                 "transferWithAuthorization",
                 args=[
@@ -366,16 +377,16 @@ class BaseAcpContractClient(ABC):
                     valid_after,
                     valid_before,
                     nonce,
-                    signature
+                    signature,
                 ],
             )
 
             payload = OperationPayload(
-                data=data,
-                to=self.config.base_fare.contract_address
+                data=data, to=self.config.base_fare.contract_address
             )
             return [payload]
 
         except Exception as error:
             from virtuals_acp.exceptions import ACPError
+
             raise ACPError("Failed to submit TransferWithAuthorization", error)

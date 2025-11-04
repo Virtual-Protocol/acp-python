@@ -52,8 +52,7 @@ def buyer():
         acp_contract_clients=ACPContractClient(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
-            entity_id=env.BUYER_ENTITY_ID,
-            config=BASE_SEPOLIA_ACP_X402_CONFIG,
+            entity_id=env.BUYER_ENTITY_ID
         ),
         on_new_task=on_new_task,
         on_evaluate=on_evaluate,

@@ -172,7 +172,9 @@ class AlchemyAccountKit:
         return "0x" + hex_str
 
     def prepare_calls(
-        self, calls: List[OperationPayload], capabilities: Optional[Dict[str, Any]] = None
+        self,
+        calls: List[OperationPayload],
+        capabilities: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         if not self.account_address:
             raise ValueError("Must request account first")
@@ -187,30 +189,34 @@ class AlchemyAccountKit:
 
         if capabilities:
             final_capabilities.update(capabilities)
-            
+
         payload = []
-            
-         #TODO can be improve, rather then looping it, debug why passing in calls into params give error   
+
+        # TODO can be improve, rather then looping it, debug why passing in calls into params give error
         for call in calls:
-            if (call.value is None):
-                payload.append({
-                    "to": call.to,
-                    "data": call.data,
-                })
+            if call.value is None:
+                payload.append(
+                    {
+                        "to": call.to,
+                        "data": call.data,
+                    }
+                )
             else:
-                payload.append({
-                    "to": call.to,
-                    "data": call.data,
-                    "value": call.value,
-                })
-            
+                payload.append(
+                    {
+                        "to": call.to,
+                        "data": call.data,
+                        "value": call.value,
+                    }
+                )
+
         params = {
             "from": self.account_address,
             "chainId": to_hex(self.chain_id),
             "calls": payload,
             "capabilities": final_capabilities,
         }
-        
+
         return self.rpc_client.wallet_prepare_calls(params)
 
     def send_prepared_calls(
@@ -218,7 +224,6 @@ class AlchemyAccountKit:
     ) -> Dict[str, Any]:
         if not self.permissions_context:
             raise ValueError("Must create session first")
-        
 
         # Sign the prepare calls result using the session key
         prepare_calls_signature_request_data = prepare_calls_result["signatureRequest"]

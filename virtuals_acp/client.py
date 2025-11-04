@@ -431,7 +431,7 @@ class VirtualsACP:
                 fare_amount.fare.contract_address,
                 expired_at,
             )
-            
+
             response = self.contract_client.handle_operation([operation])
 
         job_id = self.contract_client.get_job_id(

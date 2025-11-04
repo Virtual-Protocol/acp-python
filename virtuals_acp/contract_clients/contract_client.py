@@ -10,7 +10,17 @@ from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
-from virtuals_acp.models import ACPJobPhase, MemoType, FeeType,X402PayableRequest,X402Payment,X402PayableRequirements, OperationPayload, OffChainJob,X402PaymentResponse
+from virtuals_acp.models import (
+    ACPJobPhase,
+    MemoType,
+    FeeType,
+    X402PayableRequest,
+    X402Payment,
+    X402PayableRequirements,
+    OperationPayload,
+    OffChainJob,
+    X402PaymentResponse,
+)
 from virtuals_acp.x402 import ACPX402
 
 
@@ -28,8 +38,10 @@ class ACPContractClient(BaseAcpContractClient):
         self.alchemy_kit = AlchemyAccountKit(
             config, agent_wallet_address, entity_id, self.account, config.chain_id
         )
-        self.x402 = ACPX402(config, self.account, self.w3, self.agent_wallet_address, self.entity_id)
-        
+        self.x402 = ACPX402(
+            config, self.account, self.w3, self.agent_wallet_address, self.entity_id
+        )
+
     def _get_random_nonce(self, bits: int = 152) -> int:
         """Generate a random bigint nonce."""
         bytes_len = bits // 8
@@ -60,7 +72,7 @@ class ACPContractClient(BaseAcpContractClient):
             for log in logs
             if log["topics"][0] == self.job_created_event_signature_hex
         ]
-        
+
         if len(decoded_create_job_logs) == 0:
             raise Exception("No logs found for JobCreated event")
 
@@ -98,19 +110,19 @@ class ACPContractClient(BaseAcpContractClient):
             operation = self._build_user_operation(
                 "createJob", [provider_address, evaluator_address, expire_timestamp]
             )
-            
+
             return OperationPayload(
                 data=operation["data"],
-                to=operation['to'],
+                to=operation["to"],
             )
         except Exception as e:
             raise ACPError("Failed to create job", e)
 
     def set_budget_with_payment_token(
-            self,
-            job_id: int,
-            budget_base_unit: int,
-            payment_token_address: Optional[str] = None,
+        self,
+        job_id: int,
+        budget_base_unit: int,
+        payment_token_address: Optional[str] = None,
     ) -> OperationPayload:
         token = payment_token_address or self.config.base_fare.contract_address
         operation = self._build_user_operation(
@@ -119,7 +131,7 @@ class ACPContractClient(BaseAcpContractClient):
 
         return OperationPayload(
             data=operation["data"],
-            to=operation['to'],
+            to=operation["to"],
         )
 
     def create_payable_memo(
@@ -153,10 +165,10 @@ class ACPContractClient(BaseAcpContractClient):
                     math.floor(expired_at.timestamp()),
                 ],
             )
-            
+
             return OperationPayload(
                 data=operation["data"],
-                to=operation['to'],
+                to=operation["to"],
             )
         except Exception as e:
             raise ACPError("Failed to create payable memo", e)
@@ -173,7 +185,7 @@ class ACPContractClient(BaseAcpContractClient):
 
     def update_account_metadata(self, account_id: int, metadata: str) -> Dict[str, Any]:
         raise ACPError("Not Supported")
-    
+
     def create_job_with_x402(
         self,
         provider_address: str,
@@ -192,34 +204,33 @@ class ACPContractClient(BaseAcpContractClient):
                     math.floor(expire_at.timestamp()),
                 ],
             )
-            
+
             return OperationPayload(
                 data=operation["data"],
-                to=operation['to'],
+                to=operation["to"],
             )
         except Exception as e:
-            raise ACPError("Failed to create job", e)   
-        
+            raise ACPError("Failed to create job", e)
+
     def update_job_x402_nonce(self, job_id: int, nonce: str) -> OffChainJob:
         """Update job X402 nonce."""
         try:
             return self.x402.update_job_nonce(job_id, nonce)
         except Exception as e:
             raise ACPError("Failed to update job X402 nonce", e)
-        
+
     def generate_x402_payment(
-        self, 
-        payable_request: X402PayableRequest, 
-        requirements: X402PayableRequirements
+        self, payable_request: X402PayableRequest, requirements: X402PayableRequirements
     ) -> X402Payment:
         """Generate X402 payment."""
         try:
             return self.x402.generate_payment(payable_request, requirements)
         except Exception as e:
             raise ACPError("Failed to generate X402 payment", e)
-        
-        
-    def perform_x402_request(self, url: str, budget: Optional[str] = None, signature: Optional[str] = None) -> Dict[str, Any]:
+
+    def perform_x402_request(
+        self, url: str, budget: Optional[str] = None, signature: Optional[str] = None
+    ) -> Dict[str, Any]:
         try:
             return self.x402.perform_request(url, budget, signature)
         except Exception as e:

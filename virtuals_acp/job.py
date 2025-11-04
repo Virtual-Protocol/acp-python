@@ -6,14 +6,25 @@ from pydantic import BaseModel, Field, ConfigDict
 
 from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import (PriceType, ACPMemoStatus, OperationPayload, X402PayableRequest, X402PayableRequirements, RequestPayload)
-from virtuals_acp.utils import try_parse_json_model, prepare_payload, get_txn_hash_from_response
+from virtuals_acp.models import (
+    PriceType,
+    ACPMemoStatus,
+    OperationPayload,
+    X402PayableRequest,
+    X402PayableRequirements,
+    RequestPayload,
+)
+from virtuals_acp.utils import (
+    try_parse_json_model,
+    prepare_payload,
+    get_txn_hash_from_response,
+)
 from virtuals_acp.models import (
     ACPJobPhase,
     MemoType,
     IACPAgent,
     DeliverablePayload,
-    FeeType
+    FeeType,
 )
 from virtuals_acp.fare import Fare, FareAmountBase, FareAmount
 
@@ -66,9 +77,7 @@ class ACPJob(BaseModel):
         if not content_obj:
             return None
 
-        self._requirement = (
-            content_obj.service_requirement or content_obj.requirement
-        )
+        self._requirement = content_obj.service_requirement or content_obj.requirement
         self._name = content_obj.service_name or content_obj.name
         self._price_type = content_obj.price_type or PriceType.FIXED
         self._price_value = content_obj.price_value or self.price
@@ -143,16 +152,16 @@ class ACPJob(BaseModel):
             (
                 m
                 for m in self.memos
-                if m.next_phase == ACPJobPhase.NEGOTIATION and m.status == ACPMemoStatus.REJECTED
+                if m.next_phase == ACPJobPhase.NEGOTIATION
+                and m.status == ACPMemoStatus.REJECTED
             ),
-            None
+            None,
         )
         if request_memo:
             return request_memo.signed_reason
 
         fallback_memo = next(
-            (m for m in self.memos if m.next_phase == ACPJobPhase.REJECTED),
-            None
+            (m for m in self.memos if m.next_phase == ACPJobPhase.REJECTED), None
         )
         return fallback_memo.content if fallback_memo else None
 
@@ -175,10 +184,7 @@ class ACPJob(BaseModel):
     def create_payable_requirement(
         self,
         content: str,
-        type: Literal[
-            MemoType.PAYABLE_REQUEST,
-            MemoType.PAYABLE_TRANSFER_ESCROW
-        ],
+        type: Literal[MemoType.PAYABLE_REQUEST, MemoType.PAYABLE_TRANSFER_ESCROW],
         amount: FareAmountBase,
         recipient: str,
         expired_at: Optional[datetime] = None,
@@ -271,13 +277,7 @@ class ACPJob(BaseModel):
             )
 
         # sign memo
-        operations.append(
-            self.acp_contract_client.sign_memo(
-                memo.id,
-                True,
-                reason
-            )
-        )
+        operations.append(self.acp_contract_client.sign_memo(memo.id, True, reason))
 
         operations.append(
             self.acp_contract_client.create_memo(
@@ -288,7 +288,7 @@ class ACPJob(BaseModel):
                 ACPJobPhase.EVALUATION,
             )
         )
-        
+
         x402PaymentDetails = self.acp_contract_client.get_x402_payment_details(self.id)
         if x402PaymentDetails.is_x402:
             self.perform_x402_payment(self.price)
@@ -299,10 +299,7 @@ class ACPJob(BaseModel):
     def accept(self, reason: Optional[str] = None) -> str | None:
         memo_content = f"Job {self.id} accepted. {reason or ''}"
         latest_memo = self.latest_memo
-        if (
-            latest_memo is None
-            or latest_memo.next_phase != ACPJobPhase.NEGOTIATION
-        ):
+        if latest_memo is None or latest_memo.next_phase != ACPJobPhase.NEGOTIATION:
             raise ValueError("No request memo found")
 
         return latest_memo.sign(True, memo_content)
@@ -320,11 +317,7 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.create_memo(
-                self.id,
-                memo_content,
-                MemoType.MESSAGE,
-                True,
-                ACPJobPhase.REJECTED
+                self.id, memo_content, MemoType.MESSAGE, True, ACPJobPhase.REJECTED
             )
         )
 
@@ -335,7 +328,7 @@ class ACPJob(BaseModel):
         self,
         reason: Optional[str],
         amount: FareAmountBase,
-        expired_at: Optional[datetime] = None
+        expired_at: Optional[datetime] = None,
     ) -> str | None:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
@@ -346,8 +339,7 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.approve_allowance(
-                amount.amount,
-                amount.fare.contract_address
+                amount.amount, amount.fare.contract_address
             )
         )
 
@@ -362,7 +354,7 @@ class ACPJob(BaseModel):
                 next_phase=ACPJobPhase.REJECTED,
                 memo_type=MemoType.PAYABLE_TRANSFER,
                 expired_at=expired_at,
-                token=amount.fare.contract_address
+                token=amount.fare.contract_address,
             )
         )
 
@@ -374,7 +366,9 @@ class ACPJob(BaseModel):
         accept: bool,
         reason: Optional[str] = None,
     ) -> str | None:
-        memo_content = f"Job {self.id} {'accepted' if accept else 'rejected'}. {reason or ''}"
+        memo_content = (
+            f"Job {self.id} {'accepted' if accept else 'rejected'}. {reason or ''}"
+        )
         if accept:
             self.accept(memo_content)
             return self.create_requirement(memo_content)
@@ -419,7 +413,7 @@ class ACPJob(BaseModel):
                 prepare_payload(deliverable),
                 MemoType.MESSAGE,
                 True,
-                ACPJobPhase.COMPLETED
+                ACPJobPhase.COMPLETED,
             )
         )
 
@@ -445,8 +439,7 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.approve_allowance(
-                amount.amount,
-                amount.fare.contract_address
+                amount.amount, amount.fare.contract_address
             )
         )
 
@@ -463,7 +456,7 @@ class ACPJob(BaseModel):
                 next_phase=ACPJobPhase.COMPLETED,
                 memo_type=MemoType.PAYABLE_TRANSFER,
                 expired_at=expired_at,
-                token=amount.fare.contract_address
+                token=amount.fare.contract_address,
             )
         )
 
@@ -508,8 +501,7 @@ class ACPJob(BaseModel):
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
         self.acp_contract_client.approve_allowance(
-            amount.amount,
-            amount.fare.contract_address
+            amount.amount, amount.fare.contract_address
         )
 
         fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
@@ -524,18 +516,18 @@ class ACPJob(BaseModel):
             next_phase=ACPJobPhase.COMPLETED,
             memo_type=MemoType.PAYABLE_NOTIFICATION,
             expired_at=expired_at,
-            token=amount.fare.contract_address
+            token=amount.fare.contract_address,
         )
-        
+
     def perform_x402_payment(self, budget: float):
         try:
             payment_url = "/acp-budget"
 
             # Perform X402 request to get payment requirements
-            x402_payable_requirements =  self.acp_contract_client.perform_x402_request(
+            x402_payable_requirements = self.acp_contract_client.perform_x402_request(
                 payment_url, str(budget)
             )
-            
+
             if not x402_payable_requirements.get("isPaymentRequired"):
                 return
 
@@ -544,7 +536,7 @@ class ACPJob(BaseModel):
                 raise Exception("No X402 payment requirements found")
 
             requirement = accepts[0]
-            
+
             x402_payment = self.acp_contract_client.generate_x402_payment(
                 X402PayableRequest(
                     to=requirement["payTo"],
@@ -552,7 +544,9 @@ class ACPJob(BaseModel):
                     maxTimeoutSeconds=requirement["maxTimeoutSeconds"],
                     asset=requirement["asset"],
                 ),
-                X402PayableRequirements.model_validate(x402_payable_requirements["data"])
+                X402PayableRequirements.model_validate(
+                    x402_payable_requirements["data"]
+                ),
             )
             encoded_payment = x402_payment.encodedPayment
             signature = x402_payment.signature
@@ -568,17 +562,19 @@ class ACPJob(BaseModel):
                 payment_url, str(budget), encoded_payment
             )
             if x402_response.get("isPaymentRequired"):
-                    # If payment is required, submit transfer with authorization and handle the operation
-                    operations = self.acp_contract_client.submit_transfer_with_authorization(
+                # If payment is required, submit transfer with authorization and handle the operation
+                operations = (
+                    self.acp_contract_client.submit_transfer_with_authorization(
                         message["from"],
                         message["to"],
                         int(message["value"]),
                         int(message["validAfter"]),
                         int(message["validBefore"]),
                         message["nonce"],
-                        signature
+                        signature,
                     )
-                    self.acp_contract_client.handle_operation(operations)
+                )
+                self.acp_contract_client.handle_operation(operations)
 
             wait_ms = 2000
             max_wait_ms = 30000  # max 30 seconds of polling
@@ -586,7 +582,9 @@ class ACPJob(BaseModel):
             max_iterations = 10
 
             while True:
-                x402_payment_details = self.acp_contract_client.get_x402_payment_details(self.id)
+                x402_payment_details = (
+                    self.acp_contract_client.get_x402_payment_details(self.id)
+                )
                 if x402_payment_details.is_budget_received:
                     break
 
@@ -600,5 +598,3 @@ class ACPJob(BaseModel):
             # Optionally: handle exception, log, or re-raise
             print(f"An error occurred during perform_x402_payment: {e}")
             raise
-        
-    
