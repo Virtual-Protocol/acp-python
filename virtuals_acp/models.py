@@ -279,18 +279,6 @@ class OperationPayload(PayloadModel):
     to: str  # Address as str
     value: Optional[int] = None
 
-    def to_dict(self):
-        return {
-            "data": self.data,
-            "to": self.to,
-            "value": self.value,
-        }
-
-    def to_json(self):
-        import json
-
-        return json.dumps(self.to_dict())
-
 
 class OffChainJob(PayloadModel):
     id: int
