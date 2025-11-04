@@ -197,20 +197,16 @@ class ACPX402:
                 headers["x-budget"] = str(budget)
                 
             res = requests.get(f"{base_url}{url}", headers=headers)
+            data = res.json()                    
             
-            if res.status_code == HTTP_STATUS_CODES_X402["Payment Required"]:
-                data = res.json()                    
-                return {
-                    "isPaymentRequired": True,
-                    "data": data
-                }
-            else :
-                res.raise_for_status()
-                data = res.json()
-                return {
-                    "isPaymentRequired": False,
-                    "data": data
-                }
+            if not res.ok and res.status_code != HTTP_STATUS_CODES_X402["Payment Required"]:
+                raise ACPError("Invalid response status code for X402 request", data)
+            
+            return {
+                "isPaymentRequired": res.status_code == HTTP_STATUS_CODES_X402["Payment Required"],
+                "data": data
+            }
+            return data
         except Exception as error:
             raise ACPError("Failed to perform X402 request", error)
         
