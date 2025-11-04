@@ -51,7 +51,7 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
 
 BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
     chain="base-sepolia",
-    rpc_url="https://sepolia.base.org",
+    rpc_url="https://alchemy-proxy.virtuals.io/api/proxy/rpc",
     chain_id=84532,
     contract_address="0x8Db6B1c839Fc8f6bd35777E194677B67b4D51928",
     base_fare=Fare("0x036CbD53842c5426634e7929541eC2318f3dCF7e", 6),
