@@ -15,7 +15,7 @@ from virtuals_acp.models import (
     ACPGraduationStatus,
     ACPOnlineStatus,
 )
-from virtuals_acp.configs.configs import BASE_SEPOLIA_ACP_X402_CONFIG, BASE_MAINNET_ACP_X402_CONFIG
+from virtuals_acp.configs.configs import BASE_MAINNET_ACP_X402_CONFIG
 
 load_dotenv(override=True)
 
