@@ -351,7 +351,8 @@ class VirtualsACP:
                         contract_client=contract_client,
                         provider_address=provider_address,
                         name=job["name"],
-                        price=job["price"],
+                        price=job["priceV2"]["value"],
+                        price_type=job["priceV2"]["type"],
                         requirement=job.get("requirement", None),
                     )
                     for job in agent_data.get("jobs", [])

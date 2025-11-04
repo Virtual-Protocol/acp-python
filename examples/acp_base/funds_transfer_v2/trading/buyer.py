@@ -153,9 +153,9 @@ def main():
             # Waiting for current job to complete
             continue
 
-        print("\nAvailable actions:")
+        logger.info("\nAvailable actions:")
         for action in actions_definition:
-            print(f"{action['index']}. {action['desc']}")
+            logger.info(f"{action['index']}. {action['desc']}")
 
         try:
             answer = input("\nSelect an action (enter the number): ").strip()

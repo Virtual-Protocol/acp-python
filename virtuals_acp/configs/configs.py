@@ -39,7 +39,7 @@ class ACPContractConfig:
 
 BASE_SEPOLIA_CONFIG = ACPContractConfig(
     chain="base-sepolia",
-    rpc_url="https://sepolia.base.org",
+    rpc_url="https://alchemy-proxy.virtuals.io/api/proxy/rpc",
     chain_id=84532,
     contract_address="0x8Db6B1c839Fc8f6bd35777E194677B67b4D51928",
     base_fare=Fare("0x036CbD53842c5426634e7929541eC2318f3dCF7e", 6),
@@ -66,7 +66,7 @@ BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
 
 BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     chain="base-sepolia",
-    rpc_url="https://sepolia.base.org",
+    rpc_url="https://alchemy-proxy.virtuals.io/api/proxy/rpc",
     chain_id=84532,
     contract_address="0xdf54E6Ed6cD1d0632d973ADECf96597b7e87893c",
     base_fare=Fare("0x036CbD53842c5426634e7929541eC2318f3dCF7e", 6),
@@ -80,7 +80,7 @@ BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
 
 BASE_MAINNET_CONFIG = ACPContractConfig(
     chain="base",
-    rpc_url="https://mainnet.base.org",
+    rpc_url="https://alchemy-proxy-prod.virtuals.io/api/proxy/rpc",
     chain_id=8453,
     contract_address="0x6a1FE26D54ab0d3E1e3168f2e0c0cDa5cC0A0A4A",
     base_fare=Fare("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6),
@@ -92,7 +92,7 @@ BASE_MAINNET_CONFIG = ACPContractConfig(
 
 BASE_MAINNET_CONFIG_V2 = ACPContractConfig(
     chain="base",
-    rpc_url="https://mainnet.base.org",
+    rpc_url="https://alchemy-proxy-prod.virtuals.io/api/proxy/rpc",
     chain_id=8453,
     contract_address="0xa6C9BA866992cfD7fd6460ba912bfa405adA9df0",
     base_fare=Fare("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6),
