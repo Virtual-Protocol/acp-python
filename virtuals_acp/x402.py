@@ -212,7 +212,6 @@ class ACPX402:
                 "isPaymentRequired": res.status_code == HTTP_STATUS_CODES_X402["Payment Required"],
                 "data": data
             }
-            return data
         except Exception as error:
             raise ACPError("Failed to perform X402 request", error)
 
