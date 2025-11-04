@@ -1,6 +1,5 @@
 import time
 import requests
-import json
 import secrets
 from typing import Any, Dict, Optional
 from eth_account.messages import encode_defunct
@@ -16,6 +15,7 @@ from virtuals_acp.models import (
     X402PayableRequirements,
     X402Payment,
     OffChainJob,
+    X402PaymentPayload,
 )
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.configs.configs import ACPContractConfig
@@ -169,12 +169,15 @@ class ACPX402:
                 raw_signature, self.entity_id
             )
 
-            payload = {
-                "x402Version": requirements.x402Version,
-                "scheme": requirements.accepts[0].scheme,
-                "network": requirements.accepts[0].network,
-                "payload": {"signature": final_signature, "authorization": message},
-            }
+            payload = X402PaymentPayload(
+                x402_version=requirements.x402Version,
+                scheme=requirements.accepts[0].scheme,
+                network=requirements.accepts[0].network,
+                payload={
+                    "signature": final_signature,
+                    "authorization": message
+                }
+            )
 
             encoded_payment = self.encode_payment(payload)
 
@@ -215,22 +218,8 @@ class ACPX402:
         except Exception as error:
             raise ACPError("Failed to perform X402 request", error)
 
-    def encode_payment(self, payment_payload: Any) -> str:
-        """Encode a payment payload into a base64 string, handling HexBytes and other non-serializable types."""
-        from hexbytes import HexBytes
-
-        def default(obj):
-            if isinstance(obj, HexBytes):
-                return obj.hex()
-            if hasattr(obj, "to_dict"):
-                return obj.to_dict()
-            if hasattr(obj, "hex"):
-                return obj.hex()
-            raise TypeError(
-                f"Object of type {obj.__class__.__name__} is not JSON serializable"
-            )
-
-        return safe_base64_encode(json.dumps(payment_payload, default=default))
+    def encode_payment(self, payment_payload: X402PaymentPayload) -> str:
+        return safe_base64_encode(payment_payload.model_dump_json())
 
     def pack_1271_eoa_signature(self, validation_signature: str, entity_id: int) -> str:
         if not validation_signature.startswith("0x"):

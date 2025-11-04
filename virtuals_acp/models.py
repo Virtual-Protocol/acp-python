@@ -274,6 +274,13 @@ class X402Payment(PayloadModel):
     signature: str
 
 
+class X402PaymentPayload(PayloadModel):
+    x402_version: int
+    scheme: str
+    network: str
+    payload: Dict[str, Any]
+
+
 class OperationPayload(PayloadModel):
     data: str  # Should start with '0x'
     to: str  # Address as str
