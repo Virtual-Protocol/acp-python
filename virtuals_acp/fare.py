@@ -73,7 +73,7 @@ class FareAmountBase(ABC):
         amount: Union[int, float], contract_address: str, config: "ACPContractConfig"
     ) -> "FareAmountBase":
         fare = Fare.from_contract_address(contract_address, config)
-        if isinstance(amount, (int, float)):
+        if isinstance(amount, float):
             return FareAmount(amount, fare)
         return FareBigInt(int(amount), fare)
 

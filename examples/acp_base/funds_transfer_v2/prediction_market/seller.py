@@ -24,6 +24,7 @@ logger = logging.getLogger("PredictionMarketSellerAgent")
 
 load_dotenv(override=True)
 config = BASE_MAINNET_CONFIG_V2
+REJECT_AND_REFUND = False  # flag to trigger job.reject_payable use cases
 
 
 class JobName(str, Enum):
@@ -241,6 +242,16 @@ def handle_task_transaction(job: ACPJob):
         end_time = payload.get("endTime")
         market_id = _derive_market_id(question)
 
+        if REJECT_AND_REFUND:  # to cater cases where a reject and refund is needed (ie: internal server error)
+            reason = f"Internal server error handling market creation for {question}"
+            logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
+            job.reject_payable(
+                reason,
+                FareAmount(liquidity, config.base_fare),
+            )
+            logger.info(f"Job {job.id} rejected and refunded.")
+            return
+
         if len(outcomes) < 2:
             return job.reject("Market creation failed: need >= 2 outcomes")
 
@@ -272,6 +283,16 @@ def handle_task_transaction(job: ACPJob):
         if not market:
             return job.reject(f"Market {market_id} not found")
 
+        if REJECT_AND_REFUND:  # to cater cases where a reject and refund is needed (ie: internal server error)
+            reason = f"Internal server error handling bet placement for market {market_id}"
+            logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
+            job.reject_payable(
+                reason,
+                FareAmount(amount, config.base_fare),
+            )
+            logger.info(f"Job {job.id} rejected and refunded.")
+            return
+
         market.bets.append(Bet(bettor=job.client_address, outcome=outcome, amount=amount))
         market.outcome_pools[outcome] = market.outcome_pools.get(outcome, 0) + amount
 
@@ -285,6 +306,21 @@ def handle_task_transaction(job: ACPJob):
     if job_name == JobName.CLOSE_BET:
         payload = job.requirement
         market_id = payload.get("marketId")
+        
+        if REJECT_AND_REFUND:  # to cater cases where a reject and refund is needed (ie: internal server error)
+            reason = f"Internal server error handling bet closure for market {market_id}"
+            logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
+            # Get the original bet amount before closing (close_bet removes bets from market)
+            market = markets.get(market_id)
+            bets = [b for b in (market.bets if market else []) if b.bettor == job.client_address]
+            original_bet_amount = sum(bet.amount for bet in bets)
+            job.reject_payable(
+                reason,
+                FareAmount(original_bet_amount, config.base_fare),
+            )
+            logger.info(f"Job {job.id} rejected and refunded.")
+            return
+        
         closing_amount = close_bet(job.client_address, market_id)
         logger.info(f"Bet closed for {job.client_address} in market {market_id}")
         job.deliver_payable(

@@ -2,7 +2,7 @@ from datetime import datetime, timezone, timedelta
 import time
 from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 
 from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
@@ -47,11 +47,11 @@ class ACPJob(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    _base_fare: Fare
-    _name: Optional[str] = None
-    _requirement: Optional[Union[str, Dict[str, Any]]] = None
-    _price_type: PriceType
-    _price_value: float
+    _base_fare: Optional[Fare] = PrivateAttr(default=None)
+    _name: Optional[str] = PrivateAttr(default=None)
+    _requirement: Optional[Union[str, Dict[str, Any]]] = PrivateAttr(default=None)
+    _price_type: PriceType = PrivateAttr(default=PriceType.FIXED)
+    _price_value: float = PrivateAttr(default=0.0)
 
     def model_post_init(self, __context: Any) -> None:
         if self.acp_client:
