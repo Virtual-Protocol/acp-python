@@ -101,14 +101,17 @@ class ACPContractClient(BaseAcpContractClient):
         payment_token_address: str,
         budget_base_unit: int,
         metadata: str = "",
+        isX402Job: bool = False
     ) -> OperationPayload:
         try:
             provider_address = Web3.to_checksum_address(provider_address)
             evaluator_address = Web3.to_checksum_address(evaluator_address)
             expire_timestamp = math.floor(expire_at.timestamp())
+            
+            fn_name = "createJobWithX402" if isX402Job else "createJob"
 
             operation = self._build_user_operation(
-                "createJob", [provider_address, evaluator_address, expire_timestamp]
+                fn_name, [provider_address, evaluator_address, expire_timestamp]
             )
 
             return OperationPayload(
@@ -185,32 +188,6 @@ class ACPContractClient(BaseAcpContractClient):
 
     def update_account_metadata(self, account_id: int, metadata: str) -> Dict[str, Any]:
         raise ACPError("Not Supported")
-
-    def create_job_with_x402(
-        self,
-        provider_address: str,
-        evaluator_address: str,
-        expire_at: datetime,
-        payment_token_address: str,
-        budget_base_unit: int,
-        metadata: str,
-    ) -> OperationPayload:
-        try:
-            operation = self._build_user_operation(
-                "createJobWithX402",
-                [
-                    Web3.to_checksum_address(provider_address),
-                    Web3.to_checksum_address(evaluator_address),
-                    math.floor(expire_at.timestamp()),
-                ],
-            )
-
-            return OperationPayload(
-                data=operation["data"],
-                to=operation["to"],
-            )
-        except Exception as e:
-            raise ACPError("Failed to create job", e)
 
     def update_job_x402_nonce(self, job_id: int, nonce: str) -> OffChainJob:
         """Update job X402 nonce."""

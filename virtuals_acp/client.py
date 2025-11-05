@@ -13,6 +13,7 @@ import requests
 import socketio
 from web3 import Web3
 
+from virtuals_acp.constants import USDC_TOKEN_ADDRESS
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPApiError, ACPError
 from virtuals_acp.account import ACPAccount
@@ -30,6 +31,7 @@ from virtuals_acp.models import (
     GenericPayload,
     T,
     ACPMemoStatus,
+    OperationPayload,
 )
 from virtuals_acp.job_offering import ACPJobOffering, ACPResourceOffering
 from virtuals_acp.fare import (
@@ -40,6 +42,8 @@ from virtuals_acp.fare import (
     FareAmountBase,
 )
 from virtuals_acp.configs.configs import (
+    BASE_MAINNET_ACP_X402_CONFIG,
+    BASE_SEPOLIA_ACP_X402_CONFIG,
     BASE_SEPOLIA_CONFIG,
     BASE_MAINNET_CONFIG,
 )
@@ -406,39 +410,48 @@ class VirtualsACP:
         # Determine whether to call createJob or createJobWithAccount
         base_contract_addresses = {
             BASE_SEPOLIA_CONFIG.contract_address.lower(),
+            BASE_SEPOLIA_ACP_X402_CONFIG.contract_address.lower(),
             BASE_MAINNET_CONFIG.contract_address.lower(),
+            BASE_MAINNET_ACP_X402_CONFIG.contract_address.lower(),
+            
         }
 
         use_simple_create = (
             self.contract_client.config.contract_address.lower()
             in base_contract_addresses
         )
+        
+        chain_id = self.contract_client.config.chain_id
+        usdc_token_address = USDC_TOKEN_ADDRESS[chain_id]
+        is_usdc_payment_token = usdc_token_address == fare_amount.fare.contract_address
 
         if use_simple_create or not account:
-            operation = self.contract_client.create_job(
+            isX402Job =  bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
+            create_job_operation = self.contract_client.create_job(
                 provider_address,
                 eval_addr or self.wallet_address,
                 expired_at,
                 fare_amount.fare.contract_address,
                 fare_amount.amount,
                 "",
+                isX402Job=isX402Job,
             )
         else:
-            operation = self.contract_client.create_job_with_account(
+            create_job_operation = self.contract_client.create_job_with_account(
                 account.id,
                 eval_addr or self.wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
                 expired_at,
             )
-
-            response = self.contract_client.handle_operation([operation])
+            
+        response = self.contract_client.handle_operation([create_job_operation])
 
         job_id = self.contract_client.get_job_id(
             response, self.agent_address, provider_address
         )
 
-        self.contract_client.create_memo(
+        operations = self.contract_client.create_memo(
             job_id,
             (
                 service_requirement
@@ -449,6 +462,8 @@ class VirtualsACP:
             is_secured=True,
             next_phase=ACPJobPhase.NEGOTIATION,
         )
+        
+        self.contract_client.handle_operation([operations])
 
         return job_id
 

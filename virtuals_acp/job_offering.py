@@ -10,6 +10,7 @@ from virtuals_acp.configs.configs import (
     BASE_SEPOLIA_CONFIG,
     BASE_MAINNET_CONFIG,
     BASE_SEPOLIA_ACP_X402_CONFIG,
+    BASE_MAINNET_ACP_X402_CONFIG
 )
 from virtuals_acp.constants import USDC_TOKEN_ADDRESS
 from web3 import Web3
@@ -78,6 +79,12 @@ class ACPJobOffering(BaseModel):
             "priceValue": self.price,
             "priceType": self.price_type,
         }
+        
+        eval_addr = (
+            Web3.to_checksum_address(evaluator_address)
+            if evaluator_address
+            else self.contract_client.agent_wallet_address
+        )
 
         # Prepare fare amount based on this offering's price and contract's base fare
         fare_amount = FareAmount(
@@ -96,6 +103,8 @@ class ACPJobOffering(BaseModel):
             BASE_SEPOLIA_CONFIG.contract_address.lower(),
             BASE_SEPOLIA_ACP_X402_CONFIG.contract_address.lower(),
             BASE_MAINNET_CONFIG.contract_address.lower(),
+            BASE_MAINNET_ACP_X402_CONFIG.contract_address.lower(),
+            
         }
 
         use_simple_create = (
@@ -109,37 +118,16 @@ class ACPJobOffering(BaseModel):
 
         if use_simple_create or not account:
             # If the contract has x402_config and USDC is used, call create_job_with_x402
-            if (
-                getattr(self.contract_client.config, "x402_config", None)
-                and is_usdc_payment_token
-            ):
-                create_job_operation = self.contract_client.create_job_with_x402(
-                    self.provider_address,
-                    evaluator_address
-                    or getattr(
-                        self.contract_client,
-                        "wallet_address",
-                        self.contract_client.agent_wallet_address,
-                    ),
-                    expired_at,
-                    fare_amount.fare.contract_address,
-                    fare_amount.amount,
-                    "",
-                )
-            else:
-                create_job_operation = self.contract_client.create_job(
-                    self.provider_address,
-                    evaluator_address
-                    or getattr(
-                        self.contract_client,
-                        "wallet_address",
-                        self.contract_client.agent_wallet_address,
-                    ),
-                    expired_at,
-                    fare_amount.fare.contract_address,
-                    fare_amount.amount,
-                    "",
-                )
+            isX402Job =  bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
+            create_job_operation = self.contract_client.create_job(
+                self.provider_address,
+                eval_addr,
+                expired_at,
+                fare_amount.fare.contract_address,
+                fare_amount.amount,
+                "",
+                isX402Job=isX402Job,
+            )
         else:
             evaluator_address = (
                 Web3.to_checksum_address(evaluator_address)

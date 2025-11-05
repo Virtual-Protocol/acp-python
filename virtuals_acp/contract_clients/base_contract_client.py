@@ -125,9 +125,11 @@ class BaseAcpContractClient(ABC):
         payment_token_address: str,
         budget_base_unit: int,
         metadata: str,
+        isX402Job: bool = False
     ) -> OperationPayload:
+        fn_name = "createJobWithX402" if isX402Job else "createJob"
         operation = self._build_user_operation(
-            "createJob",
+            fn_name,
             [
                 Web3.to_checksum_address(provider_address),
                 Web3.to_checksum_address(evaluator_address),
@@ -281,42 +283,6 @@ class BaseAcpContractClient(ABC):
         )
 
         return operation
-
-    def create_job_with_x402(
-        self,
-        provider_address: str,
-        evaluator_address: str,
-        expired_at: datetime,
-        payment_token_address: str,
-        budget_base_unit: int,
-        metadata: str,
-    ) -> OperationPayload:
-        """
-        Build the payload for createJobWithX402 operation.
-        """
-        try:
-            # Convert datetime to Unix timestamp
-            expired_at_timestamp = int(expired_at.timestamp())
-            operation = self._build_user_operation(
-                "createJobWithX402",
-                [
-                    Web3.to_checksum_address(provider_address),
-                    Web3.to_checksum_address(evaluator_address),
-                    expired_at_timestamp,
-                    Web3.to_checksum_address(payment_token_address),
-                    budget_base_unit,
-                    metadata,
-                ],
-            )
-
-            operation = OperationPayload(
-                data=operation["data"],
-                to=operation["to"],
-            )
-
-            return operation
-        except Exception as e:
-            raise ACPError("Failed to create job with x402", e)
 
     def get_x402_payment_details(self, job_id: int) -> AcpJobX402PaymentDetails:
         """Get X402 payment details for a job."""
