@@ -205,7 +205,7 @@ class ACPX402:
             if budget:
                 headers["x-budget"] = str(budget)
 
-            res = requests.get(f"{base_url}{url}", headers=headers)
+            res = requests.get(f"{base_url}{url}", headers=headers, timeout=60)
             data = res.json()                    
             
             if not res.ok and res.status_code != HTTP_STATUS_CODES_X402["Payment Required"]:
