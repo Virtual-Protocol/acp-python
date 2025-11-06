@@ -173,8 +173,11 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         return job.create_payable_requirement(
             "Send USDC to setup initial liquidity to create market",
             MemoType.PAYABLE_REQUEST,
-            FareAmount(liquidity, config.base_fare),
-            job.provider_address,
+            FareAmount(
+                liquidity,
+                config.base_fare # ACP Base Currency: USDC
+            ),
+            job.provider_address, # funds receiving address, can be any address on Base
         )
 
     if job_name == JobName.PLACE_BET:
@@ -198,8 +201,11 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         return job.create_payable_requirement(
             f"Send {amount} {token} to place bet",
             MemoType.PAYABLE_REQUEST,
-            FareAmount(amount, config.base_fare),
-            job.provider_address,
+            FareAmount(
+                amount,
+                config.base_fare # ACP Base Currency: USDC
+            ),
+            job.provider_address, # funds receiving address, can be any address on Base
         )
 
     if job_name == JobName.CLOSE_BET:
