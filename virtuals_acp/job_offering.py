@@ -150,9 +150,6 @@ class ACPJobOffering(BaseModel):
             self.provider_address,
         )
 
-        self.contract_client.set_budget_with_payment_token(
-            job_id, fare_amount.amount, fare_amount.fare.contract_address
-        )
 
         operations: List[OperationPayload] = []
 
