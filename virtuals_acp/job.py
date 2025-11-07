@@ -525,7 +525,7 @@ class ACPJob(BaseModel):
 
             # Perform X402 request to get payment requirements
             x402_payable_requirements = self.acp_contract_client.perform_x402_request(
-                payment_url, str(budget)
+                payment_url, self.acp_contract_client.getAcpVersion(), str(budget)
             )
 
             if not x402_payable_requirements.get("isPaymentRequired"):

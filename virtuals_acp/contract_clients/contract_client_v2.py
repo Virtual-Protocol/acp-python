@@ -1,5 +1,5 @@
 import secrets
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from eth_account import Account
 from web3 import Web3
@@ -9,7 +9,8 @@ from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG_V2
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPError
-from virtuals_acp.models import OperationPayload
+from virtuals_acp.models import AcpJobX402PaymentDetails, OffChainJob, OperationPayload, X402PayableRequest, X402PayableRequirements, X402Payment
+from virtuals_acp.x402 import ACPX402
 
 
 class ACPContractClientV2(BaseAcpContractClient):
@@ -32,6 +33,9 @@ class ACPContractClientV2(BaseAcpContractClient):
             chain_id=config.chain_id,
         )
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
+        self.x402 = ACPX402(config, self.account, self.w3, self.agent_wallet_address, self.entity_id)
+        
+
 
         def multicall_read(
             w3: Web3, contract_address: str, abi: list[Dict[str, Any]], calls: list[str]
@@ -58,6 +62,9 @@ class ACPContractClientV2(BaseAcpContractClient):
         self.job_manager_contract = self.w3.eth.contract(
             address=self.job_manager_address, abi=JOB_MANAGER_ABI
         )
+        
+    def getAcpVersion(self) -> str:
+        return "2"
 
     def _get_random_nonce(self, bits: int = 152) -> int:
         """Generate a random bigint nonce."""
@@ -109,19 +116,54 @@ class ACPContractClientV2(BaseAcpContractClient):
             )
 
         return int(created_job_log["args"]["jobId"])
-
-    def update_job_x402_nonce(self, job_id: int, nonce: str) -> str:
-        """
-        Not implemented yet for contract_client_v2.
-        """
-        raise NotImplementedError("update_job_x402_nonce is not implemented.")
+    
+    def update_job_x402_nonce(self, job_id: int, nonce: str) -> OffChainJob:
+        """Update job X402 nonce."""
+        try:
+            return self.x402.update_job_nonce(job_id, nonce)
+        except Exception as e:
+            raise ACPError("Failed to update job X402 nonce", e)
 
     def generate_x402_payment(
-        self,
-        payable_request,  # X402PayableRequest type expected
-        requirements,  # X402PayableRequirements type expected
-    ):
-        """
-        Not implemented yet for contract_client_v2.
-        """
-        raise NotImplementedError("generate_x402_payment is not implemented.")
+        self, 
+        payable_request: X402PayableRequest, 
+        requirements: X402PayableRequirements
+    ) -> X402Payment:
+        """Generate X402 payment."""
+        try:
+            return self.x402.generate_payment(payable_request, requirements)
+        except Exception as e:
+            raise ACPError("Failed to generate X402 payment", e)
+        
+    def perform_x402_request(self, url: str, version: str, budget: Optional[str] = None, signature: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            return self.x402.perform_request(url, version, budget, signature)
+        except Exception as e:
+            raise ACPError("Failed to perform X402 request", e)
+
+    def get_x402_payment_details(self, job_id: int) -> AcpJobX402PaymentDetails:
+        """Get X402 payment details for a job."""
+        try:
+            from virtuals_acp.abis.job_manager import JOB_MANAGER_ABI
+
+            x402_config = self.config.x402_config
+            if not x402_config or not getattr(x402_config, "url", None):
+                return AcpJobX402PaymentDetails(is_x402=False, is_budget_received=False)
+
+            # Use the job manager address & JOB_MANAGER_ABI directly
+            job_manager_address = Web3.to_checksum_address(self.job_manager_address)
+            if not job_manager_address:
+                raise ACPError("Job manager address not provided in config.")
+
+            job_manager_contract = self.w3.eth.contract(
+                address=job_manager_address,
+                abi=JOB_MANAGER_ABI,
+            )
+
+            result = job_manager_contract.functions.x402PaymentDetails(job_id).call()
+
+            return AcpJobX402PaymentDetails(
+                is_x402=result[0], is_budget_received=result[1]
+            )
+        except Exception as e:
+            raise ACPError("Failed to get X402 payment details", e)

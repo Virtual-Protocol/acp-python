@@ -115,10 +115,10 @@ class ACPJobOffering(BaseModel):
         chain_id = self.contract_client.config.chain_id
         usdc_token_address = USDC_TOKEN_ADDRESS[chain_id]
         is_usdc_payment_token = usdc_token_address == fare_amount.fare.contract_address
-
+        
+        # If the contract has x402_config and USDC is used, call create_job_with_x402
+        is_x402_job =  bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
         if use_simple_create or not account:
-            # If the contract has x402_config and USDC is used, call create_job_with_x402
-            isX402Job =  bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
             create_job_operation = self.contract_client.create_job(
                 self.provider_address,
                 eval_addr,
@@ -126,7 +126,7 @@ class ACPJobOffering(BaseModel):
                 fare_amount.fare.contract_address,
                 fare_amount.amount,
                 "",
-                isX402Job=isX402Job,
+                is_x402_job=is_x402_job,
             )
         else:
             evaluator_address = (
@@ -140,6 +140,7 @@ class ACPJobOffering(BaseModel):
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
                 expired_at or datetime.utcnow(),
+                is_x402_job=is_x402_job,
             )
 
         response = self.contract_client.handle_operation([create_job_operation])

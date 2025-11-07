@@ -4,6 +4,7 @@ from virtuals_acp.fare import Fare
 from virtuals_acp.abis.abi import ACP_ABI
 from virtuals_acp.abis.abi_v2 import ACP_V2_ABI
 from virtuals_acp.abis.acp_x402_abi import ACP_X402_ABI
+from virtuals_acp.abis.acp_v2_x402_abi import ACP_V2_X402_ABI
 from virtuals_acp.models import X402Config
 
 ChainEnv = Literal["base-sepolia", "base"]
@@ -74,6 +75,21 @@ BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.gg/api",
     abi=ACP_V2_ABI,
+)
+
+BASE_SEPOLIA_ACP_X402_CONFIG_V2 = ACPContractConfig(
+    chain="base-sepolia",
+    rpc_url="https://alchemy-proxy.virtuals.io/api/proxy/rpc",
+    chain_id=84532,
+    contract_address="0xdf54E6Ed6cD1d0632d973ADECf96597b7e87893c",
+    base_fare=Fare("0x036CbD53842c5426634e7929541eC2318f3dCF7e", 6),
+    alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
+    alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
+    acp_api_url="https://acpx.virtuals.gg/api",
+    abi=ACP_V2_X402_ABI,
+    x402_config=X402Config(
+        url="https://dev-acp-x402.virtuals.io",
+    )
 )
 
 

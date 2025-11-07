@@ -67,6 +67,10 @@ class BaseAcpContractClient(ABC):
         self.job_created_event_signature_hex = (
             "0x" + event_abi_to_log_topic(cast(ABIEvent, job_created_event_abi)).hex()
         )
+        
+    @abstractmethod
+    def getAcpVersion(self) -> str:
+        pass
 
     def _build_user_operation(
         self,
@@ -125,9 +129,9 @@ class BaseAcpContractClient(ABC):
         payment_token_address: str,
         budget_base_unit: int,
         metadata: str,
-        isX402Job: bool = False
+        is_x402_job: bool = False
     ) -> OperationPayload:
-        fn_name = "createJobWithX402" if isX402Job else "createJob"
+        fn_name = "createX402Job" if is_x402_job else "createJob"
         operation = self._build_user_operation(
             fn_name,
             [
@@ -153,7 +157,9 @@ class BaseAcpContractClient(ABC):
         budget_base_unit: int,
         payment_token_address: str,
         expired_at: datetime,
+        is_x402_job: bool = False
     ) -> OperationPayload:
+        fn_name = "createX402JobWithAccount" if is_x402_job else "createJobWithAccount"
         operation = self._build_user_operation(
             "createJobWithAccount",
             [
@@ -314,7 +320,7 @@ class BaseAcpContractClient(ABC):
 
     @abstractmethod
     def perform_x402_request(
-        self, url: str, budget: Optional[str] = None, signature: Optional[str] = None
+        self, url: str, version: str, budget: Optional[str] = None, signature: Optional[str] = None
     ) -> Dict[str, Any]:
         """Abstract method to perform an X402 request."""
         pass

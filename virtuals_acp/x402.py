@@ -191,7 +191,7 @@ class ACPX402:
             raise ACPError("Failed to generate X402 payment", error)
 
     def perform_request(
-        self, url: str, budget: Optional[str] = None, signature: Optional[str] = None
+        self, url: str, version: str, budget: Optional[str] = None, signature: Optional[str] = None
     ) -> Dict[str, Any]:
         base_url = self.config.x402_config.url if self.config.x402_config else None
 
@@ -204,6 +204,8 @@ class ACPX402:
                 headers["x-payment"] = signature
             if budget:
                 headers["x-budget"] = str(budget)
+                
+            headers["x-acp-version"] = version
 
             res = requests.get(f"{base_url}{url}", headers=headers, timeout=60)
             data = res.json()                    

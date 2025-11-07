@@ -41,6 +41,9 @@ class ACPContractClient(BaseAcpContractClient):
         self.x402 = ACPX402(
             config, self.account, self.w3, self.agent_wallet_address, self.entity_id
         )
+        
+    def getAcpVersion(self) -> str:
+        return "1"
 
     def _get_random_nonce(self, bits: int = 152) -> int:
         """Generate a random bigint nonce."""
@@ -206,9 +209,9 @@ class ACPContractClient(BaseAcpContractClient):
             raise ACPError("Failed to generate X402 payment", e)
 
     def perform_x402_request(
-        self, url: str, budget: Optional[str] = None, signature: Optional[str] = None
+        self, url: str, version: str, budget: Optional[str] = None, signature: Optional[str] = None
     ) -> Dict[str, Any]:
         try:
-            return self.x402.perform_request(url, budget, signature)
+            return self.x402.perform_request(url, version, budget, signature)
         except Exception as e:
             raise ACPError("Failed to perform X402 request", e)
