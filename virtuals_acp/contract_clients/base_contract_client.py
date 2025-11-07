@@ -161,7 +161,7 @@ class BaseAcpContractClient(ABC):
     ) -> OperationPayload:
         fn_name = "createX402JobWithAccount" if is_x402_job else "createJobWithAccount"
         operation = self._build_user_operation(
-            "createJobWithAccount",
+            fn_name,
             [
                 account_id,
                 Web3.to_checksum_address(evaluator_address),
