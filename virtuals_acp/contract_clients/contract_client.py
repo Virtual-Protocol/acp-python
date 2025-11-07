@@ -104,14 +104,14 @@ class ACPContractClient(BaseAcpContractClient):
         payment_token_address: str,
         budget_base_unit: int,
         metadata: str = "",
-        isX402Job: bool = False
+        is_x402_job: bool = False
     ) -> OperationPayload:
         try:
             provider_address = Web3.to_checksum_address(provider_address)
             evaluator_address = Web3.to_checksum_address(evaluator_address)
             expire_timestamp = math.floor(expire_at.timestamp())
             
-            fn_name = "createJobWithX402" if isX402Job else "createJob"
+            fn_name = "createJobWithX402" if is_x402_job else "createJob"
 
             operation = self._build_user_operation(
                 fn_name, [provider_address, evaluator_address, expire_timestamp]
