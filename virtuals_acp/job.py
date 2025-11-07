@@ -559,7 +559,7 @@ class ACPJob(BaseModel):
             self.acp_contract_client.update_job_x402_nonce(self.id, str(nonce))
 
             x402_response = self.acp_contract_client.perform_x402_request(
-                payment_url, str(budget), encoded_payment
+                payment_url, self.acp_contract_client.getAcpVersion(), str(budget), encoded_payment
             )
             if x402_response.get("isPaymentRequired"):
                 # If payment is required, submit transfer with authorization and handle the operation
