@@ -498,25 +498,34 @@ class ACPJob(BaseModel):
         amount: FareAmountBase,
         expired_at: Optional[datetime] = None,
     ):
+        operations: List[Dict[str, Any]] = []
+
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-        self.acp_contract_client.approve_allowance(
-            amount.amount,
-            amount.fare.contract_address
+        operations.append(
+            self.acp_contract_client.approve_allowance(
+                amount.amount,
+                amount.fare.contract_address
+            )
         )
 
         fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
 
-        return self.acp_contract_client.create_payable_memo(
-            job_id=self.id,
-            content=content,
-            amount_base_unit=amount.amount,
-            recipient=self.client_address,
-            fee_amount_base_unit=fee_amount.amount,
-            fee_type=FeeType.NO_FEE,
-            next_phase=ACPJobPhase.COMPLETED,
-            memo_type=MemoType.PAYABLE_NOTIFICATION,
-            expired_at=expired_at,
-            token=amount.fare.contract_address
+        operations.append(
+            self.acp_contract_client.create_payable_memo(
+                job_id=self.id,
+                content=content,
+                amount_base_unit=amount.amount,
+                recipient=self.client_address,
+                fee_amount_base_unit=fee_amount.amount,
+                fee_type=FeeType.NO_FEE,
+                next_phase=ACPJobPhase.COMPLETED,
+                memo_type=MemoType.PAYABLE_NOTIFICATION,
+                expired_at=expired_at,
+                token=amount.fare.contract_address
+            )
         )
+
+        response = self.acp_contract_client.handle_operation(operations)
+        return get_txn_hash_from_response(response)
