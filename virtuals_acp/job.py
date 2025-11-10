@@ -8,7 +8,6 @@ from virtuals_acp.account import ACPAccount
 from virtuals_acp.memo import ACPMemo
 from virtuals_acp.models import (
     PriceType,
-    ACPMemoStatus,
     OperationPayload,
     X402PayableRequest,
     X402PayableRequirements,
@@ -148,12 +147,14 @@ class ACPJob(BaseModel):
     @property
     def rejection_reason(self) -> Optional[str]:
         """Get the rejection reason from the rejected memo"""
+        if self.phase != ACPJobPhase.REJECTED:
+            return None
+
         request_memo = next(
             (
                 m
                 for m in self.memos
                 if m.next_phase == ACPJobPhase.NEGOTIATION
-                and m.status == ACPMemoStatus.REJECTED
             ),
             None,
         )
@@ -161,7 +162,8 @@ class ACPJob(BaseModel):
             return request_memo.signed_reason
 
         fallback_memo = next(
-            (m for m in self.memos if m.next_phase == ACPJobPhase.REJECTED), None
+            (m for m in self.memos if m.next_phase == ACPJobPhase.REJECTED),
+            None
         )
         return fallback_memo.content if fallback_memo else None
 
@@ -317,7 +319,11 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.create_memo(
-                self.id, memo_content, MemoType.MESSAGE, True, ACPJobPhase.REJECTED
+                self.id,
+                memo_content,
+                MemoType.MESSAGE,
+                True,
+                ACPJobPhase.REJECTED
             )
         )
 
@@ -339,7 +345,8 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.approve_allowance(
-                amount.amount, amount.fare.contract_address
+                amount.amount,
+                amount.fare.contract_address
             )
         )
 
@@ -497,27 +504,37 @@ class ACPJob(BaseModel):
         amount: FareAmountBase,
         expired_at: Optional[datetime] = None,
     ):
+        operations: List[OperationPayload] = []
+
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-        self.acp_contract_client.approve_allowance(
-            amount.amount, amount.fare.contract_address
+        operations.append(
+            self.acp_contract_client.approve_allowance(
+                amount.amount,
+                amount.fare.contract_address
+            )
         )
 
         fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
 
-        return self.acp_contract_client.create_payable_memo(
-            job_id=self.id,
-            content=content,
-            amount_base_unit=amount.amount,
-            recipient=self.client_address,
-            fee_amount_base_unit=fee_amount.amount,
-            fee_type=FeeType.NO_FEE,
-            next_phase=ACPJobPhase.COMPLETED,
-            memo_type=MemoType.PAYABLE_NOTIFICATION,
-            expired_at=expired_at,
-            token=amount.fare.contract_address,
+        operations.append(
+            self.acp_contract_client.create_payable_memo(
+                job_id=self.id,
+                content=content,
+                amount_base_unit=amount.amount,
+                recipient=self.client_address,
+                fee_amount_base_unit=fee_amount.amount,
+                fee_type=FeeType.NO_FEE,
+                next_phase=ACPJobPhase.COMPLETED,
+                memo_type=MemoType.PAYABLE_NOTIFICATION,
+                expired_at=expired_at,
+                token=amount.fare.contract_address
+            )
         )
+
+        response = self.acp_contract_client.handle_operation(operations)
+        return get_txn_hash_from_response(response)
 
     def perform_x402_payment(self, budget: float):
         try:

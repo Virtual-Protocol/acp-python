@@ -126,8 +126,11 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         return job.create_payable_requirement(
             "Send me USDC to open position",
             MemoType.PAYABLE_REQUEST,
-            FareAmount(amount, config.base_fare),
-            job.provider_address,
+            FareAmount(
+                amount,
+                config.base_fare # Open position against ACP Base Currency: USDC
+            ),
+            job.provider_address, # funds receiving address, can be any address on Base
         )
 
     if job_name == JobName.CLOSE_POSITION:
@@ -152,8 +155,14 @@ def handle_task_request(job: ACPJob, memo_to_sign: ACPMemo):
         return job.create_payable_requirement(
             f"Send me {job.requirement.get('fromSymbol', 'USDC')} to swap to {job.requirement.get('toSymbol', 'VIRTUAL')}",
             MemoType.PAYABLE_REQUEST,
-            FareAmount(amount, Fare.from_contract_address(from_contract, config)),
-            job.provider_address,
+            FareAmount( # Constructing Fare for the token to swap from
+                amount,
+                Fare.from_contract_address(
+                    from_contract,
+                    config
+                )
+            ),
+            job.provider_address, # funds receiving address, can be any address on Base
         )
 
     logger.warning(f"[handle_task_request] Unsupported job name | job_id={job_id}, job_name={job_name}")
