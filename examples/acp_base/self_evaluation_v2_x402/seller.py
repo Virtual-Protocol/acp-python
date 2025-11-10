@@ -1,14 +1,22 @@
+import logging
 import threading
 from typing import Optional
 
 from dotenv import load_dotenv
 
-from virtuals_acp.contract_clients.contract_client import ACPContractClient
+from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 from virtuals_acp.memo import ACPMemo
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
 from virtuals_acp.job import ACPJob
 from virtuals_acp.models import ACPJobPhase
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("SellerAgent")
 
 load_dotenv(override=True)
 
@@ -17,7 +25,7 @@ def seller():
     env = EnvSettings()
 
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
-        print(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
+        logger.info(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
         if (
             job.phase == ACPJobPhase.REQUEST
             and memo_to_sign is not None
@@ -29,13 +37,13 @@ def seller():
             and memo_to_sign is not None
             and memo_to_sign.next_phase == ACPJobPhase.EVALUATION
         ):
-            print(f"Delivering job {job.id}")
+            logger.info(f"Delivering job {job.id}")
             deliverable = {"type": "url", "value": "https://example.com"}
             job.deliver(deliverable)
         elif job.phase == ACPJobPhase.COMPLETED:
-            print("Job completed", job)
+            logger.info("Job completed", job)
         elif job.phase == ACPJobPhase.REJECTED:
-            print("Job rejected", job)
+            logger.info("Job rejected", job)
 
     if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
         raise Exception("WHITELISTED_WALLET_PRIVATE_KEY is not set")
@@ -47,7 +55,7 @@ def seller():
     # Initialize the ACP client
 
     acp_client = VirtualsACP(
-        acp_contract_clients=ACPContractClient(
+        acp_contract_clients=ACPContractClientV2(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
             entity_id=env.SELLER_ENTITY_ID
@@ -55,7 +63,7 @@ def seller():
         on_new_task=on_new_task,
     )
 
-    print("Waiting for new task...")
+    logger.info("Waiting for new task...")
     # Keep the script running to listen for new tasks
     threading.Event().wait()
 
