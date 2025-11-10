@@ -132,7 +132,7 @@ BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
     ),
 )
 
-BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
+BASE_MAINNET_ACP_X402_CONFIG_V2 = ACPContractConfig(
     chain="base",
     rpc_url="https://alchemy-proxy-prod.virtuals.io/api/proxy/rpc",
     chain_id=8453,
