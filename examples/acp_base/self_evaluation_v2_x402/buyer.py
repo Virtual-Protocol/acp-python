@@ -1,3 +1,4 @@
+import logging
 import threading
 from datetime import datetime, timedelta
 from typing import Optional
@@ -17,6 +18,13 @@ from virtuals_acp.models import (
 )
 from virtuals_acp.configs.configs import BASE_MAINNET_ACP_X402_CONFIG_V2
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("BuyerAgent")
+
 load_dotenv(override=True)
 
 
@@ -24,21 +32,21 @@ def buyer():
     env = EnvSettings()
 
     def on_new_task(job: ACPJob, memo_to_sign: Optional[ACPMemo] = None):
-        print(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
+        logger.info(f"[on_new_task] Received job {job.id} (phase: {job.phase})")
         if (
             job.phase == ACPJobPhase.NEGOTIATION
             and memo_to_sign is not None
             and memo_to_sign.next_phase == ACPJobPhase.TRANSACTION
         ):
-            print("Paying job", job.id)
+            logger.info(f"Paying job {job.id}")
             job.pay_and_accept_requirement()
         elif job.phase == ACPJobPhase.COMPLETED:
-            print("Job completed", job)
+            logger.info(f"Job completed {job}")
         elif job.phase == ACPJobPhase.REJECTED:
-            print("Job rejected", job)
+            logger.info(f"Job rejected {job}")
 
     def on_evaluate(job: ACPJob):
-        print(f"Evaluation function called for job {job.id}")
+        logger.info(f"Evaluation function called for job {job.id}")
         job.evaluate(True, "Self-evaluated and approved")
 
     if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
@@ -69,7 +77,7 @@ def buyer():
         graduation_status=ACPGraduationStatus.ALL,
         online_status=ACPOnlineStatus.ALL,
     )
-    print(f"Relevant agents: {relevant_agents}")
+    logger.info(f"Relevant agents: {relevant_agents}")
 
     # Pick one of the agents based on your criteria (in this example we just pick the first one)
     chosen_agent = relevant_agents[0]
@@ -87,8 +95,8 @@ def buyer():
         expired_at=datetime.now() + timedelta(days=1),
     )
 
-    print(f"Job {job_id} initiated")
-    print("Listening for next steps...")
+    logger.info(f"Job {job_id} initiated")
+    logger.info("Listening for next steps...")
     # Keep the script running to listen for next steps
     threading.Event().wait()
 
