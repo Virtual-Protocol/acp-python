@@ -3,8 +3,6 @@ from typing import Literal, Optional, Union, List, Dict, Any
 from virtuals_acp.fare import Fare
 from virtuals_acp.abis.abi import ACP_ABI
 from virtuals_acp.abis.abi_v2 import ACP_V2_ABI
-from virtuals_acp.abis.acp_x402_abi import ACP_X402_ABI
-from virtuals_acp.abis.acp_v2_x402_abi import ACP_V2_X402_ABI
 from virtuals_acp.models import X402Config
 
 ChainEnv = Literal["base-sepolia", "base"]
@@ -60,7 +58,7 @@ BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.gg/api",
-    abi=ACP_X402_ABI,
+    abi=ACP_ABI,
     x402_config=X402Config(
         url="https://dev-acp-x402.virtuals.io",
     ),
@@ -89,7 +87,7 @@ BASE_SEPOLIA_ACP_X402_CONFIG_V2 = ACPContractConfig(
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.gg/api",
-    abi=ACP_V2_X402_ABI,
+    abi=ACP_V2_ABI,
     x402_config=X402Config(
         url="https://dev-acp-x402.virtuals.io",
     )
@@ -118,11 +116,12 @@ BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.io/api",
-    abi=ACP_X402_ABI,
+    abi=ACP_ABI,
     x402_config=X402Config(
         url="https://acp-x402.virtuals.io",
     ),
 )
+
 
 
 BASE_MAINNET_CONFIG_V2 = ACPContractConfig(
@@ -147,7 +146,7 @@ BASE_MAINNET_ACP_X402_CONFIG_V2 = ACPContractConfig(
     alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.io/api",
-    abi=ACP_V2_X402_ABI,
+    abi=ACP_V2_ABI,
     x402_config=X402Config(
         url="https://acp-x402.virtuals.io",
     ),
