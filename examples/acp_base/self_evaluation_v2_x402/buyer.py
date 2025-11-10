@@ -15,7 +15,7 @@ from virtuals_acp.models import (
     ACPGraduationStatus,
     ACPOnlineStatus,
 )
-from virtuals_acp.configs.configs import BASE_SEPOLIA_ACP_X402_CONFIG_V2
+from virtuals_acp.configs.configs import BASE_MAINNET_ACP_X402_CONFIG_V2
 
 load_dotenv(override=True)
 
@@ -53,7 +53,7 @@ def buyer():
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
             entity_id=env.BUYER_ENTITY_ID,
-            config=BASE_SEPOLIA_ACP_X402_CONFIG_V2,
+            config=BASE_MAINNET_ACP_X402_CONFIG_V2,
         ),
         on_new_task=on_new_task,
         on_evaluate=on_evaluate,
