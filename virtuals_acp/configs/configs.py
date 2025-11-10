@@ -50,6 +50,7 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
     abi=ACP_ABI,
 )
 
+
 BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
     chain="base-sepolia",
     rpc_url="https://alchemy-proxy.virtuals.io/api/proxy/rpc",
@@ -65,6 +66,7 @@ BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
     ),
 )
 
+
 BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     chain="base-sepolia",
     rpc_url="https://alchemy-proxy.virtuals.io/api/proxy/rpc",
@@ -76,6 +78,7 @@ BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     acp_api_url="https://acpx.virtuals.gg/api",
     abi=ACP_V2_ABI,
 )
+
 
 BASE_SEPOLIA_ACP_X402_CONFIG_V2 = ACPContractConfig(
     chain="base-sepolia",
@@ -105,17 +108,6 @@ BASE_MAINNET_CONFIG = ACPContractConfig(
     abi=ACP_ABI,
 )
 
-BASE_MAINNET_CONFIG_V2 = ACPContractConfig(
-    chain="base",
-    rpc_url="https://alchemy-proxy-prod.virtuals.io/api/proxy/rpc",
-    chain_id=8453,
-    contract_address="0xa6C9BA866992cfD7fd6460ba912bfa405adA9df0",
-    base_fare=Fare("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6),
-    alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
-    alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
-    acp_api_url="https://acpx.virtuals.io/api",
-    abi=ACP_V2_ABI,
-)
 
 BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
     chain="base",
@@ -131,6 +123,20 @@ BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
         url="https://acp-x402.virtuals.io",
     ),
 )
+
+
+BASE_MAINNET_CONFIG_V2 = ACPContractConfig(
+    chain="base",
+    rpc_url="https://alchemy-proxy-prod.virtuals.io/api/proxy/rpc",
+    chain_id=8453,
+    contract_address="0xa6C9BA866992cfD7fd6460ba912bfa405adA9df0",
+    base_fare=Fare("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6),
+    alchemy_base_url="https://alchemy-proxy.virtuals.io/api/proxy/wallet",
+    alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
+    acp_api_url="https://acpx.virtuals.io/api",
+    abi=ACP_V2_ABI,
+)
+
 
 BASE_MAINNET_ACP_X402_CONFIG_V2 = ACPContractConfig(
     chain="base",
@@ -149,4 +155,4 @@ BASE_MAINNET_ACP_X402_CONFIG_V2 = ACPContractConfig(
 
 
 DEFAULT_CONFIG = BASE_MAINNET_CONFIG_V2
-# Or: DEFAULT_CONFIG = BASE_SEPOLIA_CONFIG
+# Or: DEFAULT_CONFIG = BASE_SEPOLIA_CONFIG_V2
