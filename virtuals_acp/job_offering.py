@@ -5,8 +5,14 @@ from pydantic import BaseModel, field_validator, ConfigDict
 from jsonschema import ValidationError, validate
 from virtuals_acp.fare import FareAmount
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
-from virtuals_acp.models import ACPJobPhase, MemoType, PriceType
-from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, BASE_MAINNET_CONFIG
+from virtuals_acp.models import ACPJobPhase, MemoType, OperationPayload, PriceType
+from virtuals_acp.configs.configs import (
+    BASE_SEPOLIA_CONFIG,
+    BASE_MAINNET_CONFIG,
+    BASE_SEPOLIA_ACP_X402_CONFIG,
+    BASE_MAINNET_ACP_X402_CONFIG
+)
+from virtuals_acp.constants import USDC_TOKEN_ADDRESS
 from web3 import Web3
 
 
@@ -73,11 +79,17 @@ class ACPJobOffering(BaseModel):
             "priceValue": self.price,
             "priceType": self.price_type,
         }
+        
+        eval_addr = (
+            Web3.to_checksum_address(evaluator_address)
+            if evaluator_address
+            else self.contract_client.agent_wallet_address
+        )
 
         # Prepare fare amount based on this offering's price and contract's base fare
         fare_amount = FareAmount(
             self.price if self.price_type == PriceType.FIXED else 0,
-            self.contract_client.config.base_fare
+            self.contract_client.config.base_fare,
         )
 
         # Lookup existing account between client and provider
@@ -89,7 +101,10 @@ class ACPJobOffering(BaseModel):
 
         base_contract_addresses = {
             BASE_SEPOLIA_CONFIG.contract_address.lower(),
+            BASE_SEPOLIA_ACP_X402_CONFIG.contract_address.lower(),
             BASE_MAINNET_CONFIG.contract_address.lower(),
+            BASE_MAINNET_ACP_X402_CONFIG.contract_address.lower(),
+            
         }
 
         use_simple_create = (
@@ -97,14 +112,21 @@ class ACPJobOffering(BaseModel):
             in base_contract_addresses
         )
 
+        chain_id = self.contract_client.config.chain_id
+        usdc_token_address = USDC_TOKEN_ADDRESS[chain_id]
+        is_usdc_payment_token = usdc_token_address == fare_amount.fare.contract_address
+        
+        # If the contract has x402_config and USDC is used, call create_job_with_x402
+        is_x402_job =  bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
         if use_simple_create or not account:
             create_job_operation = self.contract_client.create_job(
                 self.provider_address,
-                evaluator_address or self.contract_client.agent_wallet_address,
-                expired_at or datetime.utcnow(),
+                eval_addr,
+                expired_at,
                 fare_amount.fare.contract_address,
                 fare_amount.amount,
                 "",
+                is_x402_job=is_x402_job,
             )
         else:
             evaluator_address = (
@@ -118,6 +140,7 @@ class ACPJobOffering(BaseModel):
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
                 expired_at or datetime.utcnow(),
+                is_x402_job=is_x402_job,
             )
 
         response = self.contract_client.handle_operation([create_job_operation])
@@ -128,18 +151,17 @@ class ACPJobOffering(BaseModel):
             self.provider_address,
         )
 
-        operations: List[Dict[str, Any]] = []
 
-        set_budget_with_payment_token_operation = (
-            self.contract_client.set_budget_with_payment_token(
-                job_id,
-                fare_amount.amount,
-                fare_amount.fare.contract_address,
-            )
+        operations: List[OperationPayload] = []
+
+        operation = self.contract_client.set_budget_with_payment_token(
+            job_id,
+            fare_amount.amount,
+            fare_amount.fare.contract_address,
         )
 
-        if set_budget_with_payment_token_operation:
-            operations.append(set_budget_with_payment_token_operation)
+        if operation:
+            operations.append(operation)
 
         operations.append(
             self.contract_client.create_memo(

@@ -1,5 +1,3 @@
-# virtuals_acp/models.py
-
 from dataclasses import dataclass, field
 from typing import (
     Any,
@@ -93,6 +91,7 @@ class ACPOnlineStatus(str, Enum):
 
 DeliverablePayload = Union[str, Dict[str, Any]]
 IDeliverable = DeliverablePayload  # Deprecated: use DeliverablePayload instead
+
 
 @dataclass
 class IACPAgent:
@@ -226,3 +225,102 @@ class CloseJobAndWithdrawPayload(PayloadModel):
 
 class RequestClosePositionPayload(PayloadModel):
     position_id: int
+
+
+class AcpJobX402PaymentDetails(PayloadModel):
+    is_x402: bool
+    is_budget_received: bool
+
+
+class X402Config(PayloadModel):
+    url: str
+
+
+class X402RequirementExtra(PayloadModel):
+    name: str
+    version: str
+
+
+class X402Requirement(PayloadModel):
+    scheme: str
+    network: str
+    maxAmountRequired: str
+    resource: str
+    description: str
+    mimeType: str
+    payTo: str  # Address as str
+    maxTimeoutSeconds: int
+    asset: str  # Address as str
+    extra: X402RequirementExtra
+    outputSchema: Any
+
+
+class X402PayableRequirements(PayloadModel):
+    x402Version: int
+    error: str
+    accepts: List[X402Requirement]
+
+
+class X402PayableRequest(PayloadModel):
+    to: str  # Address as str
+    value: int
+    maxTimeoutSeconds: int
+    asset: str  # Address as str
+
+
+class X402Payment(PayloadModel):
+    encodedPayment: str
+    message: Dict[str, Any]
+    signature: str
+
+
+class X402PaymentPayload(PayloadModel):
+    x402_version: int
+    scheme: str
+    network: str
+    payload: Dict[str, Any]
+
+
+class OperationPayload(PayloadModel):
+    data: str  # Should start with '0x'
+    to: str  # Address as str
+    value: Optional[int] = None
+
+
+class OffChainJob(PayloadModel):
+    id: int
+    documentId: str
+    txHash: str  # Address as str
+    clientId: int
+    providerId: int
+    budget: float
+    createdAt: str
+    updatedAt: str
+    publishedAt: str
+    locale: Optional[str] = None
+    clientAddress: str
+    providerAddress: str
+    evaluators: List[str]
+    budgetTxHash: Optional[str] = None
+    phase: str  # AcpJobPhases as str (define separately if available)
+    agentIdPair: str
+    onChainJobId: str
+    summary: str
+    userOpHash: Optional[str] = None
+    amountClaimed: float
+    context: Optional[Dict[str, Any]] = None
+    expiry: str
+    refundRetryTimes: int
+    additionalFees: float
+    budgetTokenAddress: str
+    budgetUSD: float
+    amountClaimedUSD: Optional[float] = None
+    additionalFeesUSD: Optional[float] = None
+    contractAddress: str
+    accountId: Optional[int] = None
+    x402Nonce: str
+
+
+class X402PaymentResponse(PayloadModel):
+    isPaymentRequired: bool
+    data: X402PayableRequirements
