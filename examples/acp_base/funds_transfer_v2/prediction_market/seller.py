@@ -244,7 +244,7 @@ def handle_task_transaction(job: ACPJob):
         payload = job.requirement
         question = payload.get("question")
         outcomes = payload.get("outcomes", [])
-        liquidity = float(payload.get("liquidity", 0))
+        liquidity = job.net_payable_amount # liquidity principal after ACP fee deduction
         end_time = payload.get("endTime")
         market_id = _derive_market_id(question)
 
@@ -253,7 +253,10 @@ def handle_task_transaction(job: ACPJob):
             logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
             job.reject_payable(
                 reason,
-                FareAmount(liquidity, config.base_fare),
+                FareAmount(
+                    job.net_payable_amount, # return the net payable amount from seller wallet
+                    config.base_fare
+                ),
             )
             logger.info(f"Job {job.id} rejected and refunded.")
             return
@@ -283,7 +286,7 @@ def handle_task_transaction(job: ACPJob):
         payload = job.requirement
         market_id = payload.get("marketId")
         outcome = payload.get("outcome")
-        amount = float(payload.get("amount", 0))
+        amount = job.net_payable_amount # betting principal after ACP fee deduction
         market = markets.get(market_id)
 
         if not market:
@@ -294,7 +297,10 @@ def handle_task_transaction(job: ACPJob):
             logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
             job.reject_payable(
                 reason,
-                FareAmount(amount, config.base_fare),
+                FareAmount(
+                    job.net_payable_amount, # return the net payable amount from seller wallet
+                    config.base_fare
+                ),
             )
             logger.info(f"Job {job.id} rejected and refunded.")
             return
@@ -322,7 +328,10 @@ def handle_task_transaction(job: ACPJob):
             original_bet_amount = sum(bet.amount for bet in bets)
             job.reject_payable(
                 reason,
-                FareAmount(original_bet_amount, config.base_fare),
+                FareAmount(
+                    original_bet_amount,
+                    config.base_fare
+                )
             )
             logger.info(f"Job {job.id} rejected and refunded.")
             return

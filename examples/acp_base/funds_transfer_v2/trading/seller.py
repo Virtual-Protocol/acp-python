@@ -182,14 +182,14 @@ def handle_task_transaction(job: ACPJob):
             job.reject_payable(
                 reason,
                 FareAmount(
-                    job.requirement.get("amount"),
+                    job.net_payable_amount, # return the net payable amount from seller wallet
                     config.base_fare
                 )
             )
             logger.info(f"Job {job.id} rejected job and refunded.")
             return
 
-        open_position(wallet, job.requirement)
+        open_position(wallet, job)
         logger.info(f"Opening position: {job.requirement}")
         job.deliver("Opened position with txn 0x71c038a47fd90069f133e991c4f19093e37bef26ca5c78398b9c99687395a97a")
         logger.info("Position opened")
@@ -211,7 +211,7 @@ def handle_task_transaction(job: ACPJob):
             reason = f"Internal server error handling ${job.requirement.get('fromSymbol')} swaps"
             logger.info(f"Rejecting and refunding job {job.id} with reason: {reason}")
             from_amount = FareAmount(
-                job.requirement.get("amount"),
+                job.net_payable_amount, # return the net payable amount from seller wallet
                 Fare.from_contract_address(job.requirement.get("fromContractAddress"), config)
             )
             job.reject_payable(
@@ -222,9 +222,17 @@ def handle_task_transaction(job: ACPJob):
             return
 
         to_contract = job.requirement.get("toContractAddress")
+        token_swapping_ratio = 1 / 2 # 2 token from : 1 token to
         swapped_amount = FareAmount(
-            0.00088,
-            Fare.from_contract_address(to_contract, config)
+            (
+                    job.net_payable_amount # swapping principal after ACP fee deduction
+                    *
+                    token_swapping_ratio
+            ),
+            Fare.from_contract_address(
+                to_contract,
+                config
+            )
         )
         logger.info(f"Returning swapped token: {swapped_amount}")
         job.deliver_payable(
@@ -236,15 +244,17 @@ def handle_task_transaction(job: ACPJob):
     else:
         logger.warning(f"[handle_task_transaction] Unsupported job name | job_id={job_id}, job_name={job_name}")
 
-def open_position(wallet: ClientWallet, payload: dict[str, Any]) -> None:
+def open_position(wallet: ClientWallet, job: ACPJob) -> None:
+    payload = job.requirement
+    amount = job.net_payable_amount # trading principal after ACP fee deduction
     pos = next((p for p in wallet.positions if p.symbol == payload.get("symbol")), None)
     if pos:
-        pos.amount += payload.get("amount")
+        pos.amount += amount
     else:
         wallet.positions.append(
             Position(
                 symbol=payload.get("symbol"),
-                amount=payload.get("amount"),
+                amount=amount,
                 tp=payload.get("tp"),
                 sl=payload.get("sl")
             )
