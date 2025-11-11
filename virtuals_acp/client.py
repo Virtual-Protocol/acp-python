@@ -7,7 +7,7 @@ import sys
 import threading
 from datetime import datetime, timezone, timedelta
 from importlib.metadata import version
-from typing import Literal, List, Optional, Tuple, Union, Dict, Any, Callable
+from typing import List, Optional, Union, Dict, Any, Callable
 
 import requests
 import socketio
@@ -26,28 +26,16 @@ from virtuals_acp.models import (
     ACPOnlineStatus,
     MemoType,
     IACPAgent,
-    DeliverablePayload,
-    FeeType,
-    GenericPayload,
-    T,
     ACPMemoStatus,
-    OperationPayload,
 )
 from virtuals_acp.job_offering import ACPJobOffering, ACPResourceOffering
-from virtuals_acp.fare import (
-    ETH_FARE,
-    WETH_FARE,
-    FareAmount,
-    FareBigInt,
-    FareAmountBase,
-)
+from virtuals_acp.fare import FareAmountBase
 from virtuals_acp.configs.configs import (
     BASE_MAINNET_ACP_X402_CONFIG,
     BASE_SEPOLIA_ACP_X402_CONFIG,
     BASE_SEPOLIA_CONFIG,
     BASE_MAINNET_CONFIG,
 )
-from virtuals_acp.utils import prepare_payload
 
 logging.basicConfig(
     level=logging.INFO,
@@ -190,15 +178,16 @@ class VirtualsACP:
         job = ACPJob(
             acp_client=self,
             id=data["id"],
-            provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
+            provider_address=data["providerAddress"],
             evaluator_address=data["evaluatorAddress"],
-            contract_address=data.get("contractAddress"),
-            memos=memos,
-            phase=data["phase"],
             price=data["price"],
             price_token_address=data["priceTokenAddress"],
+            memos=memos,
+            phase=data["phase"],
             context=context,
+            contract_address=data.get("contractAddress"),
+            net_payable_amount=data.get("netPayableAmount"),
         )
         if self.on_new_task:
             self.on_new_task(job, memo_to_sign)
@@ -235,15 +224,16 @@ class VirtualsACP:
         job = ACPJob(
             acp_client=self,
             id=data["id"],
-            provider_address=data["providerAddress"],
             client_address=data["clientAddress"],
+            provider_address=data["providerAddress"],
             evaluator_address=data["evaluatorAddress"],
-            contract_address=data.get("contractAddress"),
-            memos=memos,
-            phase=data["phase"],
             price=data["price"],
             price_token_address=data["priceTokenAddress"],
+            memos=memos,
+            phase=data["phase"],
             context=context,
+            contract_address=data.get("contractAddress"),
+            net_payable_amount=data.get("netPayableAmount"),
         )
         self.on_evaluate(job)
 
@@ -579,15 +569,16 @@ class VirtualsACP:
                     ACPJob(
                         acp_client=self,
                         id=job.get("id"),
-                        provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
+                        provider_address=job.get("providerAddress"),
                         evaluator_address=job.get("evaluatorAddress"),
-                        contract_address=job.get("contractAddress"),
+                        price=job.get("price"),
+                        price_token_address=job.get("priceTokenAddress"),
                         memos=memos,
                         phase=job.get("phase"),
-                        price_token_address=job.get("priceTokenAddress"),
-                        price=job.get("price"),
                         context=context,
+                        contract_address=job.get("contractAddress"),
+                        net_payable_amount=job.get("netPayableAmount"),
                     )
                 )
             return jobs
@@ -636,15 +627,16 @@ class VirtualsACP:
                     ACPJob(
                         acp_client=self,
                         id=job.get("id"),
-                        provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
+                        provider_address=job.get("providerAddress"),
                         evaluator_address=job.get("evaluatorAddress"),
-                        contract_address=job.get("contractAddress"),
+                        price=job.get("price"),
                         price_token_address=job.get("priceTokenAddress"),
                         memos=memos,
                         phase=job.get("phase"),
-                        price=job.get("price"),
                         context=context,
+                        contract_address=job.get("contractAddress"),
+                        net_payable_amount=job.get("netPayableAmount"),
                     )
                 )
             return jobs
@@ -693,15 +685,16 @@ class VirtualsACP:
                     ACPJob(
                         acp_client=self,
                         id=job.get("id"),
-                        provider_address=job.get("providerAddress"),
                         client_address=job.get("clientAddress"),
+                        provider_address=job.get("providerAddress"),
                         evaluator_address=job.get("evaluatorAddress"),
-                        contract_address=job.get("contractAddress"),
+                        price=job.get("price"),
+                        price_token_address=job.get("priceTokenAddress"),
                         memos=memos,
                         phase=job.get("phase"),
-                        price_token_address=job.get("priceTokenAddress"),
-                        price=job.get("price"),
                         context=context,
+                        contract_address=job.get("contractAddress"),
+                        net_payable_amount=job.get("netPayableAmount"),
                     )
                 )
             return jobs
@@ -749,16 +742,17 @@ class VirtualsACP:
 
             return ACPJob(
                 acp_client=self,
-                id=data.get("data", {}).get("id"),
-                provider_address=data.get("data", {}).get("providerAddress"),
-                client_address=data.get("data", {}).get("clientAddress"),
-                evaluator_address=data.get("data", {}).get("evaluatorAddress"),
-                contract_address=data.get("data", {}).get("contractAddress"),
+                id=data["id"],
+                client_address=data["clientAddress"],
+                provider_address=data["providerAddress"],
+                evaluator_address=data["evaluatorAddress"],
+                price=data["price"],
+                price_token_address=data["priceTokenAddress"],
                 memos=memos,
-                phase=data.get("data", {}).get("phase"),
-                price=data.get("data", {}).get("price"),
-                price_token_address=data.get("data", {}).get("priceTokenAddress"),
+                phase=data["phase"],
                 context=context,
+                contract_address=data.get("contractAddress"),
+                net_payable_amount=data.get("netPayableAmount"),
             )
         except Exception as e:
             raise ACPApiError(f"Failed to get job by onchain ID: {e}")
