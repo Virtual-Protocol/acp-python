@@ -34,15 +34,16 @@ if TYPE_CHECKING:
 class ACPJob(BaseModel):
     acp_client: "VirtualsACP"
     id: int
-    provider_address: str
     client_address: str
+    provider_address: str
     evaluator_address: str
-    contract_address: Optional[str] = None
     price: float
     price_token_address: Optional[str] = None
     memos: List[ACPMemo] = Field(default_factory=list)
     phase: ACPJobPhase
     context: Dict[str, Any] | None
+    contract_address: Optional[str] = None
+    net_payable_amount: Optional[float] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -101,15 +102,16 @@ class ACPJob(BaseModel):
         return (
             f"AcpJob(\n"
             f"  id={self.id},\n"
-            f"  provider_address='{self.provider_address}',\n"
             f"  client_address='{self.client_address}',\n"
+            f"  provider_address='{self.provider_address}',\n"
             f"  evaluator_address='{self.evaluator_address}',\n"
-            f"  contract_address='{self.contract_address}',\n"
             f"  price={self.price},\n"
             f"  price_token_address='{self.price_token_address}',\n"
             f"  memos=[{', '.join(str(memo) for memo in self.memos)}],\n"
             f"  phase={self.phase}\n"
             f"  context={self.context}\n"
+            f"  contract_address='{self.contract_address}',\n"
+            f"  net_payable_amount='{self.net_payable_amount}',\n"
             f")"
         )
 
