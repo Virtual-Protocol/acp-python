@@ -193,10 +193,7 @@ class AlchemyAccountKit:
         params = {
             "from": self.account_address,
             "chainId": to_hex(self.chain_id),
-            "calls": [
-                call.model_dump(exclude_none=True)
-                for call in calls
-            ],
+            "calls": [call.model_dump(exclude_none=True) for call in calls],
             "capabilities": final_capabilities,
         }
 
@@ -257,17 +254,15 @@ class AlchemyAccountKit:
         self, calls: List[OperationPayload], capabilities: Dict[str, Any] = {}
     ) -> Dict[str, Any]:
         retries = MAX_RETRIES
+
+        # Increase the max fee per gas by 10%
+        additional_capabilities = {"maxFeePerGas": {"multiplier": 1.1}}
+        capabilities.update(additional_capabilities)
+
+        prepare_result = self.prepare_calls(calls, capabilities)
+
         while True:
             try:
-                additional_capabilities = {}
-
-                # Increase the max fee per gas by 10% for subsequent retries
-                if retries <= MAX_RETRIES - 1:
-                    additional_capabilities = {"maxFeePerGas": {"multiplier": 1.1}}
-
-                capabilities.update(additional_capabilities)
-
-                prepare_result = self.prepare_calls(calls, capabilities)
                 result = self.send_prepared_calls(prepare_result)
                 return self.wait_for_call_status(result["preparedCallIds"][0])
             except Exception as e:
