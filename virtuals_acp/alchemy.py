@@ -238,7 +238,7 @@ class AlchemyAccountKit:
             try:
                 status = self.rpc_client.wallet_get_calls_status(prepared_call_id)
 
-                if status["status"] == 200:
+                if status["status"] == 200 or status["status"] == 110:
                     return status
 
                 raise Exception("Retrying...")
