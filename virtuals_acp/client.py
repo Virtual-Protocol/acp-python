@@ -291,7 +291,7 @@ class VirtualsACP:
         graduation_status: Optional[ACPGraduationStatus] = None,
         online_status: Optional[ACPOnlineStatus] = None,
     ) -> List[IACPAgent]:
-        url = f"{self.acp_api_url}/agents/v3/search?search={keyword}"
+        url = f"{self.acp_api_url}/agents/v4/search?search={keyword}"
         top_k = 5 if top_k is None else top_k
 
         if sort_by:
