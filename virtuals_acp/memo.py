@@ -31,6 +31,8 @@ class ACPMemo(BaseModel):
     signed_reason: Optional[str] = None
     expiry: Optional[datetime] = None
     payable_details: Optional[Dict[str, Any]] = None
+    txn_hash: Optional[str] = None
+    signed_txn_hash: Optional[str] = None
 
     structured_content: Optional[GenericPayload] = None
 
