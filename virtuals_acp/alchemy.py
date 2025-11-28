@@ -238,7 +238,7 @@ class AlchemyAccountKit:
             try:
                 status = self.rpc_client.wallet_get_calls_status(prepared_call_id)
 
-                if status["status"] == 200 or status["status"] == 110:
+                if status["status"] == 200:
                     return status
 
                 raise Exception("Retrying...")
@@ -251,8 +251,11 @@ class AlchemyAccountKit:
             time.sleep(0.1 * (MAX_RETRIES - retries))
 
     def handle_user_operation(
-        self, calls: List[OperationPayload], capabilities: Dict[str, Any] = {}
+        self, calls: List[OperationPayload], capabilities=None
     ) -> Dict[str, Any]:
+        if capabilities is None:
+            capabilities = {}
+
         retries = MAX_RETRIES
 
         # Increase the max fee per gas by 10%
