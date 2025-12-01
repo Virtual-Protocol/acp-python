@@ -79,7 +79,7 @@ class ACPJobOffering(BaseModel):
             "priceValue": self.price,
             "priceType": self.price_type,
         }
-        
+
         eval_addr = (
             Web3.to_checksum_address(evaluator_address)
             if evaluator_address
@@ -104,7 +104,6 @@ class ACPJobOffering(BaseModel):
             BASE_SEPOLIA_ACP_X402_CONFIG.contract_address.lower(),
             BASE_MAINNET_CONFIG.contract_address.lower(),
             BASE_MAINNET_ACP_X402_CONFIG.contract_address.lower(),
-            
         }
 
         use_simple_create = (

@@ -158,6 +158,8 @@ class VirtualsACP:
                     else None
                 ),
                 payable_details=memo.get("payableDetails"),
+                txn_hash=memo.get("txHash"),
+                signed_txn_hash=memo.get("signedTxHash"),
             )
             for memo in data["memos"]
         ]
@@ -210,6 +212,8 @@ class VirtualsACP:
                     else None
                 ),
                 payable_details=memo.get("payableDetails"),
+                txn_hash=memo.get("txHash"),
+                signed_txn_hash=memo.get("signedTxHash"),
             )
             for memo in data["memos"]
         ]
@@ -555,6 +559,8 @@ class VirtualsACP:
                                 else None
                             ),
                             payable_details=memo.get("payableDetails"),
+                            txn_hash=memo.get("txHash"),
+                            signed_txn_hash=memo.get("signedTxHash"),
                         )
                     )
 
@@ -613,6 +619,8 @@ class VirtualsACP:
                                 else None
                             ),
                             payable_details=memo.get("payableDetails"),
+                            txn_hash=memo.get("txHash"),
+                            signed_txn_hash=memo.get("signedTxHash"),
                         )
                     )
 
@@ -671,6 +679,8 @@ class VirtualsACP:
                                 else None
                             ),
                             payable_details=memo.get("payableDetails"),
+                            txn_hash=memo.get("txHash"),
+                            signed_txn_hash=memo.get("signedTxHash"),
                         )
                     )
 
@@ -730,6 +740,8 @@ class VirtualsACP:
                             else None
                         ),
                         payable_details=memo.get("payableDetails"),
+                        txn_hash=memo.get("txHash"),
+                        signed_txn_hash=memo.get("signedTxHash"),
                     )
                 )
 
@@ -785,6 +797,8 @@ class VirtualsACP:
                     else None
                 ),
                 payable_details=memo.get("payableDetails"),
+                txn_hash=memo.get("txHash"),
+                signed_txn_hash=memo.get("signedTxHash"),
             )
 
         except Exception as e:
