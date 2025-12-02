@@ -1,15 +1,14 @@
 import secrets
 import time
-from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass
 from enum import Enum
+from typing import Dict, Any, List, Optional, Union
 
 import requests
 from eth_account import Account
+from eth_account.messages import encode_defunct
 from eth_account.messages import encode_typed_data
 from eth_utils.conversions import to_hex
-from eth_account.messages import encode_defunct
-
 
 from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, ACPContractConfig
 from virtuals_acp.models import OperationPayload

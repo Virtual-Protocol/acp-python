@@ -1,3 +1,4 @@
+import json
 from abc import ABC, abstractmethod
 from datetime import datetime
 from decimal import Decimal
@@ -5,14 +6,16 @@ import math
 from typing import Dict, Any, Optional, List, cast
 
 from eth_typing import ABIEvent
-import requests
+from ens.utils import is_none_or_zero_address
 from web3 import Web3
 from web3.contract import Contract
 from eth_utils.abi import event_abi_to_log_topic
 
 from virtuals_acp.abis.erc20_abi import ERC20_ABI
 from virtuals_acp.abis.flat_token_v2_abi import FIAT_TOKEN_V2_ABI
+from virtuals_acp.abis.single_signer_validation_module_abi import SINGLE_SIGNER_VALIDATION_MODULE_ABI
 from virtuals_acp.abis.weth_abi import WETH_ABI
+from virtuals_acp.constants import SINGLE_SIGNER_VALIDATION_MODULE_ADDRESS
 from virtuals_acp.fare import WETH_FARE
 from virtuals_acp.configs.configs import ACPContractConfig
 from virtuals_acp.exceptions import ACPError
@@ -26,7 +29,6 @@ from virtuals_acp.models import (
     X402PayableRequirements,
     OperationPayload,
     OffChainJob,
-    X402PaymentResponse,
 )
 
 
@@ -67,7 +69,57 @@ class BaseAcpContractClient(ABC):
         self.job_created_event_signature_hex = (
             "0x" + event_abi_to_log_topic(cast(ABIEvent, job_created_event_abi)).hex()
         )
-        
+
+        agent_smart_contract_code = self.w3.eth.get_code(Web3.to_checksum_address(self.agent_wallet_address))
+        is_account_deployed = len(agent_smart_contract_code) > 0
+        if not is_account_deployed:
+            raise ACPError(f"ACP Contract Client validation failed: agent account {self.agent_wallet_address} is not deployed on-chain")
+
+    def validate_session_key_on_chain(
+        self,
+        session_signer_address: str,
+        session_entity_key_id: int
+    ) -> None:
+        single_signer_validation_contract: Contract = self.w3.eth.contract(
+            address=SINGLE_SIGNER_VALIDATION_MODULE_ADDRESS,
+            abi=SINGLE_SIGNER_VALIDATION_MODULE_ABI,
+        )
+        on_chain_signer_address = (
+            single_signer_validation_contract
+                .functions
+                .signers(session_entity_key_id, self.agent_wallet_address)
+                .call()
+        )
+        expected = on_chain_signer_address
+        given = session_signer_address
+
+        if is_none_or_zero_address(expected):
+            raise ACPError(
+                "ACP Contract Client validation failed:\n" +
+                json.dumps(
+                    {
+                        "reason": "no whitelisted wallet registered on-chain for entity id",
+                        "entity_id": session_entity_key_id,
+                        "agent_wallet_address": self.agent_wallet_address,
+                    },
+                    indent=2
+                )
+            )
+
+        if expected.lower() != given.lower():
+            raise ACPError(
+                "ACP Contract Client validation failed:\n" +
+                json.dumps(
+                    {
+                        "agent_wallet_address": self.agent_wallet_address,
+                        "entity_id": session_entity_key_id,
+                        "given_whitelisted_wallet_address": session_signer_address,
+                        "expected_whitelisted_wallet_address": on_chain_signer_address,
+                    },
+                    indent=2
+                )
+            )
+
     @abstractmethod
     def getAcpVersion(self) -> str:
         pass

@@ -1,5 +1,7 @@
 # virtuals_acp/configs.py
-from typing import Literal, Optional, Union, List, Dict, Any
+from web3 import Web3
+
+from typing import Literal, Optional, List, Dict, Any
 from virtuals_acp.fare import Fare
 from virtuals_acp.abis.abi import ACP_ABI
 from virtuals_acp.abis.abi_v2 import ACP_V2_ABI
