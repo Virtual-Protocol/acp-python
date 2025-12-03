@@ -90,10 +90,8 @@ class BaseAcpContractClient(ABC):
                 .signers(session_entity_key_id, self.agent_wallet_address)
                 .call()
         )
-        expected = on_chain_signer_address
-        given = session_signer_address
 
-        if is_none_or_zero_address(expected):
+        if is_none_or_zero_address(on_chain_signer_address):
             raise ACPError(
                 "ACP Contract Client validation failed:\n" +
                 json.dumps(
@@ -106,7 +104,7 @@ class BaseAcpContractClient(ABC):
                 )
             )
 
-        if expected.lower() != given.lower():
+        if on_chain_signer_address.lower() != session_signer_address.lower():
             raise ACPError(
                 "ACP Contract Client validation failed:\n" +
                 json.dumps(
