@@ -83,7 +83,7 @@ class ACPContractClientV2(BaseAcpContractClient):
             )
         )
         
-    def getAcpVersion(self) -> str:
+    def get_acp_version(self) -> str:
         return "2"
 
     def _get_random_nonce(self, bits: int = 152) -> int:

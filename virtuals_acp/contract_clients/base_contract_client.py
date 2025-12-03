@@ -121,7 +121,7 @@ class BaseAcpContractClient(ABC):
             )
 
     @abstractmethod
-    def getAcpVersion(self) -> str:
+    def get_acp_version(self) -> str:
         pass
 
     def _build_user_operation(
