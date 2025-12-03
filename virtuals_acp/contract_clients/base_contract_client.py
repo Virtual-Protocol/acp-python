@@ -113,6 +113,7 @@ class BaseAcpContractClient(ABC):
                         "entity_id": session_entity_key_id,
                         "given_whitelisted_wallet_address": session_signer_address,
                         "expected_whitelisted_wallet_address": on_chain_signer_address,
+                        "reason": "session signer address mismatch",
                     },
                     indent=2
                 )
