@@ -1,11 +1,12 @@
-from datetime import datetime, timezone, timedelta
 import json
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, Union, TYPE_CHECKING, List
-from pydantic import BaseModel, field_validator, ConfigDict
+
 from jsonschema import ValidationError, validate
-from virtuals_acp.fare import FareAmount
-from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
-from virtuals_acp.models import ACPJobPhase, MemoType, OperationPayload, PriceType
+from pydantic import BaseModel, field_validator, ConfigDict
+from web3 import Web3
+from web3.constants import ADDRESS_ZERO
+
 from virtuals_acp.configs.configs import (
     BASE_SEPOLIA_CONFIG,
     BASE_MAINNET_CONFIG,
@@ -13,13 +14,12 @@ from virtuals_acp.configs.configs import (
     BASE_MAINNET_ACP_X402_CONFIG
 )
 from virtuals_acp.constants import USDC_TOKEN_ADDRESS
-from web3 import Web3
-
+from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
+from virtuals_acp.fare import FareAmount
+from virtuals_acp.models import ACPJobPhase, MemoType, OperationPayload, PriceType
 
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
-
-ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 
 class ACPJobOffering(BaseModel):
@@ -131,7 +131,7 @@ class ACPJobOffering(BaseModel):
             evaluator_address = (
                 Web3.to_checksum_address(evaluator_address)
                 if evaluator_address
-                else ZERO_ADDRESS
+                else ADDRESS_ZERO
             )
             create_job_operation = self.contract_client.create_job_with_account(
                 account.id,
@@ -149,7 +149,6 @@ class ACPJobOffering(BaseModel):
             self.contract_client.agent_wallet_address,
             self.provider_address,
         )
-
 
         operations: List[OperationPayload] = []
 

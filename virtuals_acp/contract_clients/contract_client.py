@@ -1,3 +1,5 @@
+import json
+import logging
 import math
 import secrets
 from datetime import datetime
@@ -19,10 +21,14 @@ from virtuals_acp.models import (
     X402PayableRequirements,
     OperationPayload,
     OffChainJob,
-    X402PaymentResponse,
 )
 from virtuals_acp.x402 import ACPX402
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("ContractClient")
 
 class ACPContractClient(BaseAcpContractClient):
     def __init__(
@@ -41,8 +47,22 @@ class ACPContractClient(BaseAcpContractClient):
         self.x402 = ACPX402(
             config, self.account, self.w3, self.agent_wallet_address, self.entity_id
         )
+
+        self.validate_session_key_on_chain(self.account.address, self.entity_id)
+
+        logger.info(
+            "\nConnected to ACP:\n%s",
+            json.dumps(
+                {
+                    "agent_wallet_address": agent_wallet_address,
+                    "whitelisted_wallet_address": self.account.address,
+                    "entity_id": self.entity_id,
+                },
+                indent=2
+            )
+        )
         
-    def getAcpVersion(self) -> str:
+    def get_acp_version(self) -> str:
         return "1"
 
     def _get_random_nonce(self, bits: int = 152) -> int:

@@ -7,7 +7,7 @@ from eth_account.messages import encode_defunct
 
 from virtuals_acp.constants import (
     HTTP_STATUS_CODES_X402,
-    VERIFYING_CONTRACT_ADDRESS,
+    SINGLE_SIGNER_VALIDATION_MODULE_ADDRESS,
     X402_AUTHORIZATION_TYPES,
 )
 from virtuals_acp.models import (
@@ -144,7 +144,7 @@ class ACPX402:
             replay_safe_typed_data = {
                 "domain": {
                     "chainId": int(self.config.chain_id),
-                    "verifyingContract": VERIFYING_CONTRACT_ADDRESS,
+                    "verifyingContract": SINGLE_SIGNER_VALIDATION_MODULE_ADDRESS,
                     "salt": "0x"
                     + "00" * 12
                     + self.agent_wallet_address[

@@ -1,3 +1,5 @@
+import json
+import logging
 import secrets
 from typing import Dict, Any, List, Optional
 
@@ -12,6 +14,11 @@ from virtuals_acp.exceptions import ACPError
 from virtuals_acp.models import AcpJobX402PaymentDetails, OffChainJob, OperationPayload, X402PayableRequest, X402PayableRequirements, X402Payment
 from virtuals_acp.x402 import ACPX402
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("ContractClientV2")
 
 class ACPContractClientV2(BaseAcpContractClient):
     def __init__(
@@ -34,7 +41,6 @@ class ACPContractClientV2(BaseAcpContractClient):
         )
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
         self.x402 = ACPX402(config, self.account, self.w3, self.agent_wallet_address, self.entity_id)
-        
 
 
         def multicall_read(
@@ -62,8 +68,22 @@ class ACPContractClientV2(BaseAcpContractClient):
         self.job_manager_contract = self.w3.eth.contract(
             address=self.job_manager_address, abi=JOB_MANAGER_ABI
         )
+
+        self.validate_session_key_on_chain(self.account.address, self.entity_id)
+
+        logger.info(
+            "\nConnected to ACP:\n%s",
+            json.dumps(
+                {
+                    "agent_wallet_address": agent_wallet_address,
+                    "whitelisted_wallet_address": self.account.address,
+                    "entity_id": self.entity_id,
+                },
+                indent=2
+            )
+        )
         
-    def getAcpVersion(self) -> str:
+    def get_acp_version(self) -> str:
         return "2"
 
     def _get_random_nonce(self, bits: int = 152) -> int:
