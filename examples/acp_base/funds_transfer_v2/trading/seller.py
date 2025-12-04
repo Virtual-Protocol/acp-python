@@ -237,7 +237,8 @@ def handle_task_transaction(job: ACPJob):
         logger.info(f"Returning swapped token: {swapped_amount}")
         job.deliver_payable(
             f"Return swapped token {job.requirement.get('toSymbol', 'VIRTUAL')}",
-            swapped_amount
+            swapped_amount,
+            True # skip fee to return swapped tokens
         )
         logger.info("Swapped token returned")
 
