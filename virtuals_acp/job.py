@@ -81,6 +81,7 @@ class ACPJob(BaseModel):
         self._name = content_obj.service_name or content_obj.name
         self._price_type = content_obj.price_type or PriceType.FIXED
         self._price_value = content_obj.price_value or self.price
+        return None
 
     @property
     def requirement(self) -> Optional[Union[str, Dict[str, Any]]]:
@@ -174,11 +175,11 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.create_memo(
-                self.id,
-                content,
-                MemoType.MESSAGE,
-                False,
-                ACPJobPhase.TRANSACTION,
+                job_id=self.id,
+                content=content,
+                memo_type=MemoType.MESSAGE,
+                is_secured=False,
+                next_phase=ACPJobPhase.TRANSACTION,
             )
         )
 
@@ -214,16 +215,16 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.create_payable_memo(
-                self.id,
-                content,
-                amount.amount,
-                recipient,
-                fee_amount,
-                fee_type,
-                ACPJobPhase.TRANSACTION,
-                type,
-                expired_at,
-                amount.fare.contract_address,
+                job_id=self.id,
+                content=content,
+                amount_base_unit=amount.amount,
+                recipient=recipient,
+                fee_amount_base_unit=fee_amount,
+                fee_type=fee_type,
+                next_phase=ACPJobPhase.TRANSACTION,
+                memo_type=type,
+                expired_at=expired_at,
+                token=amount.fare.contract_address,
             )
         )
 
@@ -241,11 +242,10 @@ class ACPJob(BaseModel):
         operations: List[OperationPayload] = []
         base_fare_amount = FareAmount(self.price, self.base_fare)
 
-        base_fare_amount = FareAmount(self.price, self.base_fare)
         if memo.payable_details:
             transfer_amount = FareAmountBase.from_contract_address(
-                memo.payable_details["amount"],
-                memo.payable_details["token"],
+                memo.payable_details.get("amount"),
+                memo.payable_details.get("token"),
                 self.config,
             )
         else:
@@ -285,11 +285,11 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.create_memo(
-                self.id,
-                f"Payment made. {reason or ''}".strip(),
-                MemoType.MESSAGE,
-                True,
-                ACPJobPhase.EVALUATION,
+                job_id=self.id,
+                content=f"Payment made. {reason or ''}".strip(),
+                memo_type=MemoType.MESSAGE,
+                is_secured=True,
+                next_phase=ACPJobPhase.EVALUATION,
             )
         )
 
@@ -321,11 +321,11 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.create_memo(
-                self.id,
-                memo_content,
-                MemoType.MESSAGE,
-                True,
-                ACPJobPhase.REJECTED
+                job_id=self.id,
+                content=memo_content,
+                memo_type=MemoType.MESSAGE,
+                is_secured=True,
+                next_phase=ACPJobPhase.REJECTED
             )
         )
 
@@ -418,11 +418,11 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.create_memo(
-                self.id,
-                prepare_payload(deliverable),
-                MemoType.MESSAGE,
-                True,
-                ACPJobPhase.COMPLETED,
+                job_id=self.id,
+                content=prepare_payload(deliverable),
+                memo_type=MemoType.MESSAGE,
+                is_secured=True,
+                next_phase=ACPJobPhase.COMPLETED,
             )
         )
 
@@ -433,6 +433,7 @@ class ACPJob(BaseModel):
         self,
         deliverable: DeliverablePayload,
         amount: FareAmountBase,
+        skip_fee: bool = False,
         expired_at: Optional[datetime] = None,
     ) -> str | None:
         if expired_at is None:
@@ -452,7 +453,12 @@ class ACPJob(BaseModel):
             )
         )
 
-        fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
+        if self._price_type == PriceType.PERCENTAGE and not skip_fee:
+            fee_amount = int(self.price_value * 10000)
+            fee_type = FeeType.PERCENTAGE_FEE
+        else:
+            fee_amount = (FareAmount(0, self.base_fare)).amount
+            fee_type = FeeType.NO_FEE
 
         operations.append(
             self.acp_contract_client.create_payable_memo(
@@ -460,8 +466,8 @@ class ACPJob(BaseModel):
                 content=prepare_payload(deliverable),
                 amount_base_unit=amount.amount,
                 recipient=self.client_address,
-                fee_amount_base_unit=fee_amount.amount,
-                fee_type=FeeType.NO_FEE,
+                fee_amount_base_unit=fee_amount,
+                fee_type=fee_type,
                 next_phase=ACPJobPhase.COMPLETED,
                 memo_type=MemoType.PAYABLE_TRANSFER,
                 expired_at=expired_at,
@@ -504,6 +510,7 @@ class ACPJob(BaseModel):
         self,
         content: str,
         amount: FareAmountBase,
+        skip_fee: bool = False,
         expired_at: Optional[datetime] = None,
     ):
         operations: List[OperationPayload] = []
@@ -518,7 +525,12 @@ class ACPJob(BaseModel):
             )
         )
 
-        fee_amount = FareAmount(0, self.acp_contract_client.config.base_fare)
+        if self._price_type == PriceType.PERCENTAGE and not skip_fee:
+            fee_amount = int(self.price_value * 10000)
+            fee_type = FeeType.PERCENTAGE_FEE
+        else:
+            fee_amount = (FareAmount(0, self.base_fare)).amount
+            fee_type = FeeType.NO_FEE
 
         operations.append(
             self.acp_contract_client.create_payable_memo(
@@ -526,8 +538,8 @@ class ACPJob(BaseModel):
                 content=content,
                 amount_base_unit=amount.amount,
                 recipient=self.client_address,
-                fee_amount_base_unit=fee_amount.amount,
-                fee_type=FeeType.NO_FEE,
+                fee_amount_base_unit=fee_amount,
+                fee_type=fee_type,
                 next_phase=ACPJobPhase.COMPLETED,
                 memo_type=MemoType.PAYABLE_NOTIFICATION,
                 expired_at=expired_at,
