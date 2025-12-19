@@ -61,14 +61,12 @@ The seller agent demonstrates how to:
 
 ### Start the Seller (Service Provider)
 ```bash
-cd examples/acp-base/self_evaluation_v2
-python seller.py
+cd examples/acp_base/funds_transfer/trading/seller.py
 ```
 
 ### Start the Buyer (Service Requestor)
 ```bash
-cd examples/acp-base/self_evaluation_v2
-python buyer.py
+cd examples/acp_base/funds_transfer/trading/buyer.py
 ```
 
 ## Usage Flow
