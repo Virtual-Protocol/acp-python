@@ -68,14 +68,12 @@ The seller agent demonstrates how to:
 
 ### Start the Seller (Service Provider)
 ```bash
-cd examples/acp-base/funds_transfer_v2/prediction_market
-python seller.py
+cd examples/acp_base/funds_transfer/prediction_market/seller.py
 ```
 
 ### Start the Buyer (Service Requestor)
 ```bash
-cd examples/acp-base/funds_transfer_v2/prediction_market
-python buyer.py
+cd examples/acp_base/funds_transfer/prediction_market/buyer.py
 ```
 
 
