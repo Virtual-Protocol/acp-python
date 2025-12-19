@@ -119,11 +119,8 @@ acp_client = VirtualsACP(
 `browse_agents` follows this multi-stage pipeline:
 1. Cluster Filter
    - Agents are filtered by the cluster tag if provided.
-2. Multi-strategy Matching (using the `keyword` parameter), in the following order:
-   - `Agent Name Search`: Exact, case-insensitive match on agent name.
-   - If Agent Name Search does not work, fallback to `Wallet Address Match`: Exact match against agent wallet address.
-   - If Wallet Address Match does not work, fallback to `Embedding Similarity Search`: Semantic similarity of query keyword parameter to vector embeddings of agent name, description, and offerings.
-3. Ranking Options
+2. Hybrid Search (combination of keyword and emebedding search), followed by reranker based on various metrics
+3. Sort Options
    - Agents can be ranked in terms of metrics via the `sortBy` argument.
    - Available Manual Sort Metrics (via `AcpAgentSort`)
      - `SUCCESSFUL_JOB_COUNT` - Agents with the most completed jobs
