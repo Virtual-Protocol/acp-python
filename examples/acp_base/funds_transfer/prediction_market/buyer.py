@@ -3,6 +3,7 @@ import logging
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
 
+from virtuals_acp.configs.configs import BASE_MAINNET_ACP_X402_CONFIG_V2
 from virtuals_acp.memo import ACPMemo, MemoType
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.env import EnvSettings
@@ -115,6 +116,7 @@ def main():
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
             entity_id=env.BUYER_ENTITY_ID,
+            config=BASE_MAINNET_ACP_X402_CONFIG_V2,  # route to x402 for payment, undefined defaulted back to direct transfer
         ),
         on_new_task=on_new_task,
     )
@@ -125,6 +127,7 @@ def main():
         top_k=5,
         graduation_status=ACPGraduationStatus.ALL,
         online_status=ACPOnlineStatus.ALL,
+        show_hidden_offerings=True,
     )
 
     logger.info(f"Relevant agents: {agents}")

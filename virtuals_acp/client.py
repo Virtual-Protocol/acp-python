@@ -13,11 +13,19 @@ import requests
 import socketio
 from web3 import Web3
 
+from virtuals_acp.account import ACPAccount
+from virtuals_acp.configs.configs import (
+    BASE_MAINNET_ACP_X402_CONFIG,
+    BASE_SEPOLIA_ACP_X402_CONFIG,
+    BASE_SEPOLIA_CONFIG,
+    BASE_MAINNET_CONFIG,
+)
 from virtuals_acp.constants import USDC_TOKEN_ADDRESS
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
 from virtuals_acp.exceptions import ACPApiError, ACPError
-from virtuals_acp.account import ACPAccount
+from virtuals_acp.fare import FareAmountBase
 from virtuals_acp.job import ACPJob
+from virtuals_acp.job_offering import ACPJobOffering, ACPResourceOffering
 from virtuals_acp.memo import ACPMemo
 from virtuals_acp.models import (
     ACPAgentSort,
@@ -27,14 +35,6 @@ from virtuals_acp.models import (
     MemoType,
     IACPAgent,
     ACPMemoStatus,
-)
-from virtuals_acp.job_offering import ACPJobOffering, ACPResourceOffering
-from virtuals_acp.fare import FareAmountBase
-from virtuals_acp.configs.configs import (
-    BASE_MAINNET_ACP_X402_CONFIG,
-    BASE_SEPOLIA_ACP_X402_CONFIG,
-    BASE_SEPOLIA_CONFIG,
-    BASE_MAINNET_CONFIG,
 )
 
 logging.basicConfig(
@@ -294,6 +294,7 @@ class VirtualsACP:
         top_k: Optional[int] = None,
         graduation_status: Optional[ACPGraduationStatus] = None,
         online_status: Optional[ACPOnlineStatus] = None,
+        show_hidden_offerings: bool = False,
     ) -> List[IACPAgent]:
         url = f"{self.acp_api_url}/agents/v4/search?search={keyword}"
         top_k = 5 if top_k is None else top_k
@@ -316,6 +317,9 @@ class VirtualsACP:
         if online_status is not None:
             url += f"&onlineStatus={online_status.value}"
 
+        if show_hidden_offerings:
+            url += f"&showHiddenOfferings=true"
+
         try:
             response = requests.get(url)
             response.raise_for_status()
@@ -333,8 +337,8 @@ class VirtualsACP:
                 agent
                 for agent in agents_data
                 if agent["walletAddress"].lower() != self.agent_address.lower()
-                and agent.get("contractAddress", "").lower()
-                in available_contract_addresses
+                   and agent.get("contractAddress", "").lower()
+                   in available_contract_addresses
             ]
 
             agents = []
@@ -407,18 +411,18 @@ class VirtualsACP:
             BASE_SEPOLIA_ACP_X402_CONFIG.contract_address.lower(),
             BASE_MAINNET_CONFIG.contract_address.lower(),
             BASE_MAINNET_ACP_X402_CONFIG.contract_address.lower(),
-            
+
         }
 
         use_simple_create = (
             self.contract_client.config.contract_address.lower()
             in base_contract_addresses
         )
-        
+
         chain_id = self.contract_client.config.chain_id
         usdc_token_address = USDC_TOKEN_ADDRESS[chain_id]
         is_usdc_payment_token = usdc_token_address == fare_amount.fare.contract_address
-        is_x402_job =  bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
+        is_x402_job = bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
 
         if use_simple_create or not account:
             create_job_operation = self.contract_client.create_job(
@@ -439,7 +443,7 @@ class VirtualsACP:
                 expired_at,
                 is_x402_job=is_x402_job,
             )
-            
+
         response = self.contract_client.handle_operation([create_job_operation])
 
         job_id = self.contract_client.get_job_id(
@@ -457,7 +461,7 @@ class VirtualsACP:
             is_secured=True,
             next_phase=ACPJobPhase.NEGOTIATION,
         )
-        
+
         self.contract_client.handle_operation([operations])
 
         return job_id
@@ -530,39 +534,82 @@ class VirtualsACP:
                 f"An unexpected error occurred while getting account by job id: {e}"
             )
 
-    def get_active_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={pageSize}"
-        headers = {"wallet-address": self.agent_address}
+    def get_active_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
+        url = f"{self.acp_api_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={page_size}"
+        raw_jobs = self._fetch_job_list(url)
+        return self._hydrate_jobs(raw_jobs, log_prefix="Active jobs")
+
+    def get_pending_memo_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
+        url = f"{self.acp_api_url}/jobs/pending-memos?pagination[page]={page}&pagination[pageSize]={page_size}"
+        raw_jobs = self._fetch_job_list(url)
+        return self._hydrate_jobs(raw_jobs, log_prefix="Pending memo jobs")
+
+    def get_completed_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
+        url = f"{self.acp_api_url}/jobs/completed?pagination[page]={page}&pagination[pageSize]={page_size}"
+        raw_jobs = self._fetch_job_list(url)
+        return self._hydrate_jobs(raw_jobs, log_prefix="Completed jobs")
+
+    def get_cancelled_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
+        url = f"{self.acp_api_url}/jobs/cancelled?pagination[page]={page}&pagination[pageSize]={page_size}"
+        raw_jobs = self._fetch_job_list(url)
+        return self._hydrate_jobs(raw_jobs, log_prefix="Cancelled jobs")
+
+    def _fetch_job_list(
+        self,
+        url: str,
+    ) -> List[dict]:
+        try:
+            response = requests.get(
+                url,
+                headers={"wallet-address": self.wallet_address},
+            )
+            response.raise_for_status()
+        except requests.RequestException as e:
+            raise ACPApiError("Failed to fetch ACP jobs (network error)") from e
 
         try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
             data = response.json()
+        except ValueError as e:
+            raise ACPApiError("Failed to parse ACP jobs response") from e
 
-            jobs = []
+        if data.get("error"):
+            raise ACPApiError(data["error"]["message"])
 
-            for job in data.get("data", []):
-                memos = []
-                for memo in job.get("memos", []):
-                    memos.append(
-                        ACPMemo(
-                            contract_client=self.contract_client,
-                            id=memo.get("id"),
-                            type=MemoType(int(memo.get("memoType"))),
-                            content=memo.get("content"),
-                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-                            status=ACPMemoStatus(memo.get("status")),
-                            signed_reason=memo.get("signedReason"),
-                            expiry=(
-                                datetime.fromtimestamp(int(memo["expiry"]))
-                                if memo.get("expiry")
-                                else None
-                            ),
-                            payable_details=memo.get("payableDetails"),
-                            txn_hash=memo.get("txHash"),
-                            signed_txn_hash=memo.get("signedTxHash"),
-                        )
+        return data.get("data", [])
+
+    def _hydrate_jobs(
+        self,
+        raw_jobs: List[dict],
+        *,
+        log_prefix: str = "Skipped",
+    ) -> List[ACPJob]:
+        jobs: List[ACPJob] = []
+        errors: list[dict] = []
+
+        for job in raw_jobs:
+            try:
+                memos = [
+                    ACPMemo(
+                        contract_client=self.contract_client_by_address(
+                            job.get("contractAddress")
+                        ),
+                        id=memo.get("id"),
+                        type=MemoType(int(memo.get("memoType"))),
+                        content=memo.get("content"),
+                        next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
+                        status=ACPMemoStatus(memo.get("status")),
+                        signed_reason=memo.get("signedReason"),
+                        expiry=(
+                            datetime.fromtimestamp(int(memo["expiry"]))
+                            if memo.get("expiry")
+                            else None
+                        ),
+                        payable_details=memo.get("payableDetails"),
+                        txn_hash=memo.get("txHash"),
+                        signed_txn_hash=memo.get("signedTxHash"),
                     )
+                    for memo in job.get("memos", [])
+                ]
 
                 context = job.get("context")
                 if isinstance(context, str):
@@ -587,129 +634,32 @@ class VirtualsACP:
                         net_payable_amount=job.get("netPayableAmount"),
                     )
                 )
-            return jobs
-        except Exception as e:
-            raise ACPApiError(f"Failed to get active jobs: {e}")
 
-    def get_completed_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/completed?pagination[page]={page}&pagination[pageSize]={pageSize}"
-        headers = {"wallet-address": self.agent_address}
-
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            jobs = []
-
-            for job in data.get("data", []):
-                memos = []
-                for memo in job.get("memos", []):
-                    memos.append(
-                        ACPMemo(
-                            contract_client=self.contract_client,
-                            id=memo.get("id"),
-                            type=MemoType(int(memo.get("memoType"))),
-                            content=memo.get("content"),
-                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-                            status=ACPMemoStatus(memo.get("status")),
-                            signed_reason=memo.get("signedReason"),
-                            expiry=(
-                                datetime.fromtimestamp(int(memo["expiry"]))
-                                if memo.get("expiry")
-                                else None
-                            ),
-                            payable_details=memo.get("payableDetails"),
-                            txn_hash=memo.get("txHash"),
-                            signed_txn_hash=memo.get("signedTxHash"),
-                        )
-                    )
-
-                context = job.get("context")
-                if isinstance(context, str):
-                    try:
-                        context = json.loads(context)
-                    except json.JSONDecodeError:
-                        context = None
-
-                jobs.append(
-                    ACPJob(
-                        acp_client=self,
-                        id=job.get("id"),
-                        client_address=job.get("clientAddress"),
-                        provider_address=job.get("providerAddress"),
-                        evaluator_address=job.get("evaluatorAddress"),
-                        price=job.get("price"),
-                        price_token_address=job.get("priceTokenAddress"),
-                        memos=memos,
-                        phase=job.get("phase"),
-                        context=context,
-                        contract_address=job.get("contractAddress"),
-                        net_payable_amount=job.get("netPayableAmount"),
-                    )
+            except Exception as e:
+                errors.append(
+                    {
+                        "job_id": job.get("id"),
+                        "error": e,
+                    }
                 )
-            return jobs
-        except Exception as e:
-            raise ACPApiError(f"Failed to get completed jobs: {e}")
 
-    def get_cancelled_jobs(self, page: int = 1, pageSize: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/cancelled?pagination[page]={page}&pagination[pageSize]={pageSize}"
-        headers = {"wallet-address": self.agent_address}
+            if errors:
+                payload = [
+                    {
+                        "job_id": e["job_id"],
+                        "message": str(e["error"]),
+                    }
+                    for e in errors
+                ]
 
-        try:
-            response = requests.get(url, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            jobs = []
-
-            for job in data.get("data", []):
-                memos = []
-                for memo in job.get("memos", []):
-                    memos.append(
-                        ACPMemo(
-                            contract_client=self.contract_client,
-                            id=memo.get("id"),
-                            type=MemoType(int(memo.get("memoType"))),
-                            content=memo.get("content"),
-                            next_phase=ACPJobPhase.from_value(memo.get("nextPhase")),
-                            status=ACPMemoStatus(memo.get("status")),
-                            signed_reason=memo.get("signedReason"),
-                            expiry=(
-                                datetime.fromtimestamp(int(memo["expiry"]))
-                                if memo.get("expiry")
-                                else None
-                            ),
-                            payable_details=memo.get("payableDetails"),
-                            txn_hash=memo.get("txHash"),
-                            signed_txn_hash=memo.get("signedTxHash"),
-                        )
-                    )
-
-                context = job.get("context")
-                if isinstance(context, str):
-                    try:
-                        context = json.loads(context)
-                    except json.JSONDecodeError:
-                        context = None
-
-                jobs.append(
-                    ACPJob(
-                        acp_client=self,
-                        id=job.get("id"),
-                        client_address=job.get("clientAddress"),
-                        provider_address=job.get("providerAddress"),
-                        evaluator_address=job.get("evaluatorAddress"),
-                        price=job.get("price"),
-                        price_token_address=job.get("priceTokenAddress"),
-                        memos=memos,
-                        phase=job.get("phase"),
-                        context=context,
-                        contract_address=job.get("contractAddress"),
-                        net_payable_amount=job.get("netPayableAmount"),
-                    )
+                logger.warning(
+                    "[ACP] %s %d malformed job(s):\n%s",
+                    log_prefix,
+                    len(errors),
+                    json.dumps(payload, indent=2),
                 )
-            return jobs
-        except Exception as e:
-            raise ACPApiError(f"Failed to get cancelled jobs: {e}")
+
+        return jobs
 
     def get_job_by_onchain_id(self, onchain_job_id: int) -> "ACPJob":
         url = f"{self.acp_api_url}/jobs/{onchain_job_id}"
@@ -752,19 +702,20 @@ class VirtualsACP:
                 except json.JSONDecodeError:
                     context = None
 
+            job = data.get("data", {})
             return ACPJob(
                 acp_client=self,
-                id=data["id"],
-                client_address=data["clientAddress"],
-                provider_address=data["providerAddress"],
-                evaluator_address=data["evaluatorAddress"],
-                price=data["price"],
-                price_token_address=data["priceTokenAddress"],
+                id=job["id"],
+                client_address=job["clientAddress"],
+                provider_address=job["providerAddress"],
+                evaluator_address=job["evaluatorAddress"],
+                price=job["price"],
+                price_token_address=job["priceTokenAddress"],
                 memos=memos,
-                phase=data["phase"],
+                phase=job["phase"],
                 context=context,
-                contract_address=data.get("contractAddress"),
-                net_payable_amount=data.get("netPayableAmount"),
+                contract_address=job.get("contractAddress"),
+                net_payable_amount=job.get("netPayableAmount"),
             )
         except Exception as e:
             raise ACPApiError(f"Failed to get job by onchain ID: {e}")
@@ -854,6 +805,7 @@ class VirtualsACP:
                 twitter_handle=agent_data.get("twitterHandle"),
                 metrics=agent_data.get("metrics"),
                 processing_time=agent_data.get("processingTime", ""),
+                contract_address=agent_data.get("contractAddress", ""),
             )
 
         except requests.exceptions.RequestException as e:

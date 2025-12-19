@@ -1,41 +1,51 @@
 import threading
-
-from virtuals_acp import VirtualsACP, ACPJob, ACPJobPhase
-from virtuals_acp.env import EnvSettings
-
+import logging
 from dotenv import load_dotenv
 
+from examples.acp_base.polling_mode.evaluator import ACCEPT_EVALUATION
+from virtuals_acp.client import VirtualsACP
+from virtuals_acp.job import ACPJob
+from virtuals_acp.env import EnvSettings
+from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("EvaluatorAgent")
+
 load_dotenv(override=True)
+
+ACCEPT_EVALUATION = True
 
 
 def evaluator():
     env = EnvSettings()
 
-    if env.WHITELISTED_WALLET_PRIVATE_KEY is None:
-        raise ValueError("WHITELISTED_WALLET_PRIVATE_KEY is not set")
-    if env.EVALUATOR_AGENT_WALLET_ADDRESS is None:
-        raise ValueError("EVALUATOR_AGENT_WALLET_ADDRESS is not set")
-    if env.EVALUATOR_ENTITY_ID is None:
-        raise ValueError("EVALUATOR_ENTITY_ID is not set")
-
     def on_evaluate(job: ACPJob):
-        # Find the deliverable memo
-        for memo in job.memos:
-            print(memo.next_phase, ACPJobPhase.COMPLETED)
-            if memo.next_phase == ACPJobPhase.COMPLETED:
-                print("Evaluating deliverable", job.id)
-                job.evaluate(True)
-                break
+        logger.info(f"[on_evaluate] Evaluation function called for job {job.id}")
+        logger.info(f"[on_evaluate] Memos: {job.memos}")
 
-    # Initialize the ACP client
-    acp_client = VirtualsACP(
-        wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
-        agent_wallet_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
+        try:
+            job.evaluate(
+                accept=ACCEPT_EVALUATION,
+                reason="Deliverable looks great, approved!" if ACCEPT_EVALUATION else "Deliverable not accepted.",
+            )
+            logger.info(f"[on_evaluate] Job {job.id} evaluated successfully with {ACCEPT_EVALUATION}")
+        except Exception as e:
+            logger.error(f"[on_evaluate] Job {job.id} evaluation failed: {e}")
+
+    VirtualsACP(
+        acp_contract_clients=ACPContractClientV2(
+            wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
+            agent_wallet_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,
+            entity_id=env.EVALUATOR_ENTITY_ID,
+        ),
         on_evaluate=on_evaluate,
-        entity_id=env.EVALUATOR_ENTITY_ID,
     )
 
-    print("Waiting for evaluation tasks...")
+    logger.info("[Evaluator] Listening for new jobs...")
     # Keep the script running to listen for evaluation tasks
     threading.Event().wait()
 
