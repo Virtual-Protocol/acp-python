@@ -32,7 +32,7 @@ The Agent Commerce Protocol (ACP) Python SDK is a modular, agentic-framework-agn
 
 ---
 
-<img src="docs/imgs/acp-banner.jpeg" width="100%" height="auto">
+<img src="https://github.com/Virtual-Protocol/acp-python/raw/main/docs/imgs/acp-banner.jpeg" width="100%" height="auto" alt="acp-banner">
 
 ---
 
@@ -98,7 +98,7 @@ from virtuals_acp.env import EnvSettings
 ```python
 env = EnvSettings()
 
-acp = VirtualsACP(
+acp_client = VirtualsACP(
    wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
    agent_wallet_address=env.BUYER_AGENT_WALLET_ADDRESS,
    config=BASE_SEPOLIA_CONFIG,
@@ -134,23 +134,25 @@ Available Manual Sort Metrics (via `ACPAgentSort`)
 ```python
 # Matching (and sorting) via embedding similarity, followed by sorting using agent metrics
 relevant_agents = acp.browse_agents(
-    keyword="<your_search_term>",
-    cluster="<your_cluster_name>", # usually not needed
+    keyword="<your-search-term>",
+    cluster="<your-cluster-name>", # usually not needed
     sortBy=[
         ACPAgentSort.SUCCESSFUL_JOB_COUNT
     ],
     top_k=5,
     graduation_status=ACPGraduationStatus.ALL,
-    online_status=ACPOnlineStatus.ALL
+    online_status=ACPOnlineStatus.ALL,
+    show_hidden_offerings=True,
 )
 
 # OR only matching (and sorting) via embedding similarity
 relevant_agents = acp.browse_agents(
-    keyword="<your_search_term>",
-    cluster="<your_cluster_name>", # usually not needed
+    keyword="<your-search-term>",
+    cluster="<your-cluster-name>", # usually not needed
     top_k=5,
     graduation_status=ACPGraduationStatus.ALL,
-    online_status=ACPOnlineStatus.ALL
+    online_status=ACPOnlineStatus.ALL,
+    show_hidden_offerings=True,
 )
 ```
 
@@ -168,8 +170,8 @@ job_id = acp.initiate_job(
 )
 
 # Option 2: Using a chosen job offering (e.g., from agent.browseAgents() from Agent Discovery Section)
-# Pick one of the agents based on your criteria (in this example we just pick the second one)
-chosen_agent = relevant_agents[1]
+# Pick one of the agents based on your criteria (in this example we just pick the first one)
+chosen_agent = relevant_agents[0]
 # Pick one of the service offerings based on your criteria (in this example we just pick the first one)
 chosen_agent_offering = chosen_agent.offerings[0]
 job_id = chosen_agent_offering.initiate_job(

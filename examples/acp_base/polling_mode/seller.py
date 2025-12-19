@@ -1,13 +1,14 @@
-import json
 import logging
 import time
 from typing import List
 
 from dotenv import load_dotenv
 
-from virtuals_acp import VirtualsACP, ACPJob, ACPJobPhase, IDeliverable, BASE_SEPOLIA_CONFIG
-from virtuals_acp.contract_manager import ACPContractManager
+from virtuals_acp.client import VirtualsACP
+from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 from virtuals_acp.env import EnvSettings
+from virtuals_acp.job import ACPJob
+from virtuals_acp.models import ACPJobPhase, DeliverablePayload
 
 # Configure logging
 logging.basicConfig(
@@ -22,98 +23,83 @@ load_dotenv(override=True)
 POLL_INTERVAL_SECONDS = 20
 # --------------------------------------------------
 
+REJECT_JOB_IN_REQUEST_PHASE = False
+REJECT_JOB_IN_OTHER_PHASE = False
+
 
 def seller():
     env = EnvSettings()
 
     acp_client = VirtualsACP(
-        acp_contract_client=ACPContractManager(
+        acp_contract_clients=ACPContractClientV2(
             wallet_private_key=env.WHITELISTED_WALLET_PRIVATE_KEY,
             agent_wallet_address=env.SELLER_AGENT_WALLET_ADDRESS,
             entity_id=env.SELLER_ENTITY_ID,
-            config=BASE_SEPOLIA_CONFIG
         ),
     )
-    logger.info(f"Seller ACP Initialized. Agent: {acp_client.agent_address}")
-
-    # Keep track of jobs to avoid reprocessing in this simple loop
-    # job_id: {"responded_to_request": bool, "delivered_work": bool}
-    processed_job_stages = {}
 
     while True:
         logger.info(
-            f"\nSeller: Polling for active jobs for {env.SELLER_AGENT_WALLET_ADDRESS}..."
+            f"\nPolling for active jobs for {acp_client.agent_address}."
         )
         active_jobs_list: List[ACPJob] = acp_client.get_active_jobs()
 
         if not active_jobs_list:
-            logger.info("Seller: No active jobs found in this poll.")
+            logger.info("No active jobs found in this poll.")
             time.sleep(POLL_INTERVAL_SECONDS)
             continue
 
         for job in active_jobs_list:
-            onchain_job_id = job.id
-
             # Ensure this job is for the current seller
             if job.provider_address != acp_client.agent_address:
                 continue
 
-            job_stages = processed_job_stages.get(onchain_job_id, {})
-
             try:
                 # Fetch full details to get current phase and memos
-                job_details = acp_client.get_job_by_onchain_id(onchain_job_id)
-                current_phase = job_details.phase
                 logger.info(
-                    f"Seller: Checking job {onchain_job_id}. Current Phase: {current_phase.name}"
+                    f"Checking job {job.id}. Current Phase: {job.phase.name}"
                 )
 
                 # 1. Respond to Job Request (if not already responded)
-                if current_phase == ACPJobPhase.REQUEST and not job_stages.get(
-                    "responded_to_request"
-                ):
+                if job.phase == ACPJobPhase.REQUEST:
                     logger.info(
-                        f"Seller: Job {onchain_job_id} is in REQUEST. Responding to buyer's request..."
+                        f"Job {job.id} is in REQUEST phase. Responding to buyer's request."
                     )
-                    job.respond(
-                        accept=True,
-                        reason=f"Seller accepts the job offer.",
-                    )
+                    if REJECT_JOB_IN_REQUEST_PHASE:
+                        job.reject("Job requirement does not meet agent capability")
+                    else:
+                        job.accept("Job requirement matches agent capability")
+                        job.create_requirement(f"Job {job.id} accepted, please make payment to proceed")
+
                     logger.info(
-                        f"Seller: Accepted job {onchain_job_id}. Job phase should move to NEGOTIATION."
+                        f"{"Rejected" if REJECT_JOB_IN_REQUEST_PHASE else "Accepted"} job {job.id}. Job phase should move to {ACPJobPhase(job.phase + 1).name}."
                     )
-                    job_stages["responded_to_request"] = True
                 # 2. Submit Deliverable (if job is paid and not yet delivered)
-                elif current_phase == ACPJobPhase.TRANSACTION and not job_stages.get(
-                    "delivered_work"
-                ):
+                elif job.phase == ACPJobPhase.TRANSACTION:
                     # Buyer has paid, job is in TRANSACTION. Seller needs to deliver.
                     logger.info(
-                        f"Seller: Job {onchain_job_id} is PAID (TRANSACTION phase). Submitting deliverable..."
+                        f"Job {job.id} is PAID (TRANSACTION phase). Submitting deliverable."
                     )
-                    deliverable = IDeliverable(type="url", value="https://example.com")
+                    deliverable: DeliverablePayload = {
+                        "type": "url",
+                        "value": "https://example.com"
+                    }
                     job.deliver(deliverable)
                     logger.info(
-                        f"Seller: Deliverable submitted for job {onchain_job_id}. Job should move to EVALUATION."
+                        f"Deliverable submitted for job {job.id}. Job should move to {ACPJobPhase(job.phase + 1).name}."
                     )
-                    job_stages["delivered_work"] = True
 
-                elif current_phase in [
+                elif job.phase in [
                     ACPJobPhase.EVALUATION,
                     ACPJobPhase.COMPLETED,
                     ACPJobPhase.REJECTED,
                 ]:
                     logger.info(
-                        f"Seller: Job {onchain_job_id} is in {current_phase.name}. No further action for seller."
+                        f"Job {job.id} is in {job.phase.name}. No further action for seller."
                     )
-                    # Mark as fully handled for this script
-                    job_stages["responded_to_request"] = True
-                    job_stages["delivered_work"] = True
-
-                processed_job_stages[onchain_job_id] = job_stages
 
             except Exception as e:
-                logger.error(f"Seller: Error processing job {onchain_job_id}: {e}")
+                logger.error(f"Error processing job {job.id}: {e}")
 
         time.sleep(POLL_INTERVAL_SECONDS)
 

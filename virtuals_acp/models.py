@@ -114,6 +114,7 @@ class IACPAgent:
     virtual_agent_id: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
     processing_time: Optional[str] = None
+    contract_address: Optional[str] = None
 
 
 class PayloadType(str, Enum):
