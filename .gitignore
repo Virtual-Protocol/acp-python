@@ -21,3 +21,6 @@ __pycache__/
 
 # Intellij IDEA files
 .idea/
+tests/.env
+htmlcov/
+.coverage
