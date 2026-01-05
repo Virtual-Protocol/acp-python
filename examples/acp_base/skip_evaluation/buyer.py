@@ -87,7 +87,7 @@ def buyer():
             "<your-schema-key-1>": "<your-schema-value-1>",
             "<your-schema-key-2>": "<your-schema-value-2>",
         },
-        expired_at=datetime.now() + timedelta(minutes=3.1),  # job expiry duration, minimum 3 minutes
+        expired_at=datetime.now() + timedelta(minutes=5),  # job expiry duration, minimum 3 minutes
     )
     logger.info(f"Job {job_id} initiated")
     logger.info("Listening for next steps...")

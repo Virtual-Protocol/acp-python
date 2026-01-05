@@ -154,19 +154,14 @@ class ACPJob(BaseModel):
             return None
 
         request_memo = next(
-            (
-                m
-                for m in self.memos
-                if m.next_phase == ACPJobPhase.NEGOTIATION
-            ),
+            (m for m in self.memos if m.next_phase == ACPJobPhase.NEGOTIATION),
             None,
         )
         if request_memo:
             return request_memo.signed_reason
 
         fallback_memo = next(
-            (m for m in self.memos if m.next_phase == ACPJobPhase.REJECTED),
-            None
+            (m for m in self.memos if m.next_phase == ACPJobPhase.REJECTED), None
         )
         return fallback_memo.content if fallback_memo else None
 
@@ -293,9 +288,12 @@ class ACPJob(BaseModel):
             )
         )
 
-        x402PaymentDetails = self.acp_contract_client.get_x402_payment_details(self.id)
-        if x402PaymentDetails.is_x402:
-            self.perform_x402_payment(self.price)
+        if self.price > 0:
+            x402PaymentDetails = self.acp_contract_client.get_x402_payment_details(
+                self.id
+            )
+            if x402PaymentDetails.is_x402:
+                self.perform_x402_payment(self.price)
 
         response = self.acp_contract_client.handle_operation(operations)
         return get_txn_hash_from_response(response)
@@ -325,7 +323,7 @@ class ACPJob(BaseModel):
                 content=memo_content,
                 memo_type=MemoType.MESSAGE,
                 is_secured=True,
-                next_phase=ACPJobPhase.REJECTED
+                next_phase=ACPJobPhase.REJECTED,
             )
         )
 
@@ -347,8 +345,7 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.approve_allowance(
-                amount.amount,
-                amount.fare.contract_address
+                amount.amount, amount.fare.contract_address
             )
         )
 
@@ -520,8 +517,7 @@ class ACPJob(BaseModel):
 
         operations.append(
             self.acp_contract_client.approve_allowance(
-                amount.amount,
-                amount.fare.contract_address
+                amount.amount, amount.fare.contract_address
             )
         )
 
@@ -543,7 +539,7 @@ class ACPJob(BaseModel):
                 next_phase=ACPJobPhase.COMPLETED,
                 memo_type=MemoType.PAYABLE_NOTIFICATION,
                 expired_at=expired_at,
-                token=amount.fare.contract_address
+                token=amount.fare.contract_address,
             )
         )
 
@@ -590,7 +586,10 @@ class ACPJob(BaseModel):
             self.acp_contract_client.update_job_x402_nonce(self.id, str(nonce))
 
             x402_response = self.acp_contract_client.perform_x402_request(
-                payment_url, self.acp_contract_client.get_acp_version(), str(budget), encoded_payment
+                payment_url,
+                self.acp_contract_client.get_acp_version(),
+                str(budget),
+                encoded_payment,
             )
             if x402_response.get("isPaymentRequired"):
                 # If payment is required, submit transfer with authorization and handle the operation
