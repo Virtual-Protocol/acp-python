@@ -35,6 +35,7 @@ from virtuals_acp.models import (
     MemoType,
     IACPAgent,
     ACPMemoStatus,
+    PriceType,
 )
 
 logging.basicConfig(
@@ -286,6 +287,61 @@ class VirtualsACP:
     def agent_address(self) -> str:
         return self._agent_wallet_address
 
+    def _hydrate_agent(self, agent_data: Dict[str, Any]) -> IACPAgent:
+        contract_address = Web3.to_checksum_address(agent_data.get("contractAddress"))
+        if not contract_address:
+            raise ACPError("Agent contract address is required")
+
+        contract_client = self.contract_client_by_address(contract_address)
+        provider_address = agent_data.get("walletAddress")
+
+        job_offerings: List[ACPJobOffering] = []
+        for job in agent_data.get("jobs", []):
+            if "priceV2" in job:
+                price = job["priceV2"]["value"]
+                price_type = PriceType(job["priceV2"]["type"])
+            elif "price" in job:
+                price = job["price"]
+                price_type = PriceType.FIXED
+            else:
+                continue
+
+            job_offerings.append(
+                ACPJobOffering(
+                    acp_client=self,
+                    contract_client=contract_client,
+                    provider_address=provider_address,
+                    name=job["name"],
+                    price=price,
+                    price_type=price_type,
+                    requirement=job.get("requirement", None),
+                )
+            )
+
+        resources = [
+            ACPResourceOffering(
+                acp_client=self,
+                name=resource["name"],
+                description=resource["description"],
+                url=resource["url"],
+                parameters=resource.get("parameters", None),
+                id=resource["id"],
+            )
+            for resource in agent_data.get("resources", [])
+        ]
+
+        return IACPAgent(
+            id=agent_data["id"],
+            name=agent_data.get("name"),
+            description=agent_data.get("description"),
+            wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
+            job_offerings=job_offerings,
+            resources=resources,
+            twitter_handle=agent_data.get("twitterHandle"),
+            metrics=agent_data.get("metrics"),
+            contract_address=contract_address,
+        )
+
     def browse_agents(
         self,
         keyword: str,
@@ -343,37 +399,12 @@ class VirtualsACP:
 
             agents = []
             for agent_data in filtered_agents:
-                contract_client = self.contract_client_by_address(
-                    agent_data.get("contractAddress")
-                )
-                provider_address = agent_data.get("walletAddress")
-                job_offerings = [
-                    ACPJobOffering(
-                        acp_client=self,
-                        contract_client=contract_client,
-                        provider_address=provider_address,
-                        name=job["name"],
-                        price=job["priceV2"]["value"],
-                        price_type=job["priceV2"]["type"],
-                        requirement=job.get("requirement", None),
-                    )
-                    for job in agent_data.get("jobs", [])
-                ]
+                try:
+                    agents.append(self._hydrate_agent(agent_data))
+                except Exception as e:
+                    logger.warning(f"Failed to hydrate agent {agent_data.get('id')}: {e}")
+                    continue
 
-                agents.append(
-                    IACPAgent(
-                        id=agent_data["id"],
-                        name=agent_data.get("name"),
-                        description=agent_data.get("description"),
-                        wallet_address=Web3.to_checksum_address(
-                            agent_data["walletAddress"]
-                        ),
-                        job_offerings=job_offerings,
-                        twitter_handle=agent_data.get("twitterHandle"),
-                        metrics=agent_data.get("metrics"),
-                        processing_time=agent_data.get("processingTime", ""),
-                    )
-                )
             return agents
         except requests.exceptions.RequestException as e:
             raise ACPApiError(f"Failed to browse agents: {e}")
@@ -755,8 +786,11 @@ class VirtualsACP:
         except Exception as e:
             raise ACPApiError(f"Failed to get memo by ID: {e}")
 
-    def get_agent(self, wallet_address: str) -> Optional[IACPAgent]:
+    def get_agent(self, wallet_address: str, *, show_hidden_offerings: bool = False) -> Optional[IACPAgent]:
         url = f"{self.acp_api_url}/agents?filters[walletAddress]={wallet_address}"
+
+        if show_hidden_offerings:
+            url += f"&showHiddenOfferings=true"
 
         try:
             response = requests.get(url)
@@ -768,45 +802,7 @@ class VirtualsACP:
                 return None
 
             agent_data = agents_data[0]
-
-            offerings = [
-                ACPJobOffering(
-                    acp_client=self,
-                    contract_client=self.contract_client_by_address(
-                        offering.get("contractAddress")
-                    ),
-                    provider_address=agent_data["walletAddress"],
-                    name=offering["name"],
-                    price=offering["price"],
-                    requirement=offering.get("requirement", None),
-                )
-                for offering in agent_data.get("jobs", [])
-            ]
-
-            resources = [
-                ACPResourceOffering(
-                    acp_client=self,
-                    name=resource["name"],
-                    description=resource["description"],
-                    url=resource["url"],
-                    parameters=resource.get("parameters", None),
-                    id=resource["id"],
-                )
-                for resource in agent_data.get("resources", [])
-            ]
-
-            return IACPAgent(
-                id=agent_data["id"],
-                name=agent_data.get("name"),
-                description=agent_data.get("description"),
-                wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
-                job_offerings=offerings,
-                resources=resources,
-                twitter_handle=agent_data.get("twitterHandle"),
-                metrics=agent_data.get("metrics"),
-                processing_time=agent_data.get("processingTime", ""),
-                contract_address=agent_data.get("contractAddress", ""),
-            )
+            return self._hydrate_agent(agent_data)
 
         except requests.exceptions.RequestException as e:
             raise ACPApiError(f"Failed to get agent: {e}")
