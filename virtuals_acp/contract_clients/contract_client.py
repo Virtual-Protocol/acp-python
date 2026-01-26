@@ -235,3 +235,6 @@ class ACPContractClient(BaseAcpContractClient):
             return self.x402.perform_request(url, version, budget, signature)
         except Exception as e:
             raise ACPError("Failed to perform X402 request", e)
+
+    def get_asset_manager_address(self) -> str:
+        raise ACPError("Not Supported")

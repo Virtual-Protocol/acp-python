@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal, ROUND_DOWN
-from typing import Union
+from typing import Optional, Union
 from web3 import Web3
 from web3.contract import Contract
 
@@ -13,9 +13,10 @@ if TYPE_CHECKING:
 
 
 class Fare:
-    def __init__(self, contract_address: str, decimals: int):
+    def __init__(self, contract_address: str, decimals: int, chain_id: Optional[int] = None):
         self.contract_address = Web3.to_checksum_address(contract_address)
         self.decimals = decimals
+        self.chain_id = chain_id
 
     def format_amount(self, amount: Union[int, float, Decimal]) -> int:
         """Convert to smallest unit (like parseUnits)."""
@@ -24,14 +25,22 @@ class Fare:
 
     @staticmethod
     def from_contract_address(
-        contract_address: str, config: "ACPContractConfig"
+        contract_address: str, config: "ACPContractConfig", chain_id: Optional[int] = None
     ) -> "Fare":
         if Web3.to_checksum_address(contract_address) == Web3.to_checksum_address(
             config.base_fare.contract_address
         ):
             return config.base_fare
 
-        w3 = Web3(Web3.HTTPProvider(config.rpc_url))
+        rpc_url = config.rpc_url
+
+        if chain_id and chain_id != config.chain_id:
+            rpc_url = next(c.rpc_url for c in config.chains if c.chain_id == chain_id)
+
+        if not rpc_url:
+            raise ACPError(f"No RPC URL found for chain ID: {chain_id}")
+        
+        w3 = Web3(Web3.HTTPProvider(rpc_url))
 
         erc20_abi = [
             {
@@ -47,7 +56,7 @@ class Fare:
             address=Web3.to_checksum_address(contract_address), abi=erc20_abi
         )
         decimals = contract.functions.decimals().call()
-        return Fare(contract_address, decimals)
+        return Fare(contract_address, decimals, chain_id)
 
 
 class FareAmountBase(ABC):

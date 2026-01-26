@@ -25,6 +25,13 @@ class ACPMemoStatus(str, Enum):
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
 
+class ACPMemoState(int, Enum):
+    NONE = 0
+    PENDING = 1
+    IN_PROGRESS = 2
+    READY = 3
+    COMPLETED = 4
+    REJECTED = 5
 
 class MemoType(int, Enum):
     MESSAGE = 0  # Text message
@@ -325,3 +332,7 @@ class OffChainJob(PayloadModel):
 class X402PaymentResponse(PayloadModel):
     isPaymentRequired: bool
     data: X402PayableRequirements
+
+class ChainConfig(BaseModel):
+    chain_id: int
+    rpc_url: Optional[str] = None

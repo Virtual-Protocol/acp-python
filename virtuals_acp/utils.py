@@ -59,3 +59,20 @@ def safe_base64_encode(data: Union[str, bytes]) -> str:
     else:
         data_bytes = data
     return base64.b64encode(data_bytes).decode("utf-8")
+
+def get_destination_endpoint_id(chain_id: int) -> int:
+    id_to_eid = {
+        84532: 40245,    # baseSepolia.id
+        11155111: 40161, # sepolia.id
+        80002: 40267,    # polygonAmoy.id
+        421614: 40231,   # arbitrumSepolia.id
+        97: 40102,       # bscTestnet.id
+        8453: 30184,     # base.id
+        1: 30101,        # mainnet.id
+        137: 30109,      # polygon.id
+        42161: 30110,    # arbitrum.id
+        56: 30102,       # bsc.id
+    }
+    if chain_id in id_to_eid:
+        return id_to_eid[chain_id]
+    raise ValueError(f"Unsupported chain ID: {chain_id}")

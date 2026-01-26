@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union, Literal
 from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 
 from virtuals_acp.account import ACPAccount
+from virtuals_acp.exceptions import ACPError
 from virtuals_acp.memo import ACPMemo
 from virtuals_acp.models import (
     PriceType,
@@ -14,6 +15,7 @@ from virtuals_acp.models import (
     RequestPayload,
 )
 from virtuals_acp.utils import (
+    get_destination_endpoint_id,
     try_parse_json_model,
     prepare_payload,
     get_txn_hash_from_response,
@@ -26,6 +28,7 @@ from virtuals_acp.models import (
     FeeType,
 )
 from virtuals_acp.fare import Fare, FareAmountBase, FareAmount
+from virtuals_acp.web3 import getERC20Allowance, getERC20Balance, getERC20Symbol
 
 if TYPE_CHECKING:
     from virtuals_acp.client import VirtualsACP
@@ -208,20 +211,37 @@ class ACPJob(BaseModel):
             fee_amount = (FareAmount(0, self.base_fare)).amount
             fee_type = FeeType.NO_FEE
 
-        operations.append(
-            self.acp_contract_client.create_payable_memo(
-                job_id=self.id,
-                content=content,
-                amount_base_unit=amount.amount,
-                recipient=recipient,
-                fee_amount_base_unit=fee_amount,
-                fee_type=fee_type,
-                next_phase=ACPJobPhase.TRANSACTION,
-                memo_type=type,
-                expired_at=expired_at,
-                token=amount.fare.contract_address,
+        if amount.fare.chain_id != self.acp_contract_client.config.chain_id:
+            operations.append(
+                self.acp_contract_client.create_cross_chain_payable_memo(
+                    job_id=self.id,
+                    content=content,
+                    amount_base_unit=amount.amount,
+                    recipient=recipient,
+                    fee_amount_base_unit=fee_amount,
+                    fee_type=fee_type,
+                    token=amount.fare.contract_address,
+                    next_phase=ACPJobPhase.TRANSACTION,
+                    memo_type=type,
+                    expired_at=expired_at,
+                    destination_eid=get_destination_endpoint_id(amount.fare.chain_id),
+                )
             )
-        )
+        else:
+            operations.append(
+                self.acp_contract_client.create_payable_memo(
+                    job_id=self.id,
+                    content=content,
+                    amount_base_unit=amount.amount,
+                    recipient=recipient,
+                    fee_amount_base_unit=fee_amount,
+                    fee_type=fee_type,
+                    next_phase=ACPJobPhase.TRANSACTION,
+                    memo_type=type,
+                    expired_at=expired_at,
+                    token=amount.fare.contract_address,
+                )
+            )
 
         response = self.acp_contract_client.handle_operation(operations)
         return get_txn_hash_from_response(response)
@@ -405,12 +425,6 @@ class ACPJob(BaseModel):
         return next((m for m in self.memos if m.id == memo_id), None)
 
     def deliver(self, deliverable: DeliverablePayload) -> str | None:
-        if (
-            self.latest_memo is None
-            or self.latest_memo.next_phase != ACPJobPhase.EVALUATION
-        ):
-            raise ValueError("No transaction memo found")
-
         operations: List[OperationPayload] = []
 
         operations.append(
@@ -436,11 +450,8 @@ class ACPJob(BaseModel):
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
-        if (
-            self.latest_memo is None
-            or self.latest_memo.next_phase != ACPJobPhase.EVALUATION
-        ):
-            raise ValueError("No transaction memo found")
+        if amount.fare.chain_id != self.acp_contract_client.config.chain_id:
+            return self._deliver_cross_chain_payable(self.client_address, amount)
 
         operations: List[OperationPayload] = []
 
@@ -628,3 +639,59 @@ class ACPJob(BaseModel):
             # Optionally: handle exception, log, or re-raise
             print(f"An error occurred during perform_x402_payment: {e}")
             raise
+
+    def _deliver_cross_chain_payable(self, client_address: str, amount: FareAmountBase) -> str | None:
+        if not amount.fare.chain_id:
+            raise ACPError("Chain ID is required for cross chain payable delivery")
+
+        chain_id = amount.fare.chain_id
+
+        token_balance = getERC20Balance(
+            self.acp_contract_client.public_clients[chain_id],
+            amount.fare.contract_address,
+            client_address,
+        )
+
+        if token_balance < amount.amount:
+            raise ACPError("Insufficient token balance for cross chain payable delivery")
+
+        asset_manager_address = self.acp_contract_client.get_asset_manager_address()
+    
+        token_allowance = getERC20Allowance(
+            self.acp_contract_client.public_clients[chain_id],
+            amount.fare.contract_address,
+            client_address,
+            asset_manager_address
+        )
+
+        approve_allowance_op = self.acp_contract_client.approve_allowance(
+            amount.amount + token_allowance,
+            amount.fare.contract_address,
+            asset_manager_address
+        )
+
+        self.acp_contract_client.handle_operation([approve_allowance_op], chain_id)
+
+        token_symbol = getERC20Symbol(
+            self.acp_contract_client.public_clients[chain_id],
+            amount.fare.contract_address,
+        )
+
+        create_memo_op = self.acp_contract_client.create_cross_chain_payable_memo(
+            job_id=self.id,
+            content=f"Performing cross chain transfer of {amount.amount} {token_symbol} to {client_address} on chain {chain_id}",
+            token=amount.fare.contract_address,
+            amount_base_unit=amount.amount,
+            recipient=client_address,
+            fee_amount_base_unit=0,
+            fee_type=FeeType.NO_FEE,
+            memo_type=MemoType.PAYABLE_TRANSFER,
+            expired_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+            next_phase=ACPJobPhase.COMPLETED,
+            destination_eid=get_destination_endpoint_id(chain_id),
+            secured=True,
+        )
+
+        self.acp_contract_client.handle_operation([create_memo_op])
+
+
