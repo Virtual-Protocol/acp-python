@@ -42,3 +42,15 @@ def getERC20Symbol(
     symbol = erc20_contract_instance.functions.symbol().call()
     
     return symbol
+
+def getERC20Decimals(
+    public_client: Web3,
+    contract_address: str,
+) -> int:
+    erc20_contract_instance = public_client.eth.contract(
+        address=contract_address, abi=ERC20_ABI
+    )
+    
+    decimals = erc20_contract_instance.functions.decimals().call()
+    
+    return decimals
