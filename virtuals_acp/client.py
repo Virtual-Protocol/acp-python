@@ -31,6 +31,7 @@ from virtuals_acp.models import (
     ACPAgentSort,
     ACPJobPhase,
     ACPGraduationStatus,
+    ACPMemoState,
     ACPOnlineStatus,
     MemoType,
     IACPAgent,
@@ -161,6 +162,7 @@ class VirtualsACP:
                 payable_details=memo.get("payableDetails"),
                 txn_hash=memo.get("txHash"),
                 signed_txn_hash=memo.get("signedTxHash"),
+                state=ACPMemoState(memo.get("state")),
             )
             for memo in data["memos"]
         ]
@@ -215,6 +217,7 @@ class VirtualsACP:
                 payable_details=memo.get("payableDetails"),
                 txn_hash=memo.get("txHash"),
                 signed_txn_hash=memo.get("signedTxHash"),
+                state=ACPMemoState(memo.get("state")),
             )
             for memo in data["memos"]
         ]
@@ -638,6 +641,7 @@ class VirtualsACP:
                         payable_details=memo.get("payableDetails"),
                         txn_hash=memo.get("txHash"),
                         signed_txn_hash=memo.get("signedTxHash"),
+                        state=ACPMemoState(memo.get("state")),
                     )
                     for memo in job.get("memos", [])
                 ]
@@ -723,6 +727,7 @@ class VirtualsACP:
                         payable_details=memo.get("payableDetails"),
                         txn_hash=memo.get("txHash"),
                         signed_txn_hash=memo.get("signedTxHash"),
+                        state=ACPMemoState(memo.get("state")),
                     )
                 )
 
@@ -781,6 +786,7 @@ class VirtualsACP:
                 payable_details=memo.get("payableDetails"),
                 txn_hash=memo.get("txHash"),
                 signed_txn_hash=memo.get("signedTxHash"),
+                state=ACPMemoState(memo.get("state")),
             )
 
         except Exception as e:

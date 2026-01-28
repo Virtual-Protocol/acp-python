@@ -4,27 +4,27 @@ initial_acp_v2_abi = [
   {
     "inputs": [
       { "internalType": "address", "name": "account", "type": "address" },
-      { "internalType": "bytes32", "name": "neededRole", "type": "bytes32" },
+      { "internalType": "bytes32", "name": "neededRole", "type": "bytes32" }
     ],
     "name": "AccessControlUnauthorizedAccount",
-    "type": "error",
+    "type": "error"
   },
   {
     "inputs": [{ "internalType": "address", "name": "target", "type": "address" }],
     "name": "AddressEmptyCode",
-    "type": "error",
+    "type": "error"
   },
   {
     "inputs": [{ "internalType": "address", "name": "account", "type": "address" }],
     "name": "AddressInsufficientBalance",
-    "type": "error",
+    "type": "error"
   },
   {
     "inputs": [
-      { "internalType": "address", "name": "implementation", "type": "address" },
+      { "internalType": "address", "name": "implementation", "type": "address" }
     ],
     "name": "ERC1967InvalidImplementation",
-    "type": "error",
+    "type": "error"
   },
   { "inputs": [], "name": "ERC1967NonPayable", "type": "error" },
   { "inputs": [], "name": "EnforcedPause", "type": "error" },
@@ -36,13 +36,13 @@ initial_acp_v2_abi = [
   {
     "inputs": [{ "internalType": "address", "name": "token", "type": "address" }],
     "name": "SafeERC20FailedOperation",
-    "type": "error",
+    "type": "error"
   },
   { "inputs": [], "name": "UUPSUnauthorizedCallContext", "type": "error" },
   {
     "inputs": [{ "internalType": "bytes32", "name": "slot", "type": "bytes32" }],
     "name": "UUPSUnsupportedProxiableUUID",
-    "type": "error",
+    "type": "error"
   },
   {
     "anonymous": False,
@@ -51,23 +51,23 @@ initial_acp_v2_abi = [
         "indexed": True,
         "internalType": "uint256",
         "name": "accountId",
-        "type": "uint256",
+        "type": "uint256"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "client",
-        "type": "address",
+        "type": "address"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "provider",
-        "type": "address",
-      },
+        "type": "address"
+      }
     ],
     "name": "AccountCreated",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -76,12 +76,12 @@ initial_acp_v2_abi = [
         "indexed": True,
         "internalType": "uint256",
         "name": "accountId",
-        "type": "uint256",
+        "type": "uint256"
       },
-      { "indexed": False, "internalType": "bool", "name": "isActive", "type": "bool" },
+      { "indexed": False, "internalType": "bool", "name": "isActive", "type": "bool" }
     ],
     "name": "AccountStatusUpdated",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -90,23 +90,23 @@ initial_acp_v2_abi = [
         "indexed": False,
         "internalType": "uint256",
         "name": "jobId",
-        "type": "uint256",
+        "type": "uint256"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "evaluator",
-        "type": "address",
+        "type": "address"
       },
       {
         "indexed": False,
         "internalType": "uint256",
         "name": "evaluatorFee",
-        "type": "uint256",
-      },
+        "type": "uint256"
+      }
     ],
     "name": "ClaimedEvaluatorFee",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -115,23 +115,23 @@ initial_acp_v2_abi = [
         "indexed": False,
         "internalType": "uint256",
         "name": "jobId",
-        "type": "uint256",
+        "type": "uint256"
       },
       {
-        "indexed": True,
+        "indexed": True             ,
         "internalType": "address",
         "name": "provider",
-        "type": "address",
+        "type": "address"
       },
       {
         "indexed": False,
         "internalType": "uint256",
         "name": "providerFee",
-        "type": "uint256",
-      },
+        "type": "uint256"
+      }
     ],
     "name": "ClaimedProviderFee",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -140,11 +140,11 @@ initial_acp_v2_abi = [
         "indexed": False,
         "internalType": "uint64",
         "name": "version",
-        "type": "uint64",
-      },
+        "type": "uint64"
+      }
     ],
     "name": "Initialized",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -153,23 +153,23 @@ initial_acp_v2_abi = [
         "indexed": True,
         "internalType": "string",
         "name": "moduleType",
-        "type": "string",
+        "type": "string"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "oldModule",
-        "type": "address",
+        "type": "address"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "newModule",
-        "type": "address",
-      },
+        "type": "address"
+      }
     ],
     "name": "ModuleUpdated",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -178,11 +178,11 @@ initial_acp_v2_abi = [
         "indexed": False,
         "internalType": "address",
         "name": "account",
-        "type": "address",
-      },
+        "type": "address"
+      }
     ],
     "name": "Paused",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -191,23 +191,23 @@ initial_acp_v2_abi = [
         "indexed": False,
         "internalType": "uint256",
         "name": "jobId",
-        "type": "uint256",
+        "type": "uint256"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "client",
-        "type": "address",
+        "type": "address"
       },
       {
         "indexed": False,
         "internalType": "uint256",
         "name": "amount",
-        "type": "uint256",
-      },
+        "type": "uint256"
+      }
     ],
     "name": "RefundedBudget",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -217,17 +217,17 @@ initial_acp_v2_abi = [
         "indexed": True,
         "internalType": "bytes32",
         "name": "previousAdminRole",
-        "type": "bytes32",
+        "type": "bytes32"
       },
       {
         "indexed": True,
         "internalType": "bytes32",
         "name": "newAdminRole",
-        "type": "bytes32",
-      },
+        "type": "bytes32"
+      }
     ],
     "name": "RoleAdminChanged",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -237,17 +237,17 @@ initial_acp_v2_abi = [
         "indexed": True,
         "internalType": "address",
         "name": "account",
-        "type": "address",
+        "type": "address"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "sender",
-        "type": "address",
-      },
+        "type": "address"
+      }
     ],
     "name": "RoleGranted",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -257,17 +257,17 @@ initial_acp_v2_abi = [
         "indexed": True,
         "internalType": "address",
         "name": "account",
-        "type": "address",
+        "type": "address"
       },
       {
         "indexed": True,
         "internalType": "address",
         "name": "sender",
-        "type": "address",
-      },
+        "type": "address"
+      }
     ],
     "name": "RoleRevoked",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -276,11 +276,11 @@ initial_acp_v2_abi = [
         "indexed": False,
         "internalType": "address",
         "name": "account",
-        "type": "address",
-      },
+        "type": "address"
+      }
     ],
     "name": "Unpaused",
-    "type": "event",
+    "type": "event"
   },
   {
     "anonymous": False,
@@ -289,130 +289,82 @@ initial_acp_v2_abi = [
         "indexed": True,
         "internalType": "address",
         "name": "implementation",
-        "type": "address",
-      },
+        "type": "address"
+      }
     ],
     "name": "Upgraded",
-    "type": "event",
+    "type": "event"
   },
   {
     "inputs": [],
     "name": "ADMIN_ROLE",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "DEFAULT_ADMIN_ROLE",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "MODULE_MANAGER_ROLE",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "OPERATOR_ROLE",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "UPGRADE_INTERFACE_VERSION",
     "outputs": [{ "internalType": "string", "name": "", "type": "string" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "accountManager",
     "outputs": [
-      { "internalType": "contract IAccountManager", "name": "", "type": "address" },
+      { "internalType": "contract IAccountManager", "name": "", "type": "address" }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "address", "name": "account", "type": "address" },
-      { "internalType": "uint256", "name": "jobId", "type": "uint256" },
+      { "internalType": "uint256", "name": "jobId", "type": "uint256" }
     ],
     "name": "canSign",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [{ "internalType": "uint256", "name": "jobId", "type": "uint256" }],
     "name": "claimBudget",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "address", "name": "provider", "type": "address" },
-      { "internalType": "string", "name": "metadata", "type": "string" },
+      { "internalType": "string", "name": "metadata", "type": "string" }
     ],
     "name": "createAccount",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "nonpayable",
-    "type": "function",
-  },
-  {
-    "inputs": [
-      { "internalType": "address", "name": "provider", "type": "address" },
-      { "internalType": "address", "name": "evaluator", "type": "address" },
-      { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
-      { "internalType": "address", "name": "paymentToken", "type": "address" },
-      { "internalType": "uint256", "name": "budget", "type": "uint256" },
-      { "internalType": "string", "name": "metadata", "type": "string" },
-    ],
-    "name": "createJob",
-    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-    "stateMutability": "nonpayable",
-    "type": "function",
-  },
-  {
-    "inputs": [
-      { "internalType": "uint256", "name": "accountId", "type": "uint256" },
-      { "internalType": "address", "name": "evaluator", "type": "address" },
-      { "internalType": "uint256", "name": "budget", "type": "uint256" },
-      { "internalType": "address", "name": "paymentToken", "type": "address" },
-      { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
-    ],
-    "name": "createJobWithAccount",
-    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-    "stateMutability": "nonpayable",
-    "type": "function",
-  },
-  {
-    "inputs": [
-      { "internalType": "uint256", "name": "jobId", "type": "uint256" },
-      { "internalType": "string", "name": "content", "type": "string" },
-      {
-        "internalType": "enum ACPTypes.MemoType",
-        "name": "memoType",
-        "type": "uint8",
-      },
-      { "internalType": "bool", "name": "isSecured", "type": "bool" },
-      {
-        "internalType": "enum ACPTypes.JobPhase",
-        "name": "nextPhase",
-        "type": "uint8",
-      },
-    ],
-    "name": "createMemo",
-    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
-    "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
@@ -426,20 +378,21 @@ initial_acp_v2_abi = [
       {
         "internalType": "enum ACPTypes.MemoType",
         "name": "memoType",
-        "type": "uint8",
+        "type": "uint8"
       },
       { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
       { "internalType": "bool", "name": "isSecured", "type": "bool" },
       {
         "internalType": "enum ACPTypes.JobPhase",
         "name": "nextPhase",
-        "type": "uint8",
+        "type": "uint8"
       },
+      { "internalType": "uint32", "name": "lzDstEid", "type": "uint32" }
     ],
-    "name": "createPayableMemo",
+    "name": "createCrossChainPayableMemo",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
@@ -448,12 +401,12 @@ initial_acp_v2_abi = [
       { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
       { "internalType": "address", "name": "paymentToken", "type": "address" },
       { "internalType": "uint256", "name": "budget", "type": "uint256" },
-      { "internalType": "string", "name": "metadata", "type": "string" },
+      { "internalType": "string", "name": "metadata", "type": "string" }
     ],
-    "name": "createX402Job",
+    "name": "createJob",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
@@ -461,36 +414,111 @@ initial_acp_v2_abi = [
       { "internalType": "address", "name": "evaluator", "type": "address" },
       { "internalType": "uint256", "name": "budget", "type": "uint256" },
       { "internalType": "address", "name": "paymentToken", "type": "address" },
+      { "internalType": "uint256", "name": "expiredAt", "type": "uint256" }
+    ],
+    "name": "createJobWithAccount",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "jobId", "type": "uint256" },
+      { "internalType": "string", "name": "content", "type": "string" },
+      {
+        "internalType": "enum ACPTypes.MemoType",
+        "name": "memoType",
+        "type": "uint8"
+      },
+      { "internalType": "bool", "name": "isSecured", "type": "bool" },
+      {
+        "internalType": "enum ACPTypes.JobPhase",
+        "name": "nextPhase",
+        "type": "uint8"
+      }
+    ],
+    "name": "createMemo",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "jobId", "type": "uint256" },
+      { "internalType": "string", "name": "content", "type": "string" },
+      { "internalType": "address", "name": "token", "type": "address" },
+      { "internalType": "uint256", "name": "amount", "type": "uint256" },
+      { "internalType": "address", "name": "recipient", "type": "address" },
+      { "internalType": "uint256", "name": "feeAmount", "type": "uint256" },
+      { "internalType": "enum ACPTypes.FeeType", "name": "feeType", "type": "uint8" },
+      {
+        "internalType": "enum ACPTypes.MemoType",
+        "name": "memoType",
+        "type": "uint8"
+      },
       { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
+      { "internalType": "bool", "name": "isSecured", "type": "bool" },
+      {
+        "internalType": "enum ACPTypes.JobPhase",
+        "name": "nextPhase",
+        "type": "uint8"
+      }
+    ],
+    "name": "createPayableMemo",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "address", "name": "provider", "type": "address" },
+      { "internalType": "address", "name": "evaluator", "type": "address" },
+      { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
+      { "internalType": "address", "name": "paymentToken", "type": "address" },
+      { "internalType": "uint256", "name": "budget", "type": "uint256" },
+      { "internalType": "string", "name": "metadata", "type": "string" }
+    ],
+    "name": "createX402Job",
+    "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      { "internalType": "uint256", "name": "accountId", "type": "uint256" },
+      { "internalType": "address", "name": "evaluator", "type": "address" },
+      { "internalType": "uint256", "name": "budget", "type": "uint256" },
+      { "internalType": "address", "name": "paymentToken", "type": "address" },
+      { "internalType": "uint256", "name": "expiredAt", "type": "uint256" }
     ],
     "name": "createX402JobWithAccount",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "defaultPaymentToken",
     "outputs": [{ "internalType": "contract IERC20", "name": "", "type": "address" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "address", "name": "token", "type": "address" },
-      { "internalType": "uint256", "name": "amount", "type": "uint256" },
+      { "internalType": "uint256", "name": "amount", "type": "uint256" }
     ],
     "name": "emergencyWithdraw",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "evaluatorFeeBP",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [{ "internalType": "uint256", "name": "accountId", "type": "uint256" }],
@@ -507,23 +535,23 @@ initial_acp_v2_abi = [
           {
             "internalType": "uint256",
             "name": "completedJobCount",
-            "type": "uint256",
+            "type": "uint256"
           },
-          { "internalType": "bool", "name": "isActive", "type": "bool" },
+          { "internalType": "bool", "name": "isActive", "type": "bool" }
         ],
         "internalType": "struct ACPTypes.Account",
         "name": "",
-        "type": "tuple",
-      },
+        "type": "tuple"
+      }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "jobId", "type": "uint256" },
       { "internalType": "uint256", "name": "offset", "type": "uint256" },
-      { "internalType": "uint256", "name": "limit", "type": "uint256" },
+      { "internalType": "uint256", "name": "limit", "type": "uint256" }
     ],
     "name": "getAllMemos",
     "outputs": [
@@ -536,7 +564,7 @@ initial_acp_v2_abi = [
           {
             "internalType": "enum ACPTypes.MemoType",
             "name": "memoType",
-            "type": "uint8",
+            "type": "uint8"
           },
           { "internalType": "uint256", "name": "createdAt", "type": "uint256" },
           { "internalType": "bool", "name": "isApproved", "type": "bool" },
@@ -548,18 +576,23 @@ initial_acp_v2_abi = [
           {
             "internalType": "enum ACPTypes.JobPhase",
             "name": "nextPhase",
-            "type": "uint8",
+            "type": "uint8"
           },
           { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
+          {
+            "internalType": "enum ACPTypes.MemoState",
+            "name": "state",
+            "type": "uint8"
+          }
         ],
         "internalType": "struct ACPTypes.Memo[]",
         "name": "memos",
-        "type": "tuple[]",
+        "type": "tuple[]"
       },
-      { "internalType": "uint256", "name": "total", "type": "uint256" },
+      { "internalType": "uint256", "name": "total", "type": "uint256" }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
@@ -567,10 +600,10 @@ initial_acp_v2_abi = [
       {
         "internalType": "enum ACPTypes.MemoType",
         "name": "memoType",
-        "type": "uint8",
+        "type": "uint8"
       },
       { "internalType": "uint256", "name": "offset", "type": "uint256" },
-      { "internalType": "uint256", "name": "limit", "type": "uint256" },
+      { "internalType": "uint256", "name": "limit", "type": "uint256" }
     ],
     "name": "getMemosForMemoType",
     "outputs": [
@@ -583,7 +616,7 @@ initial_acp_v2_abi = [
           {
             "internalType": "enum ACPTypes.MemoType",
             "name": "memoType",
-            "type": "uint8",
+            "type": "uint8"
           },
           { "internalType": "uint256", "name": "createdAt", "type": "uint256" },
           { "internalType": "bool", "name": "isApproved", "type": "bool" },
@@ -595,25 +628,30 @@ initial_acp_v2_abi = [
           {
             "internalType": "enum ACPTypes.JobPhase",
             "name": "nextPhase",
-            "type": "uint8",
+            "type": "uint8"
           },
           { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
+          {
+            "internalType": "enum ACPTypes.MemoState",
+            "name": "state",
+            "type": "uint8"
+          }
         ],
         "internalType": "struct ACPTypes.Memo[]",
         "name": "memos",
-        "type": "tuple[]",
+        "type": "tuple[]"
       },
-      { "internalType": "uint256", "name": "total", "type": "uint256" },
+      { "internalType": "uint256", "name": "total", "type": "uint256" }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "jobId", "type": "uint256" },
       { "internalType": "enum ACPTypes.JobPhase", "name": "phase", "type": "uint8" },
       { "internalType": "uint256", "name": "offset", "type": "uint256" },
-      { "internalType": "uint256", "name": "limit", "type": "uint256" },
+      { "internalType": "uint256", "name": "limit", "type": "uint256" }
     ],
     "name": "getMemosForPhaseType",
     "outputs": [
@@ -626,7 +664,7 @@ initial_acp_v2_abi = [
           {
             "internalType": "enum ACPTypes.MemoType",
             "name": "memoType",
-            "type": "uint8",
+            "type": "uint8"
           },
           { "internalType": "uint256", "name": "createdAt", "type": "uint256" },
           { "internalType": "bool", "name": "isApproved", "type": "bool" },
@@ -638,257 +676,262 @@ initial_acp_v2_abi = [
           {
             "internalType": "enum ACPTypes.JobPhase",
             "name": "nextPhase",
-            "type": "uint8",
+            "type": "uint8"
           },
           { "internalType": "uint256", "name": "expiredAt", "type": "uint256" },
+          {
+            "internalType": "enum ACPTypes.MemoState",
+            "name": "state",
+            "type": "uint8"
+          }
         ],
         "internalType": "struct ACPTypes.Memo[]",
         "name": "memos",
-        "type": "tuple[]",
+        "type": "tuple[]"
       },
-      { "internalType": "uint256", "name": "total", "type": "uint256" },
+      { "internalType": "uint256", "name": "total", "type": "uint256" }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "getPhases",
     "outputs": [{ "internalType": "string[7]", "name": "", "type": "string[7]" }],
     "stateMutability": "pure",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [{ "internalType": "bytes32", "name": "role", "type": "bytes32" }],
     "name": "getRoleAdmin",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "bytes32", "name": "role", "type": "bytes32" },
-      { "internalType": "address", "name": "account", "type": "address" },
+      { "internalType": "address", "name": "account", "type": "address" }
     ],
     "name": "grantRole",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "bytes32", "name": "role", "type": "bytes32" },
-      { "internalType": "address", "name": "account", "type": "address" },
+      { "internalType": "address", "name": "account", "type": "address" }
     ],
     "name": "hasRole",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "address",
         "name": "defaultPaymentToken_",
-        "type": "address",
+        "type": "address"
       },
       { "internalType": "uint256", "name": "platformFeeBP_", "type": "uint256" },
       { "internalType": "address", "name": "platformTreasury_", "type": "address" },
-      { "internalType": "uint256", "name": "evaluatorFeeBP_", "type": "uint256" },
+      { "internalType": "uint256", "name": "evaluatorFeeBP_", "type": "uint256" }
     ],
     "name": "initialize",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "jobId", "type": "uint256" },
-      { "internalType": "address", "name": "account", "type": "address" },
+      { "internalType": "address", "name": "account", "type": "address" }
     ],
     "name": "isJobEvaluator",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "jobManager",
     "outputs": [
-      { "internalType": "contract IJobManager", "name": "", "type": "address" },
+      { "internalType": "contract IJobManager", "name": "", "type": "address" }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "memoManager",
     "outputs": [
-      { "internalType": "contract IMemoManager", "name": "", "type": "address" },
+      { "internalType": "contract IMemoManager", "name": "", "type": "address" }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "pause",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "paused",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "paymentManager",
     "outputs": [
-      { "internalType": "contract IPaymentManager", "name": "", "type": "address" },
+      { "internalType": "contract IPaymentManager", "name": "", "type": "address" }
     ],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "platformFeeBP",
     "outputs": [{ "internalType": "uint256", "name": "", "type": "uint256" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "platformTreasury",
     "outputs": [{ "internalType": "address", "name": "", "type": "address" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "proxiableUUID",
     "outputs": [{ "internalType": "bytes32", "name": "", "type": "bytes32" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "bytes32", "name": "role", "type": "bytes32" },
-      { "internalType": "address", "name": "callerConfirmation", "type": "address" },
+      { "internalType": "address", "name": "callerConfirmation", "type": "address" }
     ],
     "name": "renounceRole",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "bytes32", "name": "role", "type": "bytes32" },
-      { "internalType": "address", "name": "account", "type": "address" },
+      { "internalType": "address", "name": "account", "type": "address" }
     ],
     "name": "revokeRole",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "jobId", "type": "uint256" },
-      { "internalType": "uint256", "name": "amount", "type": "uint256" },
+      { "internalType": "uint256", "name": "amount", "type": "uint256" }
     ],
     "name": "setBudget",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "jobId", "type": "uint256" },
       { "internalType": "uint256", "name": "amount", "type": "uint256" },
-      { "internalType": "address", "name": "paymentToken", "type": "address" },
+      { "internalType": "address", "name": "paymentToken", "type": "address" }
     ],
     "name": "setBudgetWithPaymentToken",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "memoId", "type": "uint256" },
       { "internalType": "bool", "name": "isApproved", "type": "bool" },
-      { "internalType": "string", "name": "reason", "type": "string" },
+      { "internalType": "string", "name": "reason", "type": "string" }
     ],
     "name": "signMemo",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [{ "internalType": "bytes4", "name": "interfaceId", "type": "bytes4" }],
     "name": "supportsInterface",
     "outputs": [{ "internalType": "bool", "name": "", "type": "bool" }],
     "stateMutability": "view",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [],
     "name": "unpause",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "accountId", "type": "uint256" },
-      { "internalType": "string", "name": "metadata", "type": "string" },
+      { "internalType": "string", "name": "metadata", "type": "string" }
     ],
     "name": "updateAccountMetadata",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
-      { "internalType": "uint256", "name": "evaluatorFeeBP_", "type": "uint256" },
+      { "internalType": "uint256", "name": "evaluatorFeeBP_", "type": "uint256" }
     ],
     "name": "updateEvaluatorFee",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "string", "name": "moduleType", "type": "string" },
-      { "internalType": "address", "name": "moduleAddress", "type": "address" },
+      { "internalType": "address", "name": "moduleAddress", "type": "address" }
     ],
     "name": "updateModule",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "uint256", "name": "platformFeeBP_", "type": "uint256" },
       { "internalType": "address", "name": "platformTreasury_", "type": "address" },
-      { "internalType": "uint256", "name": "evaluatorFeeBP_", "type": "uint256" },
+      { "internalType": "uint256", "name": "evaluatorFeeBP_", "type": "uint256" }
     ],
     "name": "updatePlatformConfig",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function",
+    "type": "function"
   },
   {
     "inputs": [
       { "internalType": "address", "name": "newImplementation", "type": "address" },
-      { "internalType": "bytes", "name": "data", "type": "bytes" },
+      { "internalType": "bytes", "name": "data", "type": "bytes" }
     ],
     "name": "upgradeToAndCall",
     "outputs": [],
     "stateMutability": "payable",
-    "type": "function",
-  },
+    "type": "function"
+  }
 ]
 
 custom_abi = [
