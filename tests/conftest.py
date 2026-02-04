@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 
+# Load .env file from tests directory if it exists
 def pytest_configure(config):
     """Load environment variables from tests/.env before running tests"""
     env_file = Path(__file__).parent / ".env"

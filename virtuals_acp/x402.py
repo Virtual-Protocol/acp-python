@@ -89,7 +89,7 @@ class ACPX402:
         try:
             usdc_contract = self.config.base_fare.contract_address
             time_now = int(time.time())
-            valid_after = str(time_now - 15)
+            valid_after = str(time_now - 60)
             valid_before = str(time_now + requirements.accepts[0].maxTimeoutSeconds)
 
             # Get token name and version using multicall but python not supported

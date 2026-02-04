@@ -98,23 +98,13 @@ class IACPAgent:
     id: int
     name: str
     description: str
-    wallet_address: str  # Checksummed address
+    contract_address: str
+    wallet_address: str
     job_offerings: List["ACPJobOffering"] = field(default_factory=list)
+
     resources: List["ACPResourceOffering"] = field(default_factory=list)
     twitter_handle: Optional[str] = None
-    # Full fields from TS for completeness, though browse_agent returns a subset
-    document_id: Optional[str] = None
-    is_virtual_agent: Optional[bool] = None
-    profile_pic: Optional[str] = None
-    category: Optional[str] = None
-    token_address: Optional[str] = None
-    owner_address: Optional[str] = None
-    cluster: Optional[str] = None
-    symbol: Optional[str] = None
-    virtual_agent_id: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
-    processing_time: Optional[str] = None
-    contract_address: Optional[str] = None
 
 
 class PayloadType(str, Enum):
