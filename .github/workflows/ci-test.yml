@@ -1,0 +1,72 @@
+name: "ci"
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    name: run sdk tests
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v4
+
+      - name: setup python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: install poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+      - name: install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
+
+      - name: install project
+        run: poetry install --no-interaction
+
+      - name: create test .env file (on push)
+        if: github.event_name == 'push'
+        run: |
+          cat > tests/.env << EOF
+          WHITELISTED_WALLET_PRIVATE_KEY=${{ secrets.WHITELISTED_WALLET_PRIVATE_KEY }}
+          SELLER_ENTITY_ID=${{ secrets.SELLER_ENTITY_ID }}
+          SELLER_AGENT_WALLET_ADDRESS=${{ secrets.SELLER_AGENT_WALLET_ADDRESS }}
+          BUYER_ENTITY_ID=${{ secrets.BUYER_ENTITY_ID }}
+          BUYER_AGENT_WALLET_ADDRESS=${{ secrets.BUYER_AGENT_WALLET_ADDRESS }}
+          EOF
+
+      - name: run unit tests (on pr)
+        if: github.event_name == 'pull_request'
+        run: poetry run pytest tests/unit -v --junitxml=junit.xml
+
+      - name: run all tests (on push)
+        if: github.event_name == 'push'
+        run: poetry run pytest -v --junitxml=junit.xml
+
+      - name: upload test results
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: test-results-${{ matrix.python-version }}
+          path: junit.xml

@@ -1,0 +1,25 @@
+name: "test report"
+on:
+  workflow_run:
+    workflows: ["ci"]
+    types:
+      - completed
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: dorny/test-reporter@v2
+        with:
+          artifact: test-results-${{ matrix.python-version }}
+          name: Pytest Tests (Python ${{ matrix.python-version }})
+          path: "*.xml"
+          reporter: java-junit
