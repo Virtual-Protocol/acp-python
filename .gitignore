@@ -1,5 +1,6 @@
 # Build artifacts
 dist/
+junit.xml
 
 # Virtual environments
 venv/
