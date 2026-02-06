@@ -20,7 +20,10 @@ from google.adk.tools.url_context_tool import UrlContextTool
 from google.genai import types
 from rapidfuzz import fuzz
 
-from env import EnvSettings
+try:
+    from .env import EnvSettings
+except ImportError:
+    from env import EnvSettings
 from virtuals_acp.client import VirtualsACP
 from virtuals_acp.exceptions import ACPApiError
 from virtuals_acp.job import ACPJob
@@ -43,6 +46,11 @@ logger = logging.getLogger("EvaluatorAgent")
 logging.getLogger("google_genai.types").setLevel(logging.ERROR)
 
 POLL_INTERVAL_SECONDS = 20
+
+# Delay between each job initiation within a batch (avoids hammering the API).
+BATCH_INITIATE_DELAY_SECONDS = 2.0
+# Delay at start of batch when this parent already has children (spaces out consecutive batch tool calls).
+BATCH_CALL_DELAY_SECONDS = 1.5
 
 # Job queue: id -> ACPJob, updated each poll and by on_evaluate socket. Use _get_job_from_queue(job_id) to read; respond_to_job uses it first.
 _job_queue: Dict[int, ACPJob] = {}
@@ -440,8 +448,7 @@ def get_agent_offerings(agent_wallet_address: str) -> str:
     """
     Get an agent and their job offerings for the evaluation flow.
     Returns a JSON string with agent name, description, and list of offerings (each with index, name, requirement_schema, price).
-    For each offering: initiate at least 2 jobs with expected_outcome "accept" (valid requirement) to evaluate deliverable quality. When the requirement schema has fields that can be invalid (e.g. token_symbol, news_category, type), initiate 2 jobs with expected_outcome "reject" using invalid values (e.g. fake token_symbol "casdcasd", wrong enum, missing required field) so the provider should reject them — do not be lenient; always test reject when such fields exist. For content-generation type agents (infer from offering/agent name or description, e.g. image gen, meme gen, text gen): include at least 2 reject cases with expected_outcome "reject" that request NSFW/adult/explicit content so the provider should reject them. Offerings with no or empty schema need only 2 accept cases; use service_requirement_json "{}" for those.
-    For fact-check type agents (infer from offering/agent name or description): unless they explicitly state they cannot fact-check real-time data, include at least one accept case that tests real-time fact-checking (e.g. current news, prices, market data) and at least one accept case that tests non-real-time fact-checking, so both real-time and non-real-time capability are covered.
+    Then call initiate_evaluation_jobs_batch once per offering: for each offering index, pass a JSON array containing only that offering's test cases (same job_offering_index for all items; max 12 per batch). Per offering: at least 2 "accept" (valid service_requirement_json; use "{}" when schema empty), and when schema has invalidatable fields add 2 "reject"; for content-generation add 2 "reject" (NSFW); for fact-check add one real-time and one non-real-time accept. Small arrays per offering improve quality. A safety delay is applied between initiations and between batch calls.
 
     Args:
         agent_wallet_address: The provider agent's wallet address (from requirement.agentWalletAddress).
@@ -513,7 +520,7 @@ def initiate_evaluation_job(
         job_id = offering.initiate_job(
             service_requirement=service_requirement,
             evaluator_address=acp_client.agent_wallet_address,
-            expired_at=datetime.now(timezone.utc) + timedelta(minutes=10),
+            expired_at=datetime.now(timezone.utc) + timedelta(minutes=20),
         )
         logger.info("initiate_evaluation_job: job_id=%s initiated", job_id)
         offering_name = getattr(offering, "name", None) or f"offering_{job_offering_index}"
@@ -527,6 +534,110 @@ def initiate_evaluation_job(
     except Exception as e:
         logger.exception("initiate_evaluation_job failed: %s", e)
         return json.dumps({"error": str(e)})
+
+
+# Max jobs per batch (per-offering); small arrays improve AI-generated quality. Call once per offering.
+INITIATE_EVALUATION_JOBS_BATCH_MAX = 12
+
+
+def initiate_evaluation_jobs_batch(
+    parent_job_id: int,
+    agent_wallet_address: str,
+    jobs_json: str,
+) -> str:
+    """
+    Initiate evaluation jobs for one offering (call once per offering). Pass a JSON array of test cases for a single offering; each item: {"job_offering_index": int, "service_requirement_json": str, "expected_outcome": "accept" or "reject"}. All items should have the same job_offering_index. Cap: 12 jobs per batch. A safety delay is applied between each initiation and between consecutive batch calls. Stops if parent job becomes terminal.
+
+    Args:
+        parent_job_id: The parent (evaluation) job id.
+        agent_wallet_address: The provider agent's wallet address.
+        jobs_json: JSON array of {"job_offering_index": int, "service_requirement_json": str, "expected_outcome": "accept"|"reject"} (same job_offering_index for all).
+    """
+    # Space out consecutive batch tool calls: if we already have children for this parent, wait before starting.
+    with _evaluation_children_lock:
+        existing = len(_evaluation_children.get(parent_job_id, []))
+    if existing > 0 and BATCH_CALL_DELAY_SECONDS > 0:
+        time.sleep(BATCH_CALL_DELAY_SECONDS)
+    try:
+        jobs_list = json.loads(jobs_json)
+    except json.JSONDecodeError as e:
+        return json.dumps({"error": f"Invalid jobs_json: {e}", "initiated": 0, "job_ids": [], "errors": []})
+    if not isinstance(jobs_list, list):
+        return json.dumps({"error": "jobs_json must be a JSON array", "initiated": 0, "job_ids": [], "errors": []})
+    if len(jobs_list) > INITIATE_EVALUATION_JOBS_BATCH_MAX:
+        return json.dumps({
+            "error": f"Too many jobs (max {INITIATE_EVALUATION_JOBS_BATCH_MAX} per batch; call once per offering)",
+            "initiated": 0,
+            "job_ids": [],
+            "errors": [],
+        })
+    parent_job = _get_job_or_none(parent_job_id)
+    if parent_job is not None and parent_job.phase in _TERMINAL_PHASES:
+        phase_name = parent_job.phase.name if hasattr(parent_job.phase, "name") else str(parent_job.phase)
+        return json.dumps({
+            "error": f"Parent job {parent_job_id} is already in terminal phase ({phase_name}).",
+            "initiated": 0,
+            "job_ids": [],
+            "errors": [],
+        })
+    agent = acp_client.get_agent(agent_wallet_address)
+    if not agent:
+        return json.dumps({"error": f"Agent not found: {agent_wallet_address}", "initiated": 0, "job_ids": [], "errors": []})
+    if not agent.job_offerings:
+        return json.dumps({"error": "Agent has no job offerings", "initiated": 0, "job_ids": [], "errors": []})
+    job_ids: List[int] = []
+    errors: List[str] = []
+    for i, item in enumerate(jobs_list):
+        if not isinstance(item, dict):
+            errors.append(f"item[{i}]: not an object")
+            continue
+        job_offering_index = item.get("job_offering_index")
+        service_requirement_json = item.get("service_requirement_json")
+        expected_outcome = item.get("expected_outcome")
+        if job_offering_index is None or service_requirement_json is None or expected_outcome is None:
+            errors.append(f"item[{i}]: missing job_offering_index, service_requirement_json, or expected_outcome")
+            continue
+        if expected_outcome not in ("accept", "reject"):
+            errors.append(f"item[{i}]: expected_outcome must be 'accept' or 'reject'")
+            continue
+        if job_offering_index < 0 or job_offering_index >= len(agent.job_offerings):
+            errors.append(f"item[{i}]: job_offering_index must be 0..{len(agent.job_offerings) - 1}")
+            continue
+        try:
+            service_requirement = json.loads(service_requirement_json)
+        except json.JSONDecodeError as e:
+            errors.append(f"item[{i}]: invalid service_requirement_json: {e}")
+            continue
+        parent_job = _get_job_or_none(parent_job_id)
+        if parent_job is not None and parent_job.phase in _TERMINAL_PHASES:
+            break
+        offering = agent.job_offerings[job_offering_index]
+        try:
+            # Safety delay between each initiation (except before the first).
+            if job_ids and BATCH_INITIATE_DELAY_SECONDS > 0:
+                time.sleep(BATCH_INITIATE_DELAY_SECONDS)
+            job_id = offering.initiate_job(
+                service_requirement=service_requirement,
+                evaluator_address=acp_client.agent_wallet_address,
+                expired_at=datetime.now(timezone.utc) + timedelta(minutes=20),
+            )
+            offering_name = getattr(offering, "name", None) or f"offering_{job_offering_index}"
+            with _evaluation_children_lock:
+                _evaluation_children.setdefault(parent_job_id, []).append({
+                    "job_id": job_id,
+                    "expected_outcome": expected_outcome,
+                    "offering_name": offering_name,
+                })
+            job_ids.append(job_id)
+            logger.info("initiate_evaluation_jobs_batch: job_id=%s (offering %s, %s)", job_id, job_offering_index, expected_outcome)
+        except Exception as e:
+            logger.warning("initiate_evaluation_jobs_batch item[%s] failed: %s", i, e)
+            errors.append(f"item[{i}]: {e}")
+    return json.dumps({
+        "initiated": len(job_ids),
+        "job_ids": job_ids,
+        "errors": errors,
+    }, indent=2)
 
 
 def _deliver_evaluation_report(parent_job_id: int, report: Union[Dict[str, Any], str]) -> str:
@@ -785,6 +896,18 @@ def _evaluator_poll_loop() -> None:
                     if j.id not in by_id:
                         by_id[j.id] = j
                 jobs_to_process = list(by_id.values())
+                # Prioritize jobs that require payment (client NEGOTIATION); deprioritize EVALUATION where we are evaluator
+                def _job_priority(j: ACPJob) -> int:
+                    if j.client_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.NEGOTIATION:
+                        return 0
+                    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.REQUEST:
+                        return 1
+                    if j.evaluator_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.EVALUATION:
+                        return 2
+                    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.TRANSACTION:
+                        return 3
+                    return 1
+                jobs_to_process.sort(key=_job_priority)
             for job in jobs_to_process:
                 # Parent REQUEST: we are provider (graduation request) — accept/reject only. Parent TRANSACTION: we are provider, client paid — start children evaluation flow. Child EVALUATION: we are evaluator — evaluate deliverable (job.evaluate). Client NEGOTIATION: we are client — pay and accept. We do NOT accept/reject child jobs (provider of children does that).
                 is_parent_request = job.provider_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.REQUEST
@@ -851,12 +974,7 @@ def _evaluator_poll_loop() -> None:
                             f"Parent job {job.id} (you are the provider, client has paid — TRANSACTION phase). Run the evaluation flow. "
                             f"requirement (agent to evaluate): {req_json}. "
                             "1) Call get_agent_offerings(agent_wallet_address) with agentWalletAddress from requirement. "
-                            "2) As soon as you have the offerings, you MUST call initiate_evaluation_job for each offering (do not reply with text instead). "
-                            "For each offering: call initiate_evaluation_job at least 2 times with expected_outcome \"accept\" and valid service_requirement_json (use \"{}\" when the offering has no or empty requirement schema). "
-                            "When the requirement schema has fields that can be invalid (e.g. token_symbol, news_category, type), call 2 times with expected_outcome \"reject\" using invalid values (e.g. token_symbol \"casdcasd\", wrong enum) so the provider should reject — 2 accept and 2 reject when reject is testable, not one each. Do not be lenient; always test reject when such fields exist. "
-                            "For content-generation type offerings (e.g. image gen, meme gen, text gen): call 2 times with expected_outcome \"reject\" using NSFW/adult/explicit content requests so the provider should reject them. "
-                            "For fact-check type offerings (infer from name/description): unless the agent states they cannot fact-check real-time data, include at least one accept case that tests real-time fact-checking (e.g. current news, prices) and at least one that tests non-real-time fact-checking; cover both. "
-                            "If initiate_evaluation_job returns that the parent job is already in a terminal phase, stop initiating and deliver or conclude as appropriate. "
+                            "2) For each offering, call initiate_evaluation_jobs_batch(parent_job_id, agent_wallet_address, jobs_json) once with a small JSON array (max 12 items) containing only that offering's test cases: same job_offering_index for all items; at least 2 \"accept\" (use \"{}\" when schema empty), 2 \"reject\" when schema has invalidatable fields, 2 \"reject\" (NSFW) for content-generation, and real-time + non-real-time accept for fact-check. One batch per offering keeps arrays small and improves quality. A safety delay is applied between initiations. "
                             f"Use parent_job_id={job.id}. The runner will wait for child jobs, compile the report, and deliver."
                         )
                     if not is_evaluator_evaluation:
@@ -937,8 +1055,8 @@ root_agent = Agent(
     You MUST use Google Search and/or URL context to verify real-time data before evaluating: when the deliverable or requirement includes a URL, use the URL context tool to fetch and read the live page content; when the deliverable is real-time or time-sensitive (e.g. current prices, news, market data), use the Google Search tool to verify or contextualize it. Only then call evaluate_job_deliverable. You can combine both: use the search tool to find relevant results and URLs, then use the URL context tool to crawl and read those URLs before evaluating.
 
     Parent job TRANSACTION (client paid — you are the provider, run evaluation flow):
-    1. Get agent from requirement (agentWalletAddress). Call get_agent_offerings(agent_wallet_address) to get agent name, description, and job offerings (each with index, name, requirement_schema, price).
-    2. Immediately after get_agent_offerings returns, you MUST call initiate_evaluation_job for each offering (do not respond with text only). For each offering: call at least 2 times with expected_outcome "accept" and valid service_requirement_json (use "{}" when no or empty requirement schema). When the requirement schema has fields that can be invalid (e.g. token_symbol, symbol, ticker, enum), call 2 times with expected_outcome "reject" using invalid values (e.g. token_symbol "casdcasd", wrong enum) so the provider should reject — 2 accept and 2 reject when reject is testable, not one each. Do not be lenient; always test reject when such fields exist. For content-generation type offerings (e.g. image gen, meme gen, text gen): call 2 times with expected_outcome "reject" using NSFW/adult/explicit content requests so the provider should reject them. For fact-check type offerings (infer from name or description): unless the agent explicitly states they cannot fact-check real-time data, include at least one accept case that tests real-time fact-checking (e.g. current news, prices, market data) and at least one that tests non-real-time fact-checking; cover both real-time and non-real-time. If initiate_evaluation_job returns that the parent job is already in a terminal phase, stop initiating and conclude. Use parent_job_id from the prompt. The runner will wait for child jobs (via job queue), compile the report, and deliver to the parent job.
+    1. Call get_agent_offerings(agent_wallet_address) with agentWalletAddress from requirement to get agent name, description, and offerings (index, name, requirement_schema, price).
+    2. For each offering, call initiate_evaluation_jobs_batch(parent_job_id, agent_wallet_address, jobs_json) once with a small array (max 12 items) containing only that offering's test cases: same job_offering_index for all; at least 2 "accept" (use "{}" when schema empty), 2 "reject" when schema has invalidatable fields, 2 "reject" (NSFW) for content-gen, and real-time + non-real-time accept for fact-check. One batch per offering keeps arrays small and improves AI-generated quality. Safety delays are applied between initiations and between batch calls. The runner will wait for child jobs and deliver the report.
 
     When answering, always explain in detail the steps you have taken. Use JSON where appropriate.
     """,
@@ -951,6 +1069,7 @@ root_agent = Agent(
         reject_job,
         evaluate_job_deliverable,
         get_agent_offerings,
+        initiate_evaluation_jobs_batch,
         initiate_evaluation_job,
         # run_test_evaluation,
         UrlContextTool(),
