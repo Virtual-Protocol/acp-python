@@ -448,7 +448,7 @@ def get_agent_offerings(agent_wallet_address: str) -> str:
     """
     Get an agent and their job offerings for the evaluation flow.
     Returns a JSON string with agent name, description, and list of offerings (each with index, name, requirement_schema, price).
-    Then call initiate_evaluation_jobs_batch once per offering: for each offering index, pass a JSON array containing only that offering's test cases (same job_offering_index for all items; max 12 per batch). Per offering: at least 2 "accept" (valid service_requirement_json; use "{}" when schema empty), and when schema has invalidatable fields add 2 "reject"; for content-generation add 2 "reject" (NSFW); for fact-check add one real-time and one non-real-time accept. Small arrays per offering improve quality. A safety delay is applied between initiations and between batch calls.
+    For test cases that need real-time data or live URLs (e.g. fact-check current news, live prices, URL to verify): use Google Search and/or UrlContextTool first to get accurate, working URLs or data; then put that verified content in service_requirement_json. Do not pass made-up or unverified URLs/real-time data. Then call initiate_evaluation_jobs_batch once per offering: for each offering index, pass a JSON array containing only that offering's test cases (same job_offering_index for all items; max 12 per batch). Per offering: at least 2 "accept" (valid service_requirement_json; use "{}" when schema empty), and when schema has invalidatable fields add 2 "reject"; for content-generation add 2 "reject" (NSFW); for fact-check add one real-time and one non-real-time accept. Small arrays per offering improve quality. A safety delay is applied between initiations and between batch calls.
 
     Args:
         agent_wallet_address: The provider agent's wallet address (from requirement.agentWalletAddress).
@@ -536,7 +536,6 @@ def initiate_evaluation_job(
         return json.dumps({"error": str(e)})
 
 
-# Max jobs per batch (per-offering); small arrays improve AI-generated quality. Call once per offering.
 INITIATE_EVALUATION_JOBS_BATCH_MAX = 12
 
 
@@ -974,7 +973,8 @@ def _evaluator_poll_loop() -> None:
                             f"Parent job {job.id} (you are the provider, client has paid — TRANSACTION phase). Run the evaluation flow. "
                             f"requirement (agent to evaluate): {req_json}. "
                             "1) Call get_agent_offerings(agent_wallet_address) with agentWalletAddress from requirement. "
-                            "2) For each offering, call initiate_evaluation_jobs_batch(parent_job_id, agent_wallet_address, jobs_json) once with a small JSON array (max 12 items) containing only that offering's test cases: same job_offering_index for all items; at least 2 \"accept\" (use \"{}\" when schema empty), 2 \"reject\" when schema has invalidatable fields, 2 \"reject\" (NSFW) for content-generation, and real-time + non-real-time accept for fact-check. One batch per offering keeps arrays small and improves quality. A safety delay is applied between initiations. "
+                            "2) For test cases that need real-time data or live URLs (e.g. fact-check current news, live prices, URL to verify): use Google Search and/or URL context tool first to browse/fetch and confirm the URL or data is accurate and working; then use that verified content in the requirement you pass to initiate_evaluation_jobs_batch. Do not pass made-up or unverified URLs or real-time data. "
+                            "3) For each offering, call initiate_evaluation_jobs_batch(parent_job_id, agent_wallet_address, jobs_json) once with a small JSON array (max 12 items) containing only that offering's test cases: same job_offering_index for all items; at least 2 \"accept\" (use \"{}\" when schema empty), 2 \"reject\" when schema has invalidatable fields, 2 \"reject\" (NSFW) for content-generation, and real-time + non-real-time accept for fact-check. One batch per offering keeps arrays small and improves quality. A safety delay is applied between initiations. "
                             f"Use parent_job_id={job.id}. The runner will wait for child jobs, compile the report, and deliver."
                         )
                     if not is_evaluator_evaluation:
@@ -1056,7 +1056,8 @@ root_agent = Agent(
 
     Parent job TRANSACTION (client paid — you are the provider, run evaluation flow):
     1. Call get_agent_offerings(agent_wallet_address) with agentWalletAddress from requirement to get agent name, description, and offerings (index, name, requirement_schema, price).
-    2. For each offering, call initiate_evaluation_jobs_batch(parent_job_id, agent_wallet_address, jobs_json) once with a small array (max 12 items) containing only that offering's test cases: same job_offering_index for all; at least 2 "accept" (use "{}" when schema empty), 2 "reject" when schema has invalidatable fields, 2 "reject" (NSFW) for content-gen, and real-time + non-real-time accept for fact-check. One batch per offering keeps arrays small and improves AI-generated quality. Safety delays are applied between initiations and between batch calls. The runner will wait for child jobs and deliver the report.
+    2. Before passing requirements that need real-time data or live URLs (e.g. fact-check current news, live prices, URL to verify): use Google Search and/or URL context tool to browse or search first; confirm the URL or data is accurate and working, then put that verified content in the service_requirement_json you pass to initiate_evaluation_jobs_batch. Do not pass made-up or unverified URLs or real-time data.
+    3. For each offering, call initiate_evaluation_jobs_batch(parent_job_id, agent_wallet_address, jobs_json) once with a small array (max 12 items) containing only that offering's test cases: same job_offering_index for all; at least 2 "accept" (use "{}" when schema empty), 2 "reject" when schema has invalidatable fields, 2 "reject" (NSFW) for content-gen, and real-time + non-real-time accept for fact-check. One batch per offering keeps arrays small and improves AI-generated quality. Safety delays are applied between initiations and between batch calls. The runner will wait for child jobs and deliver the report.
 
     When answering, always explain in detail the steps you have taken. Use JSON where appropriate.
     """,
