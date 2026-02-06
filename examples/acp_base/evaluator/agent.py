@@ -60,6 +60,25 @@ _job_queue_lock = threading.Lock()
 # Payment queue: job IDs that need pay_and_accept_requirement; consumed by _payment_worker so main loop is not blocked.
 _payment_queue: queue.Queue[int] = queue.Queue()
 
+
+def _enqueue_payment_job_id(job_id: int, reason: str = "NEGOTIATION -> TRANSACTION") -> None:
+    """Put a job ID on the payment queue. Payment worker will pay when the job is in NEGOTIATION with memo next_phase TRANSACTION; it skips until then."""
+    _payment_queue.put(job_id)
+    logger.info("Enqueued job %s for payment (%s)", job_id, reason)
+
+
+def _enqueue_job_for_payment_if_eligible(job: ACPJob) -> bool:
+    """If job is our client NEGOTIATION with memo ready to pay (next_phase TRANSACTION) and we track it, enqueue for payment. Returns True if enqueued (caller should not run agent for this job)."""
+    if job.client_address != acp_client.agent_wallet_address or job.phase != ACPJobPhase.NEGOTIATION:
+        return False
+    if not _is_tracked_child_job(job.id):
+        return False
+    if not job.latest_memo or job.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
+        return False
+    _enqueue_payment_job_id(job.id, "NEGOTIATION -> TRANSACTION")
+    return True
+
+
 # Parent job id -> list of {job_id, expected_outcome} for evaluation flow. Poll loop waits for these to be terminal, compiles report, delivers.
 _evaluation_children: Dict[int, List[Dict[str, Any]]] = {}
 _evaluation_children_lock = threading.Lock()
@@ -67,18 +86,27 @@ _evaluation_children_lock = threading.Lock()
 # Parent job ids for which we have already started the evaluation flow (one round of children). Skip creating another round.
 _parent_evaluation_started: Set[int] = set()
 
+# Parent job id -> set of job_offering_index for which we have already initiated a batch (avoid duplicate batches per offering).
+_parent_offerings_initiated: Dict[int, Set[int]] = {}
+
 # One session per job (reused across phases: REQUEST -> TRANSACTION for parent; single EVALUATION for child).
 _job_sessions: Dict[int, str] = {}
 _job_sessions_lock = threading.Lock()
 
 def _on_new_task(job: ACPJob, _memo_to_sign: Optional[ACPMemo] = None) -> None:
-    """Socket handler: add incoming job to the job queue so the poll loop will process it."""
+    """Socket handler: payment-eligible jobs go straight to payment queue; all others go to normal job queue for poll loop."""
+    if _enqueue_job_for_payment_if_eligible(job):
+        logger.info("Job %s from on_new_task sent to payment queue (skipping normal queue)", job.id)
+        return
     with _job_queue_lock:
         _job_queue[job.id] = job
     logger.info("Job %s added to queue from on_new_task socket", job.id)
 
 def _on_evaluate(job: ACPJob) -> None:
-    """Socket handler: add incoming evaluation job to the job queue so the poll loop will process it."""
+    """Socket handler: payment-eligible jobs go straight to payment queue; all others go to normal job queue for poll loop."""
+    if _enqueue_job_for_payment_if_eligible(job):
+        logger.info("Job %s from on_evaluate sent to payment queue (skipping normal queue)", job.id)
+        return
     with _job_queue_lock:
         _job_queue[job.id] = job
     logger.info("Job %s added to queue from on_evaluate socket", job.id)
@@ -483,8 +511,7 @@ def initiate_evaluation_job(
     parent_job_id: int,
 ) -> str:
     """
-    Initiate one evaluation job with the agent (as buyer). If the parent job is already in a terminal phase (COMPLETED, REJECTED, EXPIRED), does not initiate and returns an error so the agent knows to stop. For each offering: call at least 2 times with expected_outcome "accept" (valid requirement) to evaluate deliverable quality. When the schema has fields that can be invalid (e.g. token_symbol, news_category, type), call 2 times with expected_outcome "reject" using invalid values (e.g. token_symbol "casdcasd", wrong enum) so the provider should reject — 2 accept and 2 reject when reject is testable, not one each. For content-generation type offerings (e.g. image gen, meme gen): call 2 times with expected_outcome "reject" using NSFW/adult/explicit content requests so the provider should reject them. Offerings with no or empty schema need only 2 accept; use service_requirement_json "{}" when schema is empty. For fact-check type offerings: unless the agent states they cannot fact-check real-time data, include at least one accept case with a real-time fact-check request (e.g. current news, prices) and at least one with a non-real-time fact-check request; cover both real-time and non-real-time.
-    Child jobs are tracked for the parent; the runner will wait for them (via job queue), compile the report, and deliver.
+    Initiate one evaluation job with the agent (as buyer). Use this to retry a single case when initiate_evaluation_jobs_batch reported a failure (e.g. requirement did not pass the offering's schema validation): pass service_requirement_json that satisfies the offering's requirement_schema. If the parent job is already in a terminal phase (COMPLETED, REJECTED, EXPIRED), does not initiate and returns an error. For each offering: call at least 2 times with expected_outcome "accept" (valid requirement). When the schema has invalidatable fields, call 2 times with expected_outcome "reject" using invalid values. For content-generation offerings call 2 times with expected_outcome "reject" (NSFW). For fact-check include real-time and non-real-time accept cases. Child jobs are tracked for the parent; the runner will wait for them and deliver the report.
 
     Args:
         agent_wallet_address: The provider agent's wallet address.
@@ -534,6 +561,7 @@ def initiate_evaluation_job(
                 "expected_outcome": expected_outcome,
                 "offering_name": offering_name,
             })
+        _enqueue_payment_job_id(job_id, "from job init; payment worker will pay when NEGOTIATION")
         return json.dumps({"job_id": job_id, "expected_outcome": expected_outcome})
     except Exception as e:
         logger.exception("initiate_evaluation_job failed: %s", e)
@@ -549,7 +577,7 @@ def initiate_evaluation_jobs_batch(
     jobs_json: str,
 ) -> str:
     """
-    Initiate evaluation jobs for one offering (call once per offering). Pass a JSON array of test cases for a single offering; each item: {"job_offering_index": int, "service_requirement_json": str, "expected_outcome": "accept" or "reject"}. All items should have the same job_offering_index. Cap: 12 jobs per batch. A safety delay is applied between each initiation and between consecutive batch calls. Stops if parent job becomes terminal.
+    Initiate evaluation jobs for one offering (call once per offering). Pass a JSON array of test cases for a single offering; each item: {"job_offering_index": int, "service_requirement_json": str, "expected_outcome": "accept" or "reject"}. All items should have the same job_offering_index. Cap: 12 jobs per batch. A safety delay is applied between each initiation and between consecutive batch calls. Stops if parent job becomes terminal. If a job fails to initiate (e.g. requirement did not pass the offering's schema/Zod validation), the returned "errors" array will contain the failure reason; you must retry that case by calling initiate_evaluation_job with the same parent_job_id and offering index but with service_requirement_json that satisfies the offering's requirement schema.
 
     Args:
         parent_job_id: The parent (evaluation) job id.
@@ -588,8 +616,25 @@ def initiate_evaluation_jobs_batch(
         return json.dumps({"error": f"Agent not found: {agent_wallet_address}", "initiated": 0, "job_ids": [], "errors": []})
     if not agent.job_offerings:
         return json.dumps({"error": "Agent has no job offerings", "initiated": 0, "job_ids": [], "errors": []})
+    # Avoid duplicate batch for the same offering: check if any offering in this batch was already initiated for this parent.
+    offering_indices_in_batch: Set[int] = set()
+    for item in jobs_list:
+        if isinstance(item, dict):
+            idx = item.get("job_offering_index")
+            if isinstance(idx, int) and 0 <= idx < len(agent.job_offerings):
+                offering_indices_in_batch.add(idx)
+    with _evaluation_children_lock:
+        already_initiated = _parent_offerings_initiated.get(parent_job_id, set()) & offering_indices_in_batch
+    if already_initiated:
+        return json.dumps({
+            "error": f"Already initiated evaluation for this parent and offering index(s): {sorted(already_initiated)}. Skip duplicate batch.",
+            "initiated": 0,
+            "job_ids": [],
+            "errors": [],
+        })
     job_ids: List[int] = []
     errors: List[str] = []
+    initiated_offerings_in_batch: Set[int] = set()
     for i, item in enumerate(jobs_list):
         if not isinstance(item, dict):
             errors.append(f"item[{i}]: not an object")
@@ -632,10 +677,19 @@ def initiate_evaluation_jobs_batch(
                     "offering_name": offering_name,
                 })
             job_ids.append(job_id)
+            initiated_offerings_in_batch.add(job_offering_index)
+            _enqueue_payment_job_id(job_id, "from job init; payment worker will pay when NEGOTIATION")
             logger.info("initiate_evaluation_jobs_batch: job_id=%s (offering %s, %s)", job_id, job_offering_index, expected_outcome)
         except Exception as e:
             logger.warning("initiate_evaluation_jobs_batch item[%s] failed: %s", i, e)
-            errors.append(f"item[{i}]: {e}")
+            reason = str(e)
+            errors.append(
+                f"item[{i}]: job failed to initiate — {reason}. "
+                f"Retry this case with initiate_evaluation_job(agent_wallet_address, {job_offering_index}, service_requirement_json, expected_outcome, parent_job_id) using requirement data that satisfies the offering's schema."
+            )
+    if initiated_offerings_in_batch:
+        with _evaluation_children_lock:
+            _parent_offerings_initiated.setdefault(parent_job_id, set()).update(initiated_offerings_in_batch)
     return json.dumps({
         "initiated": len(job_ids),
         "job_ids": job_ids,
@@ -871,6 +925,7 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 _deliver_evaluation_report(parent_job_id, report)
                 with _evaluation_children_lock:
                     _evaluation_children.pop(parent_job_id, None)
+                    _parent_offerings_initiated.pop(parent_job_id, None)
                     _parent_evaluation_started.discard(parent_job_id)
                 logger.info("Evaluation report delivered for parent job %s", parent_job_id)
                 return
@@ -880,11 +935,12 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
     logger.error("Timeout waiting for child jobs of parent %s", parent_job_id)
     with _evaluation_children_lock:
         _evaluation_children.pop(parent_job_id, None)
+        _parent_offerings_initiated.pop(parent_job_id, None)
         # Do NOT discard _parent_evaluation_started on timeout: ensure only one round of children per parent forever
 
 
 def _payment_worker() -> None:
-    """Dedicated thread: consume job IDs from _payment_queue and call pay_and_accept_requirement so the main poll loop is not blocked by payment."""
+    """Dedicated thread: consume job IDs from _payment_queue and call pay_and_accept_requirement so the main poll loop is not blocked by payment. SDK has built-in retry for payment calls."""
     logger.info("Payment worker started.")
     while True:
         job_id: Optional[int] = None
@@ -895,11 +951,16 @@ def _payment_worker() -> None:
                 try:
                     job = acp_client.get_job_by_onchain_id(job_id)
                 except ACPApiError:
-                    logger.warning("Payment worker: job %s not found", job_id)
+                    logger.warning("Payment worker: job %s not found (skip)", job_id)
                     continue
-            if job.client_address != acp_client.agent_wallet_address or job.phase != ACPJobPhase.NEGOTIATION:
+            if job.client_address != acp_client.agent_wallet_address:
+                logger.info("Payment worker: job %s skipped (not our client address)", job_id)
+                continue
+            if job.phase != ACPJobPhase.NEGOTIATION:
+                logger.info("Payment worker: job %s skipped (phase=%s, need NEGOTIATION)", job_id, getattr(job.phase, "name", job.phase))
                 continue
             if not job.latest_memo or job.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
+                logger.info("Payment worker: job %s skipped (no memo or memo next_phase not TRANSACTION)", job_id)
                 continue
             job.pay_and_accept_requirement()
             logger.info("Job %s: Paid and accepted requirement (payment thread)", job_id)
@@ -913,27 +974,30 @@ def _evaluator_poll_loop() -> None:
     while True:
         try:
             logger.debug("Poll iteration: fetching active jobs...")
-            active_jobs: List[ACPJob] = acp_client.get_active_jobs()
+            # Use a larger page_size so we don't miss NEGOTIATION jobs that need payment (default 10 can drop some).
+            active_jobs: List[ACPJob] = acp_client.get_active_jobs(page=1, page_size=30)
             with _job_queue_lock:
+                # Payment-eligible jobs go to payment queue only (not normal queue); others go to normal queue
                 for job in active_jobs:
-                    _job_queue[job.id] = job
+                    if _enqueue_job_for_payment_if_eligible(job):
+                        pass  # already enqueued for payment; do not add to _job_queue
+                    else:
+                        _job_queue[job.id] = job
                 # Merge API and socket jobs; deduplicate by job id (prefer API data when same id in both)
                 by_id: Dict[int, ACPJob] = {j.id: j for j in active_jobs}
                 for j in _job_queue.values():
                     if j.id not in by_id:
                         by_id[j.id] = j
                 jobs_to_process = list(by_id.values())
-                # Prioritize jobs that require payment (client NEGOTIATION); deprioritize EVALUATION where we are evaluator
+                # Evaluation last; parent REQUEST then parent TRANSACTION in between
                 def _job_priority(j: ACPJob) -> int:
-                    if j.client_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.NEGOTIATION:
+                    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.TRANSACTION:
                         return 0
                     if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.REQUEST:
                         return 1
                     if j.evaluator_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.EVALUATION:
-                        return 2
-                    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.TRANSACTION:
-                        return 3
-                    return 1
+                        return 2  # evaluation last
+                    return 0
                 jobs_to_process.sort(key=_job_priority)
             for job in jobs_to_process:
                 # Parent REQUEST: we are provider (graduation request) — accept/reject only. Parent TRANSACTION: we are provider, client paid — start children evaluation flow. Child EVALUATION: we are evaluator — evaluate deliverable (job.evaluate). Client NEGOTIATION: we are client — pay and accept. We do NOT accept/reject child jobs (provider of children does that).
@@ -954,9 +1018,7 @@ def _evaluator_poll_loop() -> None:
                         _parent_evaluation_started.add(job.id)
                 try:
                     if is_client_negotiation:
-                        if job.latest_memo and job.latest_memo.next_phase == ACPJobPhase.TRANSACTION:
-                            _payment_queue.put(job.id)
-                        continue
+                        continue  # already enqueued for payment when building queue (or from socket); skip normal processing
                     with _job_sessions_lock:
                         session_id = _job_sessions.get(job.id)
                     if session_id is None:
