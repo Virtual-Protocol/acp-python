@@ -186,52 +186,92 @@ def _get_job_or_none(job_id: int) -> Optional[ACPJob]:
         return None
 
 
-# Image evaluation: download from deliverable links and attach to prompt so Gemini can see them.
+# Media evaluation: download from deliverable links and attach to prompt so Gemini can see them.
 IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 15
 IMAGE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
-# URL pattern for image links (common extensions and path hints).
+VIDEO_DOWNLOAD_TIMEOUT_SECONDS = 60
+VIDEO_MAX_BYTES = 20 * 1024 * 1024  # 20 MB (Gemini inline video limit)
+# URL pattern for image links (common extensions).
 _IMAGE_URL_RE = re.compile(
     r"https?://[^\s<>\"']+\.(?:png|jpe?g|gif|webp|bmp)(?:\?[^\s<>\"']*)?",
     re.IGNORECASE,
 )
-# Common JSON keys that may hold image URLs in deliverables.
-_IMAGE_URL_KEYS = ("imageUrl", "image_url", "image", "url", "imageLink", "link", "src", "photo", "picture")
+# URL pattern for video links.
+_VIDEO_URL_RE = re.compile(
+    r"https?://[^\s<>\"']+\.(?:mp4|webm|mov|avi|m4v|mkv)(?:\?[^\s<>\"']*)?",
+    re.IGNORECASE,
+)
+# Type-specific keys: no overlap so each URL is classified once. Generic keys (url, link, src) are classified by URL extension.
+_IMAGE_URL_KEYS = ("imageUrl", "image_url", "image", "imageLink", "photo", "picture")
+_VIDEO_URL_KEYS = ("videoUrl", "video_url", "video", "videoLink", "mediaUrl", "media_url")
+_GENERIC_MEDIA_KEYS = ("url", "link", "src")
 
 
-def _extract_image_urls(deliverable: Any) -> List[str]:
-    """Extract image URLs from a deliverable (string or dict). Returns a deduplicated list."""
-    urls: List[str] = []
+def _normalize_media_url(u: str) -> str:
+    """Normalize URL for dedup (strip query, optional trailing slash)."""
+    return (u.split("?")[0].rstrip("/") or u).strip()
+
+
+def _extract_media_urls(deliverable: Any) -> Tuple[List[str], List[str]]:
+    """
+    Extract image and video URLs from a deliverable (string or dict). Each URL is classified
+    as image or video only (no duplicate across lists). Type-specific keys determine kind;
+    generic keys (url, link, src) are classified by URL extension. Returns (image_urls, video_urls).
+    """
+    image_urls: List[str] = []
+    video_urls: List[str] = []
     if deliverable is None:
-        return urls
-    if isinstance(deliverable, dict):
+        return (image_urls, video_urls)
+
+    def collect_from_dict(d: Dict[str, Any]) -> None:
         for key in _IMAGE_URL_KEYS:
-            val = deliverable.get(key)
+            val = d.get(key)
             if isinstance(val, str) and val.strip().startswith(("http://", "https://")):
-                urls.append(val.strip())
-        for v in deliverable.values():
+                image_urls.append(_normalize_media_url(val))
+        for key in _VIDEO_URL_KEYS:
+            val = d.get(key)
+            if isinstance(val, str) and val.strip().startswith(("http://", "https://")):
+                video_urls.append(_normalize_media_url(val))
+        for key in _GENERIC_MEDIA_KEYS:
+            val = d.get(key)
+            if isinstance(val, str) and val.strip().startswith(("http://", "https://")):
+                u = _normalize_media_url(val)
+                if _IMAGE_URL_RE.search(val):
+                    image_urls.append(u)
+                elif _VIDEO_URL_RE.search(val):
+                    video_urls.append(u)
+        for v in d.values():
             if isinstance(v, str):
-                urls.extend(_IMAGE_URL_RE.findall(v))
+                for u in _IMAGE_URL_RE.findall(v):
+                    image_urls.append(_normalize_media_url(u))
+                for u in _VIDEO_URL_RE.findall(v):
+                    video_urls.append(_normalize_media_url(u))
+
+    if isinstance(deliverable, dict):
+        collect_from_dict(deliverable)
     else:
         s = str(deliverable)
         try:
             parsed = json.loads(s)
             if isinstance(parsed, dict):
-                for key in _IMAGE_URL_KEYS:
-                    val = parsed.get(key)
-                    if isinstance(val, str) and val.strip().startswith(("http://", "https://")):
-                        urls.append(val.strip())
-            for u in _IMAGE_URL_RE.findall(s):
-                urls.append(u)
+                collect_from_dict(parsed)
         except json.JSONDecodeError:
-            urls.extend(_IMAGE_URL_RE.findall(s))
-    seen: Set[str] = set()
-    out: List[str] = []
-    for u in urls:
-        u = u.split("?")[0].rstrip("/") or u
-        if u not in seen:
-            seen.add(u)
-            out.append(u)
-    return out[:10]
+            pass
+        for u in _IMAGE_URL_RE.findall(s):
+            image_urls.append(_normalize_media_url(u))
+        for u in _VIDEO_URL_RE.findall(s):
+            video_urls.append(_normalize_media_url(u))
+
+    def dedupe(lst: List[str]) -> List[str]:
+        seen: Set[str] = set()
+        out: List[str] = []
+        for u in lst:
+            if u not in seen:
+                seen.add(u)
+                out.append(u)
+        return out
+
+    return (dedupe(image_urls)[:10], dedupe(video_urls)[:3])
 
 
 def _download_image(url: str) -> Optional[Tuple[bytes, str]]:
@@ -273,13 +313,55 @@ def _download_image(url: str) -> Optional[Tuple[bytes, str]]:
         return None
 
 
+def _download_video(url: str) -> Optional[Tuple[bytes, str]]:
+    """
+    Download video from URL. Returns (bytes, mime_type) or None on failure.
+    Uses requests with timeout and size limit (VIDEO_MAX_BYTES); infers mime from Content-Type or extension.
+    """
+    try:
+        resp = requests.get(
+            url,
+            timeout=VIDEO_DOWNLOAD_TIMEOUT_SECONDS,
+            stream=True,
+            headers={"User-Agent": "VirtualsACP-Evaluator/1.0"},
+        )
+        resp.raise_for_status()
+        content_type = (resp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        mime = "video/mp4"
+        if "video/" in content_type:
+            mime = content_type
+        elif url.lower().endswith(".webm"):
+            mime = "video/webm"
+        elif url.lower().endswith(".mov"):
+            mime = "video/quicktime"
+        elif url.lower().endswith(".avi"):
+            mime = "video/x-msvideo"
+        elif url.lower().endswith(".m4v"):
+            mime = "video/x-m4v"
+        elif url.lower().endswith(".mkv"):
+            mime = "video/x-matroska"
+        data = b""
+        for chunk in resp.iter_content(chunk_size=256 * 1024):
+            data += chunk
+            if len(data) > VIDEO_MAX_BYTES:
+                logger.warning("Video URL %s exceeded max size %s", url[:80], VIDEO_MAX_BYTES)
+                return None
+        if not data:
+            return None
+        return (data, mime)
+    except Exception as e:
+        logger.warning("Failed to download video from %s: %s", url[:80], e)
+        return None
+
+
 def _build_evaluation_content(job_id: int, prompt: str, deliverable: Any) -> types.UserContent:
     """
-    Build UserContent for evaluation: text part plus inline image parts for any image URLs
-    found in the deliverable. Gemini will receive the images so the agent can evaluate them.
+    Build UserContent for evaluation: text part plus inline image and video parts for any
+    media URLs found in the deliverable. Each URL is classified as image or video once (no double-download).
     """
     parts: List[types.Part] = [types.Part(text=prompt)]
-    for url in _extract_image_urls(deliverable):
+    image_urls, video_urls = _extract_media_urls(deliverable)
+    for url in image_urls:
         result = _download_image(url)
         if result is None:
             continue
@@ -289,6 +371,16 @@ def _build_evaluation_content(job_id: int, prompt: str, deliverable: Any) -> typ
             logger.info("Job %s: attached image from %s (%s bytes)", job_id, url[:60], len(data))
         except Exception as e:
             logger.warning("Job %s: could not attach image from %s: %s", job_id, url[:60], e)
+    for url in video_urls:
+        result = _download_video(url)
+        if result is None:
+            continue
+        data, mime_type = result
+        try:
+            parts.append(types.Part(inline_data=types.Blob(mime_type=mime_type, data=data)))
+            logger.info("Job %s: attached video from %s (%s bytes)", job_id, url[:60], len(data))
+        except Exception as e:
+            logger.warning("Job %s: could not attach video from %s: %s", job_id, url[:60], e)
     return types.UserContent(parts=parts)
 
 
@@ -333,7 +425,12 @@ def reject_job(job_id: int, reason: str) -> str:
             job.evaluate(accept=False, reason=reason)
             return f"Job {job_id} evaluated and rejected. {reason}"
         else:
+            is_request_phase = job.phase == ACPJobPhase.REQUEST
             job.reject(reason)
+            if is_request_phase:
+                with _job_queue_lock:
+                    _job_queue.pop(job_id, None)
+                logger.info("Job %s removed from queue after REQUEST-phase reject", job_id)
             return f"Job {job_id} rejected. {reason}"
     except ValueError as e:
         return f"Job {job_id} reject failed: {e}"
@@ -521,6 +618,11 @@ def _evaluation_reason(expected: str, phase: ACPJobPhase, passed: bool, evaluato
     else:  # expected == "reject"
         if passed and phase == ACPJobPhase.REJECTED:
             return "Pass: expected reject; job REJECTED. Provider correctly rejected the invalid requirement."
+        if not passed and phase == ACPJobPhase.REJECTED and evaluator_reason:
+            return (
+                "Fail: expected reject; provider accepted and delivered, so evaluator rejected the deliverable. "
+                "The provider should have rejected the requirement (e.g. NSFW).\n\nEvaluator reason: " + evaluator_reason
+            )
         if not passed:
             return f"Fail: expected reject but job reached {phase_name}. Provider accepted when we expected rejection (invalid input should have been rejected)."
         return f"Unexpected outcome: expected reject, phase {phase_name}."
@@ -609,11 +711,12 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                     "deliverable_summary": None, "offering_name": offering_name,
                 })
                 continue
+            evaluator_reason = _get_evaluator_rejection_reason(child_job) if phase == ACPJobPhase.REJECTED else None
+            # For expected "reject" (e.g. NSFW): pass only if the *provider* rejected the requirement. If we (evaluator) rejected the deliverable, the provider wrongly accepted and delivered — fail the case.
             passed = (
-                (expected == "reject" and phase == ACPJobPhase.REJECTED)
+                (expected == "reject" and phase == ACPJobPhase.REJECTED and not evaluator_reason)
                 or (expected == "accept" and phase in (ACPJobPhase.COMPLETED, ACPJobPhase.NEGOTIATION, ACPJobPhase.TRANSACTION, ACPJobPhase.EVALUATION))
             )
-            evaluator_reason = _get_evaluator_rejection_reason(child_job) if phase == ACPJobPhase.REJECTED else None
             reason = _evaluation_reason(expected, phase, passed, evaluator_reason=evaluator_reason)
             if phase == ACPJobPhase.COMPLETED:
                 deliverable_summary = _summary_for_report(getattr(child_job, "deliverable", None), max_len=800)
@@ -737,7 +840,7 @@ def _evaluator_poll_loop() -> None:
                         prompt = (
                             f"Evaluate this job deliverable (EVALUATION phase). job_id: {job.id}. "
                             f"requirement: {req_json}. deliverable (text): {deliverable_str}. "
-                            "If images are attached below, evaluate them against the requirement (e.g. correctness, quality, relevance). "
+                            "If images or videos are attached below, evaluate them against the requirement (e.g. correctness, quality, relevance). "
                             "Use Google Search and/or URL context to verify any real-time or URL-based content before deciding. Then call evaluate_job_deliverable(job_id, accept, reason) to accept or reject the deliverable."
                         )
                         content = _build_evaluation_content(job.id, prompt, job.deliverable)
@@ -830,7 +933,7 @@ root_agent = Agent(
     2. Accept with accept_job(job_id, reason) or reject with reject_job(job_id, reason).
 
     Child job EVALUATION phase: Evaluate the deliverable against the requirement. Call evaluate_job_deliverable(job_id, accept, reason) to accept or reject the deliverable.
-    When the deliverable includes images (attached inline below the text), evaluate those images against the requirement (correctness, quality, relevance, adherence to the request). You will receive the images directly; use your vision capability to assess them.
+    When the deliverable includes images or videos (attached inline below the text), evaluate them against the requirement (correctness, quality, relevance, adherence to the request). You will receive the media directly; use your vision/video capability to assess them.
     You MUST use Google Search and/or URL context to verify real-time data before evaluating: when the deliverable or requirement includes a URL, use the URL context tool to fetch and read the live page content; when the deliverable is real-time or time-sensitive (e.g. current prices, news, market data), use the Google Search tool to verify or contextualize it. Only then call evaluate_job_deliverable. You can combine both: use the search tool to find relevant results and URLs, then use the URL context tool to crawl and read those URLs before evaluating.
 
     Parent job TRANSACTION (client paid — you are the provider, run evaluation flow):
