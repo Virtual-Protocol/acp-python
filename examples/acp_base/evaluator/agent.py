@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import queue
 import re
 import threading
 import time
@@ -55,6 +56,9 @@ BATCH_CALL_DELAY_SECONDS = 1.5
 # Job queue: id -> ACPJob, updated each poll and by on_evaluate socket. Use _get_job_from_queue(job_id) to read; respond_to_job uses it first.
 _job_queue: Dict[int, ACPJob] = {}
 _job_queue_lock = threading.Lock()
+
+# Payment queue: job IDs that need pay_and_accept_requirement; consumed by _payment_worker so main loop is not blocked.
+_payment_queue: queue.Queue[int] = queue.Queue()
 
 # Parent job id -> list of {job_id, expected_outcome} for evaluation flow. Poll loop waits for these to be terminal, compiles report, delivers.
 _evaluation_children: Dict[int, List[Dict[str, Any]]] = {}
@@ -879,8 +883,32 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
         # Do NOT discard _parent_evaluation_started on timeout: ensure only one round of children per parent forever
 
 
+def _payment_worker() -> None:
+    """Dedicated thread: consume job IDs from _payment_queue and call pay_and_accept_requirement so the main poll loop is not blocked by payment."""
+    logger.info("Payment worker started.")
+    while True:
+        job_id: Optional[int] = None
+        try:
+            job_id = _payment_queue.get()
+            job = _get_job_or_none(job_id)
+            if job is None:
+                try:
+                    job = acp_client.get_job_by_onchain_id(job_id)
+                except ACPApiError:
+                    logger.warning("Payment worker: job %s not found", job_id)
+                    continue
+            if job.client_address != acp_client.agent_wallet_address or job.phase != ACPJobPhase.NEGOTIATION:
+                continue
+            if not job.latest_memo or job.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
+                continue
+            job.pay_and_accept_requirement()
+            logger.info("Job %s: Paid and accepted requirement (payment thread)", job_id)
+        except Exception as e:
+            logger.error("Payment worker error (job_id=%s): %s", job_id, e, exc_info=True)
+
+
 def _evaluator_poll_loop() -> None:
-    """Poll for active jobs; queue them and hand off each REQUEST-phase job to the ADK agent via runner.run(). Child-wait for parent TRANSACTION runs in a background thread so this loop keeps running and can pay child jobs (NEGOTIATION) and evaluate deliverables (EVALUATION)."""
+    """Poll for active jobs; queue them and hand off each REQUEST-phase job to the ADK agent via runner.run(). Payment runs in a separate thread so the main loop is not blocked; child-wait for parent TRANSACTION runs in a background thread."""
     logger.info("Evaluator ACP polling started. Agent: %s", acp_client.agent_wallet_address)
     while True:
         try:
@@ -927,8 +955,7 @@ def _evaluator_poll_loop() -> None:
                 try:
                     if is_client_negotiation:
                         if job.latest_memo and job.latest_memo.next_phase == ACPJobPhase.TRANSACTION:
-                            job.pay_and_accept_requirement()
-                            logger.info("Job %s: Paid and accepted requirement", job.id)
+                            _payment_queue.put(job.id)
                         continue
                     with _job_sessions_lock:
                         session_id = _job_sessions.get(job.id)
@@ -1012,6 +1039,10 @@ def _evaluator_poll_loop() -> None:
             logger.error("Error in evaluator poll loop: %s", e)
         time.sleep(POLL_INTERVAL_SECONDS)
 
+
+# Payment worker: runs pay_and_accept_requirement in a dedicated thread so the main poll loop is not blocked.
+_payment_thread = threading.Thread(target=_payment_worker, daemon=True)
+_payment_thread.start()
 
 # Start polling in a non-daemon thread so the process stays alive when run directly (python agent.py).
 # Daemon threads are killed when the main thread exits; non-daemon keeps the process running.
