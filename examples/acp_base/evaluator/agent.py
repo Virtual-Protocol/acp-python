@@ -504,6 +504,10 @@ def _get_evaluator_rejection_reason(job: ACPJob) -> Optional[str]:
 def _evaluation_reason(expected: str, phase: ACPJobPhase, passed: bool, evaluator_reason: Optional[str] = None) -> str:
     """Human-readable reason why the job passed or failed the evaluation check. If we rejected the deliverable, evaluator_reason is the detailed reason we gave."""
     phase_name = phase.name if hasattr(phase, "name") else str(phase)
+    if phase == ACPJobPhase.EXPIRED:
+        if expected == "accept":
+            return "Fail: expected accept but job EXPIRED. Job did not complete before deadline."
+        return "Fail: expected reject but job EXPIRED (did not complete before deadline); could not verify provider would reject."
     if expected == "accept":
         if passed:
             if phase == ACPJobPhase.COMPLETED:
@@ -615,8 +619,13 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 deliverable_summary = _summary_for_report(getattr(child_job, "deliverable", None), max_len=800)
             elif phase == ACPJobPhase.REJECTED and evaluator_reason:
                 deliverable_summary = f"Rejected by evaluator. Reason: {evaluator_reason}"
+            elif phase == ACPJobPhase.REJECTED:
+                reject_reason = getattr(child_job, "rejection_reason", None) or "N/A"
+                deliverable_summary = f"Job rejected. Reason: {reject_reason}"
+            elif phase == ACPJobPhase.EXPIRED:
+                deliverable_summary = "Job expired (did not complete before deadline)."
             else:
-                deliverable_summary = "N/A (job rejected)" if phase == ACPJobPhase.REJECTED else None
+                deliverable_summary = None
             results.append({
                 "job_id": job_id,
                 "expected_outcome": expected,
