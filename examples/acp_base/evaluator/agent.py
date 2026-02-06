@@ -46,6 +46,7 @@ logger = logging.getLogger("EvaluatorAgent")
 # Suppress noisy GenAI warning when model returns function_call parts; ADK handles them correctly.
 logging.getLogger("google_genai.types").setLevel(logging.ERROR)
 
+# Poller thread fetches active jobs on this interval and routes to payment queue or job queue.
 POLL_INTERVAL_SECONDS = 20
 
 # Delay between each job initiation within a batch (avoids hammering the API).
@@ -53,35 +54,91 @@ BATCH_INITIATE_DELAY_SECONDS = 2.0
 # Delay at start of batch when this parent already has children (spaces out consecutive batch tool calls).
 BATCH_CALL_DELAY_SECONDS = 1.5
 
-# Job queue: id -> ACPJob, updated each poll and by on_evaluate socket. Use _get_job_from_queue(job_id) to read; respond_to_job uses it first.
+# Job queue: id -> ACPJob. Filled by poller thread and socket handlers; consumed by main processor thread.
 _job_queue: Dict[int, ACPJob] = {}
 _job_queue_lock = threading.Lock()
+_job_queue_condition = threading.Condition(_job_queue_lock)
 
-# Payment queue: job IDs that need pay_and_accept_requirement; consumed by _payment_worker so main loop is not blocked.
+# Payment queue: job IDs that need pay_and_accept_requirement. Filled by poller, socket, job init; consumed by payment worker only.
 _payment_queue: queue.Queue[int] = queue.Queue()
+_payment_queue_ids: Set[int] = set()
+_payment_dedupe_lock = threading.Lock()
+
+# Evaluation queue: job IDs that need deliverable evaluation (we are evaluator, EVALUATION phase). Filled by poller and socket; consumed by evaluation worker only.
+_evaluation_queue: queue.Queue[int] = queue.Queue()
+_evaluation_queue_ids: Set[int] = set()
+_evaluation_dedupe_lock = threading.Lock()
 
 
-def _enqueue_payment_job_id(job_id: int, reason: str = "NEGOTIATION -> TRANSACTION") -> None:
-    """Put a job ID on the payment queue. Payment worker will pay when the job is in NEGOTIATION with memo next_phase TRANSACTION; it skips until then."""
-    _payment_queue.put(job_id)
-    logger.info("Enqueued job %s for payment (%s)", job_id, reason)
+def _enqueue_payment_job_id(job_id: int) -> None:
+    """Put a job ID on the payment queue if not already queued (dedupe). Worker fetches fresh so one entry per id is enough."""
+    with _payment_dedupe_lock:
+        if job_id in _payment_queue_ids:
+            return
+        _payment_queue_ids.add(job_id)
+        _payment_queue.put(job_id)
+    logger.info("Enqueued job %s for payment", job_id)
 
 
-def _enqueue_job_for_payment_if_eligible(job: ACPJob) -> bool:
-    """If job is our client NEGOTIATION with memo ready to pay (next_phase TRANSACTION) and we track it, enqueue for payment. Returns True if enqueued (caller should not run agent for this job)."""
+def _is_payment_eligible(job: ACPJob) -> bool:
+    """True if job is our client NEGOTIATION with memo ready to pay (next_phase TRANSACTION) and we track it. Does not enqueue."""
     if job.client_address != acp_client.agent_wallet_address or job.phase != ACPJobPhase.NEGOTIATION:
         return False
     if not _is_tracked_child_job(job.id):
         return False
     if not job.latest_memo or job.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
         return False
-    _enqueue_payment_job_id(job.id, "NEGOTIATION -> TRANSACTION")
     return True
 
 
-# Parent job id -> list of {job_id, expected_outcome} for evaluation flow. Poll loop waits for these to be terminal, compiles report, delivers.
+def _enqueue_job_for_payment_if_eligible(job: ACPJob) -> bool:
+    """If job is payment-eligible, enqueue for payment and return True (caller should not add to normal queue)."""
+    if not _is_payment_eligible(job):
+        return False
+    _enqueue_payment_job_id(job.id)
+    return True
+
+
+def _is_evaluation_eligible(job: ACPJob) -> bool:
+    """True if we are the evaluator, job is in EVALUATION phase, and we track it. Does not enqueue."""
+    if job.evaluator_address != acp_client.agent_wallet_address or job.phase != ACPJobPhase.EVALUATION:
+        return False
+    if not _is_tracked_child_job(job.id):
+        return False
+    return True
+
+
+def _enqueue_evaluation_job_id(job_id: int) -> None:
+    """Put a job ID on the evaluation queue if not already queued (dedupe)."""
+    with _evaluation_dedupe_lock:
+        if job_id in _evaluation_queue_ids:
+            return
+        _evaluation_queue_ids.add(job_id)
+        _evaluation_queue.put(job_id)
+    logger.info("Enqueued job %s for evaluation", job_id)
+
+
+def _enqueue_job_for_evaluation_if_eligible(job: ACPJob) -> bool:
+    """If job is evaluation-eligible (we are evaluator, EVALUATION phase, tracked), enqueue and return True."""
+    if not _is_evaluation_eligible(job):
+        return False
+    _enqueue_evaluation_job_id(job.id)
+    return True
+
+
+# Parent job id -> list of {job_id, expected_outcome, ...} for evaluation flow (flat, for backward compat and _is_tracked_child_job).
+# Replaced by parent -> offering_index -> list for deliver logic; we maintain both: _parent_offering_jobs is source of truth, flat list derived when needed.
 _evaluation_children: Dict[int, List[Dict[str, Any]]] = {}
 _evaluation_children_lock = threading.Lock()
+
+# parent_id -> number of offerings (0..n-1). Set when get_agent_offerings is called in parent TRANSACTION context. Used to know when all offerings have batches.
+_parent_expected_offerings: Dict[int, int] = {}
+
+# parent_id -> offering_index -> list of {job_id, expected_outcome, offering_name, ...}. All test-case job ids per offering; deliver when every expected offering has ≥1 job and all are terminal.
+_parent_offering_jobs: Dict[int, Dict[int, List[Dict[str, Any]]]] = {}
+
+# Thread-local: current parent job id during agent run (main processor sets before runner.run, cleared after). get_agent_offerings uses this to register expected count.
+_current_parent_id_for_offerings: threading.local = threading.local()
 
 # Parent job ids for which we have already started the evaluation flow (one round of children). Skip creating another round.
 _parent_evaluation_started: Set[int] = set()
@@ -94,21 +151,29 @@ _job_sessions: Dict[int, str] = {}
 _job_sessions_lock = threading.Lock()
 
 def _on_new_task(job: ACPJob, _memo_to_sign: Optional[ACPMemo] = None) -> None:
-    """Socket handler: payment-eligible jobs go straight to payment queue; all others go to normal job queue for poll loop."""
+    """Socket handler: payment → payment queue; evaluation → evaluation queue; others → job queue."""
     if _enqueue_job_for_payment_if_eligible(job):
-        logger.info("Job %s from on_new_task sent to payment queue (skipping normal queue)", job.id)
+        logger.info("Job %s from on_new_task sent to payment queue", job.id)
         return
-    with _job_queue_lock:
+    if _enqueue_job_for_evaluation_if_eligible(job):
+        logger.info("Job %s from on_new_task sent to evaluation queue", job.id)
+        return
+    with _job_queue_condition:
         _job_queue[job.id] = job
+        _job_queue_condition.notify_all()
     logger.info("Job %s added to queue from on_new_task socket", job.id)
 
 def _on_evaluate(job: ACPJob) -> None:
-    """Socket handler: payment-eligible jobs go straight to payment queue; all others go to normal job queue for poll loop."""
+    """Socket handler: payment → payment queue; evaluation → evaluation queue; others → job queue."""
     if _enqueue_job_for_payment_if_eligible(job):
-        logger.info("Job %s from on_evaluate sent to payment queue (skipping normal queue)", job.id)
+        logger.info("Job %s from on_evaluate sent to payment queue", job.id)
         return
-    with _job_queue_lock:
+    if _enqueue_job_for_evaluation_if_eligible(job):
+        logger.info("Job %s from on_evaluate sent to evaluation queue", job.id)
+        return
+    with _job_queue_condition:
         _job_queue[job.id] = job
+        _job_queue_condition.notify_all()
     logger.info("Job %s added to queue from on_evaluate socket", job.id)
 
 
@@ -220,6 +285,14 @@ def _get_job_or_none(job_id: int) -> Optional[ACPJob]:
     job = _get_job_from_queue(job_id)
     if job is not None:
         return job
+    try:
+        return acp_client.get_job_by_onchain_id(job_id)
+    except ACPApiError:
+        return None
+
+
+def _get_job_fresh(job_id: int) -> Optional[ACPJob]:
+    """Fetch job by onchain id for phase-sensitive logic. Returns None if not found. Use this when checking job.phase before acting."""
     try:
         return acp_client.get_job_by_onchain_id(job_id)
     except ACPApiError:
@@ -433,7 +506,7 @@ def accept_job(job_id: int, reason: str) -> str:
         job_id: The on-chain job id.
         reason: Explanation for accepting.
     """
-    job = _get_job_or_none(job_id)
+    job = _get_job_fresh(job_id)
     if job is None:
         return f"Job {job_id} not found. Cannot accept."
     if job.phase != ACPJobPhase.REQUEST:
@@ -455,7 +528,7 @@ def reject_job(job_id: int, reason: str) -> str:
         job_id: The on-chain job id.
         reason: Explanation for rejecting.
     """
-    job = _get_job_or_none(job_id)
+    job = _get_job_fresh(job_id)
     if job is None:
         return f"Job {job_id} not found. Cannot reject."
     if job.phase in _TERMINAL_PHASES:
@@ -488,6 +561,12 @@ def get_agent_offerings(agent_wallet_address: str) -> str:
     agent = acp_client.get_agent(agent_wallet_address)
     if not agent:
         return json.dumps({"error": f"Agent not found: {agent_wallet_address}"})
+    # Register expected offering count for current parent so wait thread knows when all offerings have batches.
+    parent_id = getattr(_current_parent_id_for_offerings, "value", None)
+    if parent_id is not None:
+        with _evaluation_children_lock:
+            _parent_expected_offerings[parent_id] = len(agent.job_offerings)
+        logger.info("Parent %s: registered expected offerings count = %s", parent_id, len(agent.job_offerings))
     offerings_list = []
     for i, off in enumerate(agent.job_offerings):
         offerings_list.append({
@@ -520,7 +599,7 @@ def initiate_evaluation_job(
         expected_outcome: "accept" or "reject" — whether we expect the provider to accept or reject this job.
         parent_job_id: The parent (evaluation) job id; used to track children and deliver the report later.
     """
-    parent_job = _get_job_or_none(parent_job_id)
+    parent_job = _get_job_fresh(parent_job_id)
     if parent_job is not None and parent_job.phase in _TERMINAL_PHASES:
         phase_name = parent_job.phase.name if hasattr(parent_job.phase, "name") else str(parent_job.phase)
         return json.dumps({
@@ -555,13 +634,14 @@ def initiate_evaluation_job(
         )
         logger.info("initiate_evaluation_job: job_id=%s initiated", job_id)
         offering_name = getattr(offering, "name", None) or f"offering_{job_offering_index}"
+        entry = {
+            "job_id": job_id,
+            "expected_outcome": expected_outcome,
+            "offering_name": offering_name,
+        }
         with _evaluation_children_lock:
-            _evaluation_children.setdefault(parent_job_id, []).append({
-                "job_id": job_id,
-                "expected_outcome": expected_outcome,
-                "offering_name": offering_name,
-            })
-        _enqueue_payment_job_id(job_id, "from job init; payment worker will pay when NEGOTIATION")
+            _evaluation_children.setdefault(parent_job_id, []).append(entry)
+            _parent_offering_jobs.setdefault(parent_job_id, {}).setdefault(job_offering_index, []).append(entry)
         return json.dumps({"job_id": job_id, "expected_outcome": expected_outcome})
     except Exception as e:
         logger.exception("initiate_evaluation_job failed: %s", e)
@@ -602,7 +682,7 @@ def initiate_evaluation_jobs_batch(
             "job_ids": [],
             "errors": [],
         })
-    parent_job = _get_job_or_none(parent_job_id)
+    parent_job = _get_job_fresh(parent_job_id)
     if parent_job is not None and parent_job.phase in _TERMINAL_PHASES:
         phase_name = parent_job.phase.name if hasattr(parent_job.phase, "name") else str(parent_job.phase)
         return json.dumps({
@@ -656,7 +736,7 @@ def initiate_evaluation_jobs_batch(
         except json.JSONDecodeError as e:
             errors.append(f"item[{i}]: invalid service_requirement_json: {e}")
             continue
-        parent_job = _get_job_or_none(parent_job_id)
+        parent_job = _get_job_fresh(parent_job_id)
         if parent_job is not None and parent_job.phase in _TERMINAL_PHASES:
             break
         offering = agent.job_offerings[job_offering_index]
@@ -670,15 +750,16 @@ def initiate_evaluation_jobs_batch(
                 expired_at=datetime.now(timezone.utc) + timedelta(minutes=20),
             )
             offering_name = getattr(offering, "name", None) or f"offering_{job_offering_index}"
+            entry = {
+                "job_id": job_id,
+                "expected_outcome": expected_outcome,
+                "offering_name": offering_name,
+            }
             with _evaluation_children_lock:
-                _evaluation_children.setdefault(parent_job_id, []).append({
-                    "job_id": job_id,
-                    "expected_outcome": expected_outcome,
-                    "offering_name": offering_name,
-                })
+                _evaluation_children.setdefault(parent_job_id, []).append(entry)
+                _parent_offering_jobs.setdefault(parent_job_id, {}).setdefault(job_offering_index, []).append(entry)
             job_ids.append(job_id)
             initiated_offerings_in_batch.add(job_offering_index)
-            _enqueue_payment_job_id(job_id, "from job init; payment worker will pay when NEGOTIATION")
             logger.info("initiate_evaluation_jobs_batch: job_id=%s (offering %s, %s)", job_id, job_offering_index, expected_outcome)
         except Exception as e:
             logger.warning("initiate_evaluation_jobs_batch item[%s] failed: %s", i, e)
@@ -699,12 +780,9 @@ def initiate_evaluation_jobs_batch(
 
 def _deliver_evaluation_report(parent_job_id: int, report: Union[Dict[str, Any], str]) -> str:
     """Internal: deliver compiled report to parent job. Parent job delivery by us only happens in TRANSACTION phase (we are the provider)."""
-    job = _get_job_or_none(parent_job_id)
+    job = _get_job_fresh(parent_job_id)
     if job is None:
-        try:
-            job = acp_client.get_job_by_onchain_id(parent_job_id)
-        except ACPApiError:
-            return f"Parent job {parent_job_id} not found."
+        return f"Parent job {parent_job_id} not found."
     if job.phase != ACPJobPhase.TRANSACTION:
         return f"Parent job {parent_job_id} is in {job.phase.name}; delivery only in TRANSACTION phase."
     try:
@@ -724,7 +802,7 @@ def evaluate_job_deliverable(job_id: int, accept: bool, reason: str) -> str:
         accept: True to accept the deliverable, False to reject.
         reason: Explanation for the evaluation.
     """
-    job = _get_job_or_none(job_id)
+    job = _get_job_fresh(job_id)
     if job is None:
         return f"Job {job_id} not found. Cannot evaluate."
     if job.phase != ACPJobPhase.EVALUATION:
@@ -842,13 +920,62 @@ def _format_detailed_report(results: List[Dict[str, Any]], summary: str) -> str:
 
 
 def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
-    """Wait until all tracked child jobs are terminal (fetch phase by id for fresh data; terminal jobs may not be in poll loop's active_jobs). Compile report, deliver to parent, clear children. Do not mutate _job_queue."""
-    with _evaluation_children_lock:
-        children = list(_evaluation_children.get(parent_job_id, []))
-    if not children:
-        return
+    """Wait until all expected offerings have at least one batch and all child jobs are terminal; then compile report and deliver.
+
+    Key: we only consider 'all batches done' when we know how many offerings to run (from get_agent_offerings). The final job-offering batch is the gate — we don't deliver until every offering 0..expected_count-1 has at least one job and all those jobs are terminal. No extra sleep after all children finish: we deliver in the same poll iteration where we first see all terminal.
+
+    Uses _parent_expected_offerings (from get_agent_offerings) and _parent_offering_jobs (from initiate_*). If expected count is unknown, falls back to stable-polls heuristic."""
     max_wait_polls = 120  # 120 * POLL_INTERVAL_SECONDS = ~40 min
-    for _ in range(max_wait_polls):
+    prev_child_ids: frozenset = frozenset()
+    stable_polls = 0
+    last_log_poll = -99  # throttle "waiting" logs to every 10 polls
+    logger.info(
+        "Parent %s: wait-for-children started (max_polls=%s, poll_interval=%ss)",
+        parent_job_id, max_wait_polls, POLL_INTERVAL_SECONDS,
+    )
+    for poll_i in range(max_wait_polls):
+        with _evaluation_children_lock:
+            expected_count = _parent_expected_offerings.get(parent_job_id)
+            offering_jobs = _parent_offering_jobs.get(parent_job_id, {})
+            # Flat list: all entries across offerings (sorted by offering index for stable report order).
+            children = [
+                entry
+                for oidx in sorted(offering_jobs.keys())
+                for entry in offering_jobs[oidx]
+            ]
+        if not children:
+            if poll_i - last_log_poll >= 10:
+                logger.info("Parent %s: waiting for child jobs (none initiated yet; expected_offerings=%s)", parent_job_id, expected_count)
+                last_log_poll = poll_i
+            time.sleep(POLL_INTERVAL_SECONDS)
+            continue
+        # When we know expected offerings: require every offering 0..expected_count-1 to have at least one job (batch initiated).
+        if expected_count is not None:
+            all_offerings_have_jobs = all(
+                offering_jobs.get(oidx) for oidx in range(expected_count)
+            )
+            if not all_offerings_have_jobs:
+                missing = [oidx for oidx in range(expected_count) if not offering_jobs.get(oidx)]
+                if poll_i - last_log_poll >= 10:
+                    logger.info(
+                        "Parent %s: waiting for more batches (expected %s offerings; have jobs for %s, missing offering indices %s)",
+                        parent_job_id, expected_count, list(offering_jobs.keys()), missing,
+                    )
+                    last_log_poll = poll_i
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
+        else:
+            # Fallback: require children set stable for 2 polls (agent may not have called get_agent_offerings first).
+            current_child_ids = frozenset(entry["job_id"] for entry in children)
+            if current_child_ids != prev_child_ids:
+                prev_child_ids = current_child_ids
+                stable_polls = 1
+            else:
+                stable_polls += 1
+            if stable_polls < 2:
+                logger.debug("Parent %s: children set not stable yet (stable_polls=%s, children=%s)", parent_job_id, stable_polls, len(children))
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
         results: List[Dict[str, Any]] = []
         all_terminal = True
         for entry in children:
@@ -908,117 +1035,228 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 "offering_name": offering_name,
             })
         if all_terminal:
-            parent_job = _get_job_or_none(parent_job_id)
-            if parent_job is None:
-                try:
-                    parent_job = acp_client.get_job_by_onchain_id(parent_job_id)
-                except ACPApiError:
-                    parent_job = None
-            if parent_job is not None and parent_job.phase == ACPJobPhase.TRANSACTION:
-                summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)} passed"
-                by_offering = _aggregate_results_by_offering(results)
-                report = {
-                    "test_results": by_offering,
-                    "summary": summary_str,
-                    "details": _format_detailed_report(results, summary_str),
-                }
-                _deliver_evaluation_report(parent_job_id, report)
+            summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)} passed"
+            by_offering = _aggregate_results_by_offering(results)
+            report = {
+                "test_results": by_offering,
+                "summary": summary_str,
+                "details": _format_detailed_report(results, summary_str),
+            }
+            # Use fresh parent and retry delivery a few times (phase can change or API can fail transiently).
+            delivered = False
+            for attempt in range(3):
+                parent_job = _get_job_fresh(parent_job_id)
+                if parent_job is None:
+                    logger.warning("Parent %s: not found (deliver attempt %s)", parent_job_id, attempt + 1)
+                    time.sleep(5)
+                    continue
+                if parent_job.phase != ACPJobPhase.TRANSACTION:
+                    logger.warning(
+                        "Parent %s: all children terminal but parent phase=%s (need TRANSACTION); deliver attempt %s.",
+                        parent_job_id, getattr(parent_job.phase, "name", parent_job.phase), attempt + 1,
+                    )
+                    time.sleep(5)
+                    continue
+                result = _deliver_evaluation_report(parent_job_id, report)
+                if "delivered" in result.lower() or "Evaluation report delivered" in result:
+                    delivered = True
+                    break
+                logger.warning("Parent %s: deliver attempt %s failed: %s", parent_job_id, attempt + 1, result)
+                time.sleep(5)
+            if delivered:
                 with _evaluation_children_lock:
                     _evaluation_children.pop(parent_job_id, None)
+                    _parent_offering_jobs.pop(parent_job_id, None)
+                    _parent_expected_offerings.pop(parent_job_id, None)
                     _parent_offerings_initiated.pop(parent_job_id, None)
                     _parent_evaluation_started.discard(parent_job_id)
                 logger.info("Evaluation report delivered for parent job %s", parent_job_id)
                 return
-            if all_terminal and (parent_job is None or parent_job.phase != ACPJobPhase.TRANSACTION):
-                logger.warning("Parent %s: all children terminal but parent not in TRANSACTION (phase=%s); will not deliver.", parent_job_id, getattr(parent_job, "phase", None))
+            logger.error(
+                "Parent %s: all children terminal but could not deliver report after retries (parent not in TRANSACTION or deliver failed).",
+                parent_job_id,
+            )
+        else:
+            # Not all children terminal yet
+            if poll_i - last_log_poll >= 10:
+                _terminal_names = {getattr(p, "name", str(p)) for p in _TERMINAL_PHASES}
+                terminal_count = sum(1 for r in results if r.get("actual_phase") in _terminal_names)
+                logger.info(
+                    "Parent %s: waiting for children to finish (%s/%s terminal across %s offerings)",
+                    parent_job_id, terminal_count, len(children), len(offering_jobs),
+                )
+                last_log_poll = poll_i
         time.sleep(POLL_INTERVAL_SECONDS)
     logger.error("Timeout waiting for child jobs of parent %s", parent_job_id)
     with _evaluation_children_lock:
         _evaluation_children.pop(parent_job_id, None)
+        _parent_offering_jobs.pop(parent_job_id, None)
+        _parent_expected_offerings.pop(parent_job_id, None)
         _parent_offerings_initiated.pop(parent_job_id, None)
         # Do NOT discard _parent_evaluation_started on timeout: ensure only one round of children per parent forever
 
 
-def _payment_worker() -> None:
-    """Dedicated thread: consume job IDs from _payment_queue and call pay_and_accept_requirement so the main poll loop is not blocked by payment. SDK has built-in retry for payment calls."""
-    logger.info("Payment worker started.")
-    while True:
-        job_id: Optional[int] = None
-        try:
-            job_id = _payment_queue.get()
-            job = _get_job_or_none(job_id)
-            if job is None:
-                try:
-                    job = acp_client.get_job_by_onchain_id(job_id)
-                except ACPApiError:
-                    logger.warning("Payment worker: job %s not found (skip)", job_id)
-                    continue
-            if job.client_address != acp_client.agent_wallet_address:
-                logger.info("Payment worker: job %s skipped (not our client address)", job_id)
-                continue
-            if job.phase != ACPJobPhase.NEGOTIATION:
-                logger.info("Payment worker: job %s skipped (phase=%s, need NEGOTIATION)", job_id, getattr(job.phase, "name", job.phase))
-                continue
-            if not job.latest_memo or job.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
-                logger.info("Payment worker: job %s skipped (no memo or memo next_phase not TRANSACTION)", job_id)
-                continue
-            job.pay_and_accept_requirement()
-            logger.info("Job %s: Paid and accepted requirement (payment thread)", job_id)
-        except Exception as e:
-            logger.error("Payment worker error (job_id=%s): %s", job_id, e, exc_info=True)
+def _payment_worker_try_pay(job_id: int) -> bool:
+    """Try to pay a job. Always fetches fresh job by onchain id for phase-sensitive checks. Returns True if paid."""
+    job = _get_job_fresh(job_id)
+    if job is None:
+        logger.warning("Payment worker: job %s not found (skip)", job_id)
+        return False
+    if job.client_address != acp_client.agent_wallet_address:
+        logger.info("Payment worker: job %s skipped (not our client address)", job_id)
+        return False
+    if job.phase != ACPJobPhase.NEGOTIATION:
+        logger.info("Payment worker: job %s skipped (phase=%s, need NEGOTIATION)", job_id, getattr(job.phase, "name", job.phase))
+        return False
+    if not job.latest_memo or job.latest_memo.next_phase != ACPJobPhase.TRANSACTION:
+        logger.info("Payment worker: job %s skipped (no memo or memo next_phase not TRANSACTION)", job_id)
+        return False
+    try:
+        job.pay_and_accept_requirement()
+        logger.info("Job %s: Paid and accepted requirement (payment thread)", job_id)
+        return True
+    except Exception as e:
+        logger.error("Payment worker error (job_id=%s): %s", job_id, e, exc_info=True)
+        return False
 
 
-def _evaluator_poll_loop() -> None:
-    """Poll for active jobs; queue them and hand off each REQUEST-phase job to the ADK agent via runner.run(). Payment runs in a separate thread so the main loop is not blocked; child-wait for parent TRANSACTION runs in a background thread."""
-    logger.info("Evaluator ACP polling started. Agent: %s", acp_client.agent_wallet_address)
+def _poll_worker() -> None:
+    """Dedicated thread: only polls API and routes jobs to payment queue or job queue; notifies main processor when job queue is updated."""
+    logger.info("Poller thread started (interval=%ss).", POLL_INTERVAL_SECONDS)
     while True:
         try:
-            logger.debug("Poll iteration: fetching active jobs...")
-            # Use a larger page_size so we don't miss NEGOTIATION jobs that need payment (default 10 can drop some).
-            active_jobs: List[ACPJob] = acp_client.get_active_jobs(page=1, page_size=30)
-            with _job_queue_lock:
-                # Payment-eligible jobs go to payment queue only (not normal queue); others go to normal queue
+            active_jobs: List[ACPJob] = acp_client.get_active_jobs(page=1, page_size=100)
+            to_payment, to_eval, to_queue = 0, 0, 0
+            with _job_queue_condition:
+                by_id: Dict[int, ACPJob] = {}
                 for job in active_jobs:
-                    if _enqueue_job_for_payment_if_eligible(job):
-                        pass  # already enqueued for payment; do not add to _job_queue
+                    if _is_payment_eligible(job):
+                        _enqueue_payment_job_id(job.id)
+                        to_payment += 1
+                    elif _is_evaluation_eligible(job):
+                        _enqueue_evaluation_job_id(job.id)
+                        to_eval += 1
                     else:
                         _job_queue[job.id] = job
-                # Merge API and socket jobs; deduplicate by job id (prefer API data when same id in both)
-                by_id: Dict[int, ACPJob] = {j.id: j for j in active_jobs}
+                        by_id[job.id] = job
+                        to_queue += 1
                 for j in _job_queue.values():
                     if j.id not in by_id:
                         by_id[j.id] = j
-                jobs_to_process = list(by_id.values())
-                # Evaluation last; parent REQUEST then parent TRANSACTION in between
-                def _job_priority(j: ACPJob) -> int:
-                    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.TRANSACTION:
-                        return 0
-                    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.REQUEST:
-                        return 1
-                    if j.evaluator_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.EVALUATION:
-                        return 2  # evaluation last
-                    return 0
+                _job_queue_condition.notify_all()
+            logger.debug(
+                "Poller: fetched %s jobs → payment: %s, evaluation: %s, job_queue: %s",
+                len(active_jobs), to_payment, to_eval, to_queue,
+            )
+        except Exception as e:
+            logger.error("Poller failed: %s", e, exc_info=True)
+        time.sleep(POLL_INTERVAL_SECONDS)
+
+
+def _payment_worker() -> None:
+    """Dedicated thread: only consumes payment queue (filled by poller, socket, job init). No polling."""
+    logger.info("Payment worker started (queue only).")
+    while True:
+        job_id = _payment_queue.get()
+        with _payment_dedupe_lock:
+            _payment_queue_ids.discard(job_id)
+        logger.debug("Payment worker: processing job %s", job_id)
+        _payment_worker_try_pay(job_id)
+
+
+def _evaluation_worker() -> None:
+    """Dedicated thread: only consumes evaluation queue (deliverable evaluation — we are evaluator, EVALUATION phase)."""
+    logger.info("Evaluation worker started (queue only).")
+    while True:
+        job_id = _evaluation_queue.get()
+        with _evaluation_dedupe_lock:
+            _evaluation_queue_ids.discard(job_id)
+        logger.info("Evaluation worker: processing job %s (deliverable evaluation)", job_id)
+        job = _get_job_fresh(job_id)
+        if job is None:
+            logger.warning("Evaluation worker: job %s not found (skip)", job_id)
+            continue
+        if not _is_evaluation_eligible(job):
+            logger.debug("Evaluation worker: job %s no longer evaluation-eligible (skip)", job_id)
+            continue
+        try:
+            with _job_sessions_lock:
+                session_id = _job_sessions.get(job.id)
+            if session_id is None:
+                async def _create_session():
+                    return (await session_service.create_session(
+                        app_name=runner.app_name,
+                        user_id="evaluator",
+                        session_id=None,
+                    )).id
+                session_id = asyncio.run(_create_session())
+                with _job_sessions_lock:
+                    _job_sessions[job.id] = session_id
+                logger.info("Job %s: created session %s (evaluation)", job.id, session_id)
+            req_json = json.dumps(job.requirement) if isinstance(job.requirement, dict) else str(job.requirement)
+            deliverable_str = str(job.deliverable) if job.deliverable is not None else "(none)"
+            prompt = (
+                f"Evaluate this job deliverable (EVALUATION phase). job_id: {job.id}. "
+                f"requirement: {req_json}. deliverable (text): {deliverable_str}. "
+                "If images or videos are attached below, evaluate them against the requirement (e.g. correctness, quality, relevance). "
+                "Use Google Search and/or URL context to verify any real-time or URL-based content before deciding. Then call evaluate_job_deliverable(job_id, accept, reason) to accept or reject the deliverable."
+            )
+            content = _build_evaluation_content(job.id, prompt, job.deliverable)
+            events = runner.run(
+                user_id="evaluator",
+                session_id=session_id,
+                new_message=content,
+            )
+            for event in events:
+                _log_agent_event(event, job.id)
+            logger.info("Job %s: evaluation run finished", job.id)
+        except Exception as e:
+            logger.error("Evaluation worker error (job_id=%s): %s", job_id, e, exc_info=True)
+
+
+def _job_priority(j: ACPJob) -> int:
+    """Main processor only sees parent REQUEST and TRANSACTION; TRANSACTION first then REQUEST."""
+    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.TRANSACTION:
+        return 0
+    if j.provider_address == acp_client.agent_wallet_address and j.phase == ACPJobPhase.REQUEST:
+        return 1
+    return 0
+
+
+def _main_processor_loop() -> None:
+    """Dedicated thread: only processes jobs from job queue (filled by poller and socket). Waits on condition when idle."""
+    logger.info("Main processor started. Agent: %s", acp_client.agent_wallet_address)
+    while True:
+        try:
+            with _job_queue_condition:
+                _job_queue_condition.wait(timeout=60)
+                jobs_to_process = list(_job_queue.values())
                 jobs_to_process.sort(key=_job_priority)
             for job in jobs_to_process:
-                # Parent REQUEST: we are provider (graduation request) — accept/reject only. Parent TRANSACTION: we are provider, client paid — start children evaluation flow. Child EVALUATION: we are evaluator — evaluate deliverable (job.evaluate). Client NEGOTIATION: we are client — pay and accept. We do NOT accept/reject child jobs (provider of children does that).
+                job = _get_job_fresh(job.id)
+                if job is None:
+                    continue
+                # Main processor only handles parent REQUEST and parent TRANSACTION. Payment and evaluation run in dedicated threads.
                 is_parent_request = job.provider_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.REQUEST
                 is_parent_transaction = job.provider_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.TRANSACTION
-                is_evaluator_evaluation = job.evaluator_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.EVALUATION
-                is_client_negotiation = job.client_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.NEGOTIATION
-                if not (is_parent_request or is_parent_transaction or is_evaluator_evaluation or is_client_negotiation):
-                    continue
-                # Only process child jobs (evaluator/client) that we initiated — ignore others not linked to any parent
-                if (is_evaluator_evaluation or is_client_negotiation) and not _is_tracked_child_job(job.id):
+                if not (is_parent_request or is_parent_transaction):
+                    logger.debug(
+                        "Main processor: job %s skipped (phase=%s, provider=%s; only handle parent REQUEST/TRANSACTION)",
+                        job.id, getattr(job.phase, "name", job.phase), job.provider_address[:10] + ".." if job.provider_address else None,
+                    )
                     continue
                 # Only create one round of children per parent: skip parent TRANSACTION if we already started evaluation for this parent
                 if is_parent_transaction:
                     with _evaluation_children_lock:
                         if job.id in _parent_evaluation_started:
+                            logger.info("Main processor: job %s skipped (evaluation already started for this parent)", job.id)
                             continue
                         _parent_evaluation_started.add(job.id)
+                logger.info(
+                    "Main processor: handling job %s (%s)",
+                    job.id, "parent REQUEST" if is_parent_request else "parent TRANSACTION",
+                )
                 try:
-                    if is_client_negotiation:
-                        continue  # already enqueued for payment when building queue (or from socket); skip normal processing
                     with _job_sessions_lock:
                         session_id = _job_sessions.get(job.id)
                     if session_id is None:
@@ -1045,16 +1283,6 @@ def _evaluator_poll_loop() -> None:
                             "If requirement is invalid (not an object with agentName and agentWalletAddress), call reject_job. "
                             "Otherwise verify agent identity with verify_agent_identity, then call accept_job or reject_job to accept or reject the graduation request."
                         )
-                    elif is_evaluator_evaluation:
-                        req_json = json.dumps(job.requirement) if isinstance(job.requirement, dict) else str(job.requirement)
-                        deliverable_str = str(job.deliverable) if job.deliverable is not None else "(none)"
-                        prompt = (
-                            f"Evaluate this job deliverable (EVALUATION phase). job_id: {job.id}. "
-                            f"requirement: {req_json}. deliverable (text): {deliverable_str}. "
-                            "If images or videos are attached below, evaluate them against the requirement (e.g. correctness, quality, relevance). "
-                            "Use Google Search and/or URL context to verify any real-time or URL-based content before deciding. Then call evaluate_job_deliverable(job_id, accept, reason) to accept or reject the deliverable."
-                        )
-                        content = _build_evaluation_content(job.id, prompt, job.deliverable)
                     elif is_parent_transaction:
                         # Parent job in TRANSACTION (client paid): start children evaluation jobs; runner waits, compiles report, delivers
                         req_json = json.dumps(job.requirement) if isinstance(job.requirement, dict) else str(job.requirement)
@@ -1066,15 +1294,20 @@ def _evaluator_poll_loop() -> None:
                             "3) For each offering, call initiate_evaluation_jobs_batch(parent_job_id, agent_wallet_address, jobs_json) once with a small JSON array (max 12 items) containing only that offering's test cases: same job_offering_index for all items; at least 2 \"accept\" (use \"{}\" when schema empty), 2 \"reject\" when schema has invalidatable fields, 2 \"reject\" (NSFW) for content-generation, and real-time + non-real-time accept for fact-check. One batch per offering keeps arrays small and improves quality. A safety delay is applied between initiations. "
                             f"Use parent_job_id={job.id}. The runner will wait for child jobs, compile the report, and deliver."
                         )
-                    if not is_evaluator_evaluation:
-                        content = types.UserContent(parts=[types.Part(text=prompt)])
-                    events = runner.run(
-                        user_id="evaluator",
-                        session_id=session_id,
-                        new_message=content,
-                    )
-                    for event in events:
-                        _log_agent_event(event, job.id)
+                    content = types.UserContent(parts=[types.Part(text=prompt)])
+                    if is_parent_transaction:
+                        _current_parent_id_for_offerings.value = job.id
+                    try:
+                        events = runner.run(
+                            user_id="evaluator",
+                            session_id=session_id,
+                            new_message=content,
+                        )
+                        for event in events:
+                            _log_agent_event(event, job.id)
+                    finally:
+                        if is_parent_transaction:
+                            _current_parent_id_for_offerings.value = None
                     logger.info("Job %s: agent run finished", job.id)
                     if is_parent_transaction:
                         # Run child-wait in background so poll loop keeps running (to pay child jobs and evaluate deliverables)
@@ -1098,18 +1331,24 @@ def _evaluator_poll_loop() -> None:
                 except Exception as e:
                     logger.error("Error handing off job %s to agent: %s", job.id, e)
         except Exception as e:
-            logger.error("Error in evaluator poll loop: %s", e)
-        time.sleep(POLL_INTERVAL_SECONDS)
+            logger.error("Error in main processor loop: %s", e)
 
 
-# Payment worker: runs pay_and_accept_requirement in a dedicated thread so the main poll loop is not blocked.
+# Poller: only fetches jobs and routes to payment queue or job queue.
+_poll_thread = threading.Thread(target=_poll_worker, daemon=True)
+_poll_thread.start()
+
+# Payment worker: only consumes payment queue.
 _payment_thread = threading.Thread(target=_payment_worker, daemon=True)
 _payment_thread.start()
 
-# Start polling in a non-daemon thread so the process stays alive when run directly (python agent.py).
-# Daemon threads are killed when the main thread exits; non-daemon keeps the process running.
-_poll_thread = threading.Thread(target=_evaluator_poll_loop, daemon=False)
-_poll_thread.start()
+# Evaluation worker: only consumes evaluation queue (deliverable evaluation).
+_evaluation_thread = threading.Thread(target=_evaluation_worker, daemon=True)
+_evaluation_thread.start()
+
+# Main processor: only consumes job queue (parent REQUEST / TRANSACTION). Non-daemon so process stays alive when run as python agent.py.
+_main_processor_thread = threading.Thread(target=_main_processor_loop, daemon=False)
+_main_processor_thread.start()
 
 
 # async def run_test_evaluation(requirement: str, deliverable: str) -> str:
@@ -1273,4 +1512,4 @@ runner = Runner(
 if __name__ == "__main__":
     # Run with ADK runner (interactive CLI): from this directory run:  adk run agent
     # When run as `python agent.py`, we keep the process alive so the poll thread keeps running.
-    _poll_thread.join()
+    _main_processor_thread.join()
