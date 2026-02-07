@@ -144,6 +144,14 @@ def _enqueue_job_for_evaluation_if_eligible(job: ACPJob) -> bool:
     return True
 
 
+def _is_main_processor_eligible(job: ACPJob) -> bool:
+    """True if job belongs in main job queue: we are the provider and phase is REQUEST or TRANSACTION (parent graduation job)."""
+    return (
+        job.provider_address == acp_client.agent_wallet_address
+        and job.phase in (ACPJobPhase.REQUEST, ACPJobPhase.TRANSACTION)
+    )
+
+
 # Parent job id -> list of {job_id, expected_outcome, ...} for evaluation flow (flat, for backward compat and _is_tracked_child_job).
 # Replaced by parent -> offering_index -> list for deliver logic; we maintain both: _parent_offering_jobs is source of truth, flat list derived when needed.
 _evaluation_children: Dict[int, List[Dict[str, Any]]] = {}
@@ -169,30 +177,27 @@ _job_sessions: Dict[int, str] = {}
 _job_sessions_lock = threading.Lock()
 
 def _on_new_task(job: ACPJob, _memo_to_sign: Optional[ACPMemo] = None) -> None:
-    """Socket handler: payment → payment queue; evaluation → evaluation queue; others → job queue."""
+    """Socket handler: payment → payment queue; evaluation → evaluation queue; main-processor-eligible → job queue."""
     if _enqueue_job_for_payment_if_eligible(job):
         logger.info("Job %s from on_new_task sent to payment queue", job.id)
         return
     if _enqueue_job_for_evaluation_if_eligible(job):
         logger.info("Job %s from on_new_task sent to evaluation queue", job.id)
         return
+    if not _is_main_processor_eligible(job):
+        logger.info("Job %s from on_new_task not main-processor-eligible (phase=%s, provider=...); not queued", job.id, getattr(job.phase, "name", job.phase))
+        return
     with _job_queue_condition:
         _job_queue[job.id] = job
         _job_queue_condition.notify_all()
     logger.info("Job %s added to queue from on_new_task socket", job.id)
 
+
 def _on_evaluate(job: ACPJob) -> None:
-    """Socket handler: payment → payment queue; evaluation → evaluation queue; others → job queue."""
-    if _enqueue_job_for_payment_if_eligible(job):
-        logger.info("Job %s from on_evaluate sent to payment queue", job.id)
-        return
+    """Socket handler: evaluation → evaluation queue;"""
     if _enqueue_job_for_evaluation_if_eligible(job):
         logger.info("Job %s from on_evaluate sent to evaluation queue", job.id)
         return
-    with _job_queue_condition:
-        _job_queue[job.id] = job
-        _job_queue_condition.notify_all()
-    logger.info("Job %s added to queue from on_evaluate socket", job.id)
 
 
 acp_client = VirtualsACP(
@@ -1192,7 +1197,6 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
         _parent_offering_jobs.pop(parent_job_id, None)
         _parent_expected_offerings.pop(parent_job_id, None)
         _parent_offerings_initiated.pop(parent_job_id, None)
-        # Do NOT discard _parent_evaluation_started on timeout: ensure only one round of children per parent forever
 
 
 def _payment_worker_try_pay(job_id: int) -> bool:
@@ -1235,7 +1239,7 @@ def _poll_worker() -> None:
                     elif _is_evaluation_eligible(job):
                         _enqueue_evaluation_job_id(job.id)
                         to_eval += 1
-                    else:
+                    elif _is_main_processor_eligible(job):
                         _job_queue[job.id] = job
                         by_id[job.id] = job
                         to_queue += 1
@@ -1332,17 +1336,22 @@ def _main_processor_loop() -> None:
                 jobs_to_process = list(_job_queue.values())
                 jobs_to_process.sort(key=_job_priority)
             for job in jobs_to_process:
-                job = _get_job_fresh(job.id)
+                job_id = job.id
+                job = _get_job_fresh(job_id)
                 if job is None:
+                    with _job_queue_condition:
+                        _job_queue.pop(job_id, None)
                     continue
                 # Main processor only handles parent REQUEST and parent TRANSACTION. Payment and evaluation run in dedicated threads.
                 is_parent_request = job.provider_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.REQUEST
                 is_parent_transaction = job.provider_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.TRANSACTION
                 if not (is_parent_request or is_parent_transaction):
                     logger.info(
-                        "Main processor: job %s skipped (phase=%s, provider=%s; only handle parent REQUEST/TRANSACTION)",
-                        job.id, getattr(job.phase, "name", job.phase), job.provider_address[:10] + ".." if job.provider_address else None,
+                        "Main processor: job %s removed from queue (no longer eligible: phase=%s, provider=%s)",
+                        job_id, getattr(job.phase, "name", job.phase), job.provider_address[:10] + ".." if job.provider_address else None,
                     )
+                    with _job_queue_condition:
+                        _job_queue.pop(job_id, None)
                     continue
                 agent_wallet_to_evaluate = job.requirement.get("agentWalletAddress")
                 if agent_wallet_to_evaluate and agent_wallet_to_evaluate.lower() == acp_client.agent_wallet_address.lower():
