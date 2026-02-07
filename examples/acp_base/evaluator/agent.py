@@ -245,7 +245,7 @@ def verify_agent_identity(
             similarity = 100.0
         else:
             # Use fuzzy matching to handle typos and variations
-            SIMILARITY_THRESHOLD = 85.0
+            SIMILARITY_THRESHOLD = 75.0
             ratio = fuzz.ratio(normalized_provided, normalized_actual)
             token_sort_ratio = fuzz.token_sort_ratio(normalized_provided, normalized_actual)
             similarity = max(ratio, token_sort_ratio)
