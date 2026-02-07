@@ -43,9 +43,8 @@ load_dotenv(override=True)
 env = EnvSettings()
 
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    force=True,
 )
 logger = logging.getLogger("EvaluatorAgent")
 # Suppress noisy GenAI / Google lib warnings from logs.
@@ -1071,7 +1070,7 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
             else:
                 stable_polls += 1
             if stable_polls < 2:
-                logger.debug("Parent %s: children set not stable yet (stable_polls=%s, children=%s)", parent_job_id, stable_polls, len(children))
+                logger.info("Parent %s: children set not stable yet (stable_polls=%s, children=%s)", parent_job_id, stable_polls, len(children))
                 time.sleep(POLL_INTERVAL_SECONDS)
                 continue
         results: List[Dict[str, Any]] = []
@@ -1244,7 +1243,7 @@ def _poll_worker() -> None:
                     if j.id not in by_id:
                         by_id[j.id] = j
                 _job_queue_condition.notify_all()
-            logger.debug(
+            logger.info(
                 "Poller: fetched %s jobs → payment: %s, evaluation: %s, job_queue: %s",
                 len(active_jobs), to_payment, to_eval, to_queue,
             )
@@ -1260,7 +1259,7 @@ def _payment_worker() -> None:
         job_id = _payment_queue.get()
         with _payment_dedupe_lock:
             _payment_queue_ids.discard(job_id)
-        logger.debug("Payment worker: processing job %s", job_id)
+        logger.info("Payment worker: processing job %s", job_id)
         _payment_worker_try_pay(job_id)
 
 
@@ -1277,7 +1276,7 @@ def _evaluation_worker() -> None:
             logger.warning("Evaluation worker: job %s not found (skip)", job_id)
             continue
         if not _is_evaluation_eligible(job):
-            logger.debug("Evaluation worker: job %s no longer evaluation-eligible (skip)", job_id)
+            logger.info("Evaluation worker: job %s no longer evaluation-eligible (skip)", job_id)
             continue
         try:
             with _job_sessions_lock:
@@ -1340,10 +1339,15 @@ def _main_processor_loop() -> None:
                 is_parent_request = job.provider_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.REQUEST
                 is_parent_transaction = job.provider_address == acp_client.agent_wallet_address and job.phase == ACPJobPhase.TRANSACTION
                 if not (is_parent_request or is_parent_transaction):
-                    logger.debug(
+                    logger.info(
                         "Main processor: job %s skipped (phase=%s, provider=%s; only handle parent REQUEST/TRANSACTION)",
                         job.id, getattr(job.phase, "name", job.phase), job.provider_address[:10] + ".." if job.provider_address else None,
                     )
+                    continue
+                agent_wallet_to_evaluate = job.requirement.get("agentWalletAddress")
+                if agent_wallet_to_evaluate and agent_wallet_to_evaluate.lower() == acp_client.agent_wallet_address.lower():
+                    result = reject_job(job.id, "Cannot evaluate self: the graduation request targets this evaluator agent.")
+                    logger.info("Main processor: job %s rejected (self-evaluation not allowed): %s", job.id, result)
                     continue
                 # Only create one round of children per parent: skip parent TRANSACTION if we already started evaluation for this parent
                 if is_parent_transaction:
@@ -1463,24 +1467,6 @@ _main_processor_thread = threading.Thread(target=_main_processor_loop, daemon=Fa
 _main_processor_thread.start()
 
 
-# async def run_test_evaluation(requirement: str, deliverable: str) -> str:
-#     """
-#     Run an evaluation without submitting to the chain (for testing via adk run).
-#     Use when the user wants to test how a deliverable would be evaluated before going through the full ACP job lifecycle. Images in the deliverable (e.g. imageUrl, url) are downloaded and evaluated. Returns the evaluation decision and reason as text.
-#     """
-#     try:
-#         req = json.loads(requirement) if requirement.strip().startswith("{") else requirement
-#     except json.JSONDecodeError:
-#         req = requirement
-#     try:
-#         deliv = json.loads(deliverable) if deliverable.strip().startswith("{") else deliverable
-#     except json.JSONDecodeError:
-#         deliv = deliverable
-#     result = await _test_evaluation_async(req, deliv)
-#     n = result.get("image_count_attached", 0)
-#     suffix = f" [{n} image(s) attached from deliverable]." if n else ""
-#     return result.get("response_text", "(no response)") + suffix
-
 
 root_agent = Agent(
     model=env.GEMINI_MODEL,
@@ -1533,92 +1519,6 @@ runner = Runner(
     agent=root_agent,
     session_service=session_service,
 )
-
-
-# def _sync_run_agent_and_collect(session_id: str, content: types.UserContent, job_id: int) -> str:
-#     """Run the agent with the given session and content; return collected response text. Blocking."""
-#     response_text = ""
-#     for event in runner.run(
-#         user_id="evaluator_test",
-#         session_id=session_id,
-#         new_message=content,
-#     ):
-#         _log_agent_event(event, job_id)
-#         if event.content and event.content.parts:
-#             for part in event.content.parts:
-#                 if getattr(part, "text", None):
-#                     response_text = part.text
-#     return response_text.strip() or "(no text response)"
-
-
-# async def _test_evaluation_async(
-#     requirement: Union[Dict[str, Any], str],
-#     deliverable: Any,
-#     job_id: int = 0,
-# ) -> Dict[str, Any]:
-#     """Async implementation: create session with await, run blocking runner in thread."""
-#     req_str = json.dumps(requirement) if isinstance(requirement, dict) else str(requirement)
-#     deliverable_str = str(deliverable) if deliverable is not None else "(none)"
-#     prompt = (
-#         f"[TEST RUN - do NOT call evaluate_job_deliverable] "
-#         f"Evaluate this job deliverable (EVALUATION phase). job_id: {job_id}. "
-#         f"requirement: {req_str}. deliverable (text): {deliverable_str}. "
-#         "If images are attached below, evaluate them against the requirement (e.g. correctness, quality, relevance). "
-#         "Use Google Search and/or URL context if needed to verify content. "
-#         "Respond with your evaluation in text only: state whether you would ACCEPT or REJECT the deliverable and your reason in detail. Do not call any tools to submit the evaluation."
-#     )
-#     content = _build_evaluation_content(job_id, prompt, deliverable)
-#     image_urls = _extract_image_urls(deliverable)
-#     image_count_attached = max(0, len(content.parts) - 1)
-
-#     session = await session_service.create_session(
-#         app_name=runner.app_name,
-#         user_id="evaluator_test",
-#         session_id=None,
-#     )
-#     session_id = session.id
-#     logger.info("test_evaluation: session_id=%s, image_urls=%s", session_id, image_urls)
-
-#     response_text = await asyncio.to_thread(
-#         _sync_run_agent_and_collect, session_id, content, job_id
-#     )
-
-#     return {
-#         "response_text": response_text,
-#         "session_id": session_id,
-#         "image_urls_found": image_urls,
-#         "image_count_attached": image_count_attached,
-#     }
-
-
-# def test_evaluation(
-#     requirement: Union[Dict[str, Any], str],
-#     deliverable: Any,
-#     job_id: int = 0,
-# ) -> Dict[str, Any]:
-#     """
-#     Run the evaluation flow without submitting to the chain. Uses the same prompt
-#     and image handling as real EVALUATION jobs. The agent is instructed to respond
-#     with its accept/reject decision and reason in text only (do not call
-#     evaluate_job_deliverable), so you can test reasoning and image evaluation
-#     before going through the full ACP job lifecycle.
-
-#     Args:
-#         requirement: Job requirement (dict or JSON str), e.g. {"prompt": "..."}.
-#         deliverable: Deliverable content (str or dict). May contain image URLs
-#             (as text or under keys like imageUrl, url); they will be downloaded
-#             and attached for the agent to evaluate.
-#         job_id: Placeholder job id used in the prompt (default 0). Only for
-#             context in the test; no on-chain call is made.
-
-#     Returns:
-#         Dict with:
-#           - response_text: The agent's final response (evaluation decision and reason).
-#           - session_id: Session id used for this run.
-#           - image_urls_found: List of image URLs extracted from deliverable.
-#           - image_count_attached: Number of images successfully attached.
-#     """
-#     return asyncio.run(_test_evaluation_async(requirement, deliverable, job_id))
 
 
 if __name__ == "__main__":
