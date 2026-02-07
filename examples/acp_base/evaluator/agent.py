@@ -897,12 +897,18 @@ def _aggregate_results_by_offering(results: List[Dict[str, Any]]) -> Dict[str, L
     return by_offering
 
 
-def _create_gdocs_report(title: str, body_text: str) -> Optional[str]:
-    """Create a Google Doc with the given title and body text; return the view URL (anyone with link) or edit URL on success, None on failure."""
+def _utf16_len(s: str) -> int:
+    """Return length of s in UTF-16 code units (Google Docs API uses this for indices)."""
+    return len(s.encode("utf-16-le")) // 2
+
+
+def _create_gdocs_report(title: str, requests: List[Dict[str, Any]]) -> Optional[str]:
+    """Create a Google Doc with the given title and apply the given batchUpdate requests; return the view URL (anyone with link) or edit URL on success, None on failure."""
     try:
         SCOPES = [
             "https://www.googleapis.com/auth/documents",
             "https://www.googleapis.com/auth/drive",
+            "https://www.googleapis.com/auth/drive.file",
         ]
         creds = service_account.Credentials.from_service_account_file(
             env.GOOGLE_APPLICATION_CREDENTIALS,
@@ -923,27 +929,21 @@ def _create_gdocs_report(title: str, body_text: str) -> Optional[str]:
                 supportsAllDrives=True,
             ).execute()
             doc_id = file.get("id")
+            docs_service.documents().batchUpdate(
+                documentId=doc_id,
+                body={"requests": requests},
+            ).execute()
+            try:
+                perm_kw = {"fileId": doc_id, "body": {"type": "anyone", "role": "reader"}, "fields": "id"}
+                if folder_id:
+                    perm_kw["supportsAllDrives"] = True
+                drive_service.permissions().create(**perm_kw).execute()
+                return f"https://docs.google.com/document/d/{doc_id}/view"
+            except HttpError:
+                return f"https://docs.google.com/document/d/{doc_id}/edit"
         else:
-            doc = docs_service.documents().create(body={"title": title}).execute()
-            doc_id = doc.get("documentId")
-        if not doc_id:
+            logger.warning("Google Docs: folder_id not set; cannot create document.")
             return None
-        docs_service.documents().batchUpdate(
-            documentId=doc_id,
-            body={
-                "requests": [
-                    {"insertText": {"location": {"index": 1}, "text": body_text}}
-                ]
-            },
-        ).execute()
-        try:
-            perm_kw = {"fileId": doc_id, "body": {"type": "anyone", "role": "reader"}, "fields": "id"}
-            if folder_id:
-                perm_kw["supportsAllDrives"] = True
-            drive_service.permissions().create(**perm_kw).execute()
-            return f"https://docs.google.com/document/d/{doc_id}/view"
-        except HttpError:
-            return f"https://docs.google.com/document/d/{doc_id}/edit"
     except HttpError as e:
         if e.resp.status == 403 and "insufficient authentication scopes" in str(e).lower():
             logger.warning(
@@ -961,7 +961,7 @@ def _build_delivery_payload(
     results: List[Dict[str, Any]],
     by_offering: Dict[str, List[Dict[str, Any]]],
     summary_str: str,
-    details_url: Optional[str],
+    detailed_report: Optional[str],
 ) -> Dict[str, Any]:
     """Build the compact payload for job.deliver: overall score, summary, per-offering score/summary, and optional details URL."""
     total = len(results)
@@ -981,25 +981,35 @@ def _build_delivery_payload(
         "summary": f"Graduation evaluation completed with {summary_str} pass rate.",
         "by_offering": by_offering_list,
     }
-    if details_url:
-        payload["details_url"] = details_url
+    if detailed_report:
+        payload["details_url"] = detailed_report
     return payload
 
 
-def _format_detailed_report(results: List[Dict[str, Any]], summary: str) -> str:
-    """Build a human-readable detailed report string for delivery, aggregated by job offering name."""
+def _format_detailed_report(
+    results: List[Dict[str, Any]],
+    summary: str,
+    *,
+    agent_name: Optional[str] = None,
+    wallet_address: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Build Google Docs API batchUpdate requests for the detailed report. Returns requests list for _create_gdocs_report."""
     by_offering = _aggregate_results_by_offering(results)
-    lines = [
-        "Graduation Evaluation Result",
-        "The evaluation has concluded with a " + summary + " pass rate.",
-        "",
-    ]
+    # Blocks: (paragraph text, namedStyleType or None for normal). We build body and style ranges in one pass.
+    blocks: List[Tuple[str, Optional[str]]] = []
+    blocks.append(("Graduation Evaluation Result", "HEADING_1"))
+    if agent_name:
+        blocks.append((f"Evaluated agent: {agent_name}", None))
+    if wallet_address:
+        blocks.append((f"Wallet: {wallet_address}", None))
+    blocks.append((f"The evaluation has concluded with a {summary} pass rate.", None))
+    blocks.append(("", None))
     for offering_name in sorted(by_offering.keys()):
         offering_results = by_offering[offering_name]
         passed_count = sum(1 for r in offering_results if r.get("passed"))
-        lines.append(f"--- {offering_name} ---")
-        lines.append(f"  Passed: {passed_count}/{len(offering_results)}")
-        lines.append("")
+        blocks.append((offering_name, "HEADING_2"))
+        blocks.append((f"Passed: {passed_count}/{len(offering_results)}", None))
+        blocks.append(("", None))
         for r in offering_results:
             job_id = r.get("job_id")
             expected = r.get("expected_outcome", "")
@@ -1008,17 +1018,41 @@ def _format_detailed_report(results: List[Dict[str, Any]], summary: str) -> str:
             reason = r.get("reason", "")
             requirement = r.get("requirement")
             deliverable_summary = r.get("deliverable_summary")
-            status_line = f"  Job ID {job_id}: {'Passed' if passed else 'Failed'} (Status: {actual_phase})"
-            lines.append(status_line)
-            lines.append(f"    Expected: {expected}; Actual phase: {actual_phase}.")
-            lines.append(f"    Reason: {reason}")
+            blocks.append((f"Job ID {job_id}: {'Passed' if passed else 'Failed'} (Status: {actual_phase})", None))
+            blocks.append((f"Expected: {expected}; Actual phase: {actual_phase}.", None))
+            blocks.append((f"Reason: {reason}", None))
             if requirement:
-                lines.append(f"    Requirement: {requirement}")
+                blocks.append((f"Requirement: {requirement}", None))
             if deliverable_summary is not None:
-                lines.append(f"    Deliverable summary: {deliverable_summary}")
-            lines.append("")
-        lines.append("")
-    return "\n".join(lines).rstrip()
+                blocks.append((f"Deliverable summary: {deliverable_summary}", None))
+            blocks.append(("", None))
+        blocks.append(("", None))
+    body_text = "".join(t + "\n" for t, _ in blocks)
+    requests_list: List[Dict[str, Any]] = [
+        {"insertText": {"location": {"index": 1}, "text": body_text}}
+    ]
+    idx = 1
+    for text, style in blocks:
+        seg = text + "\n"
+        end = idx + _utf16_len(seg)
+        if style == "HEADING_1":
+            requests_list.append({
+                "updateParagraphStyle": {
+                    "range": {"startIndex": idx, "endIndex": end},
+                    "paragraphStyle": {"namedStyleType": "HEADING_1"},
+                    "fields": "namedStyleType",
+                }
+            })
+        elif style == "HEADING_2":
+            requests_list.append({
+                "updateParagraphStyle": {
+                    "range": {"startIndex": idx, "endIndex": end},
+                    "paragraphStyle": {"namedStyleType": "HEADING_2"},
+                    "fields": "namedStyleType",
+                }
+            })
+        idx = end
+    return requests_list
 
 
 def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
@@ -1139,11 +1173,16 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
         if all_terminal:
             summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)} passed"
             by_offering = _aggregate_results_by_offering(results)
-            detailed_text = _format_detailed_report(results, summary_str)
-            # Upload full details to Google Docs and get link; deliver compact payload (link + overall score + per-offering summary).
+            # Resolve evaluated agent (client of parent job) for the report.
+            parent_job = _get_job_fresh(parent_job_id)
+            wallet_address = getattr(parent_job, "client_address", None) if parent_job else None
+            agent_name = getattr(parent_job, "client_name", None) or getattr(parent_job, "agent_name", None) if parent_job else None
+            detailed_requests = _format_detailed_report(
+                results, summary_str, agent_name=agent_name, wallet_address=wallet_address
+            )
             details_url = _create_gdocs_report(
                 title=f"Graduation Evaluation Report - Job {parent_job_id}",
-                body_text=detailed_text,
+                requests=detailed_requests,
             )
             report = _build_delivery_payload(results, by_offering, summary_str, details_url)
             logger.info("Parent %s: all children terminal, attempting delivery (up to 3 attempts this cycle).", parent_job_id)
@@ -1511,7 +1550,6 @@ root_agent = Agent(
         get_agent_offerings,
         initiate_evaluation_jobs_batch,
         initiate_evaluation_job,
-        # run_test_evaluation,
         UrlContextTool(),
         GoogleSearchTool(),
     ]
