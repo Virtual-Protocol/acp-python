@@ -872,7 +872,7 @@ def _evaluation_reason(expected: str, phase: ACPJobPhase, passed: bool, evaluato
                 return f"Pass: expected accept; job in {phase_name}. Provider accepted the requirement; job is in progress."
             return f"Pass: expected accept; job in {phase_name}. Provider accepted; awaiting completion."
         if evaluator_reason:
-            return f"Fail: expected accept but deliverable was rejected by evaluator.\n\nEvaluator reason: {evaluator_reason}"
+            return f"Fail: expected accept but deliverable was rejected by evaluator.\nEvaluator reason: {evaluator_reason}"
         return f"Fail: expected accept but job ended in {phase_name}. Provider rejected or job did not complete as expected."
     else:  # expected == "reject"
         if passed and phase == ACPJobPhase.REJECTED:
@@ -880,7 +880,7 @@ def _evaluation_reason(expected: str, phase: ACPJobPhase, passed: bool, evaluato
         if not passed and phase == ACPJobPhase.REJECTED and evaluator_reason:
             return (
                 "Fail: expected reject; provider accepted and delivered, so evaluator rejected the deliverable. "
-                "The provider should have rejected the requirement (e.g. NSFW).\n\nEvaluator reason: " + evaluator_reason
+                "The provider should have rejected the requirement (e.g. NSFW).\nEvaluator reason: " + evaluator_reason
             )
         if not passed:
             return f"Fail: expected reject but job reached {phase_name}. Provider accepted when we expected rejection (invalid input should have been rejected)."
@@ -962,6 +962,9 @@ def _build_delivery_payload(
     by_offering: Dict[str, List[Dict[str, Any]]],
     summary_str: str,
     detailed_report: Optional[str],
+    *,
+    agent_name: str,
+    wallet_address: str
 ) -> Dict[str, Any]:
     """Build the compact payload for job.deliver: overall score, summary, per-offering score/summary, and optional details URL."""
     total = len(results)
@@ -977,34 +980,37 @@ def _build_delivery_payload(
             "summary": f"{p}/{n} test cases passed for this offering.",
         })
     payload = {
+        "agent_name": agent_name,
+        "wallet_address": wallet_address,
         "overall_score": f"{passed}/{total} passed",
+        "test_results": by_offering_list,
         "summary": f"Graduation evaluation completed with {summary_str} pass rate.",
-        "by_offering": by_offering_list,
     }
     if detailed_report:
         payload["details_url"] = detailed_report
     return payload
 
 
+_ReportStyle = Optional[str]
+
+
 def _format_detailed_report(
     results: List[Dict[str, Any]],
     summary: str,
     *,
-    agent_name: Optional[str] = None,
-    wallet_address: Optional[str] = None,
+    agent_name: str,
+    wallet_address: str
 ) -> List[Dict[str, Any]]:
-    """Build Google Docs API batchUpdate requests for the detailed report. Returns requests list for _create_gdocs_report."""
+    """Build Google Docs API batchUpdate requests: headings, bullets for job details, bold labels, separators."""
     by_offering = _aggregate_results_by_offering(results)
-    # Blocks: (paragraph text, namedStyleType or None for normal). We build body and style ranges in one pass.
-    blocks: List[Tuple[str, Optional[str]]] = []
+    blocks: List[Tuple[str, _ReportStyle]] = []
     blocks.append(("Graduation Evaluation Result", "HEADING_1"))
-    if agent_name:
-        blocks.append((f"Evaluated agent: {agent_name}", None))
-    if wallet_address:
-        blocks.append((f"Wallet: {wallet_address}", None))
+    blocks.append((f"Evaluated agent: {agent_name}", None))
+    blocks.append((f"Wallet: {wallet_address}", None))
     blocks.append((f"The evaluation has concluded with a {summary} pass rate.", None))
     blocks.append(("", None))
-    for offering_name in sorted(by_offering.keys()):
+    offering_names = sorted(by_offering.keys())
+    for offering_name in offering_names:
         offering_results = by_offering[offering_name]
         passed_count = sum(1 for r in offering_results if r.get("passed"))
         blocks.append((offering_name, "HEADING_2"))
@@ -1019,12 +1025,12 @@ def _format_detailed_report(
             requirement = r.get("requirement")
             deliverable_summary = r.get("deliverable_summary")
             blocks.append((f"Job ID {job_id}: {'Passed' if passed else 'Failed'} (Status: {actual_phase})", None))
-            blocks.append((f"Expected: {expected}; Actual phase: {actual_phase}.", None))
-            blocks.append((f"Reason: {reason}", None))
+            blocks.append((f"Expected: {expected}; Actual phase: {actual_phase}.", "BULLET"))
+            blocks.append((f"Reason: {reason}", "BULLET"))
             if requirement:
-                blocks.append((f"Requirement: {requirement}", None))
+                blocks.append((f"Requirement: {requirement}", "BULLET"))
             if deliverable_summary is not None:
-                blocks.append((f"Deliverable summary: {deliverable_summary}", None))
+                blocks.append((f"Deliverable summary: {deliverable_summary}", "BULLET"))
             blocks.append(("", None))
         blocks.append(("", None))
     body_text = "".join(t + "\n" for t, _ in blocks)
@@ -1032,9 +1038,19 @@ def _format_detailed_report(
         {"insertText": {"location": {"index": 1}, "text": body_text}}
     ]
     idx = 1
+    bullet_ranges: List[Tuple[int, int]] = []
+    divider_indices: List[int] = []
+    prev_was_empty = False
+    offering_ends_seen = 0
     for text, style in blocks:
         seg = text + "\n"
-        end = idx + _utf16_len(seg)
+        length = _utf16_len(seg)
+        end = idx + length
+        # Insert horizontal rule before the blank line that separates offerings (location just before that newline).
+        if (text == "" and style is None) and prev_was_empty and offering_ends_seen < len(offering_names) - 1:
+            divider_indices.append(idx)
+            offering_ends_seen += 1
+        prev_was_empty = text == "" and style is None
         if style == "HEADING_1":
             requests_list.append({
                 "updateParagraphStyle": {
@@ -1051,7 +1067,132 @@ def _format_detailed_report(
                     "fields": "namedStyleType",
                 }
             })
+        elif style == "BULLET":
+            bullet_ranges.append((idx, end))
         idx = end
+    # Merge consecutive BULLET paragraphs into one range per job (each job has 2–4 bullet lines).
+    if bullet_ranges:
+        merged: List[Tuple[int, int]] = []
+        start, last_end = bullet_ranges[0]
+        for s, e in bullet_ranges[1:]:
+            if s == last_end:
+                last_end = e
+            else:
+                merged.append((start, last_end))
+                start, last_end = s, e
+        merged.append((start, last_end))
+        for start_i, end_i in merged:
+            requests_list.append({
+                "createParagraphBullets": {
+                    "range": {"startIndex": start_i, "endIndex": end_i},
+                    "bulletPreset": "BULLET_DISC_CIRCLE_SQUARE",
+                }
+            })
+    # Bold labels: find in body_text and add updateTextStyle. Docs API uses 1-based UTF-16 indices.
+    def _utf16_range(s: str, py_start: int, py_end: int) -> Tuple[int, int]:
+        start_idx = 1 + _utf16_len(s[:py_start])
+        end_idx = 1 + _utf16_len(s[:py_end])
+        return (start_idx, end_idx)
+
+    bold_labels = [
+        "Evaluated agent:",
+        "Wallet:",
+        "Job ID",
+        "Expected:",
+        "Reason:",
+        "Requirement:",
+        "Deliverable summary:",
+        "Passed:",
+    ]
+    pos = 0
+    while pos < len(body_text):
+        best = -1
+        best_label = ""
+        for label in bold_labels:
+            i = body_text.find(label, pos)
+            if i != -1 and (best == -1 or i < best):
+                best = i
+                best_label = label
+        if best == -1:
+            break
+        end_py = best + len(best_label)
+        # Bold only the label; for "Job ID" don't include the following space/digits
+        if best_label == "Job ID":
+            end_py = best + 6
+        si, ei = _utf16_range(body_text, best, end_py)
+        requests_list.append({
+            "updateTextStyle": {
+                "range": {"startIndex": si, "endIndex": ei},
+                "textStyle": {"bold": True},
+                "fields": "bold",
+            }
+        })
+        pos = end_py
+    # Bold "Failed" and "Passed" where they appear as outcome (after "Job ID N: ")
+    for outcome_word in ("Failed", "Passed"):
+        pos = 0
+        while True:
+            i = body_text.find(outcome_word, pos)
+            if i == -1:
+                break
+            # Only bold if preceded by ": " (outcome line)
+            if i >= 2 and body_text[i - 2 : i] == ": ":
+                end_py = i + len(outcome_word)
+                si, ei = _utf16_range(body_text, i, end_py)
+                requests_list.append({
+                    "updateTextStyle": {
+                        "range": {"startIndex": si, "endIndex": ei},
+                        "textStyle": {"bold": True},
+                        "fields": "bold",
+                    }
+                })
+                pos = end_py
+            else:
+                pos = i + 1
+    # Horizontal divider: 1x1 table with only bottom border (API-friendly workaround for horizontal rule).
+    # UpdateTableCellStyle uses TableRange: tableCellLocation (tableStartLocation, rowIndex, columnIndex) + rowSpan, columnSpan.
+    # InsertTable inserts a newline before the table, so table start index = location index + 1.
+    # Visible border: opaque color required (table cell borders cannot be transparent).
+    _border_visible = {
+        "width": {"magnitude": 1, "unit": "PT"},
+        "dashStyle": "SOLID",
+        "color": { "color": { "rgbColor": { "red": 0.0, "green": 0.0, "blue": 0.0 } } }
+    }
+    # Hidden borders: width 0 only (do not set color; API rejects transparent).
+    _border_hidden = {
+        "width": {"magnitude": 0, "unit": "PT"},
+        "dashStyle": "SOLID",
+        "color": { "color": { "rgbColor": { "red": 0.0, "green": 0.0, "blue": 0.0 } } }
+    }
+    for div_idx in sorted(divider_indices, reverse=True):
+        requests_list.append({
+            "insertTable": {
+                "rows": 1,
+                "columns": 1,
+                "location": {"index": div_idx},
+            },
+        })
+        table_start_index = div_idx + 1  # newline inserted before table
+        requests_list.append({
+            "updateTableCellStyle": {
+                "tableRange": {
+                    "tableCellLocation": {
+                        "tableStartLocation": {"index": table_start_index},
+                        "rowIndex": 0,
+                        "columnIndex": 0,
+                    },
+                    "rowSpan": 1,
+                    "columnSpan": 1,
+                },
+                "tableCellStyle": {
+                    "borderBottom": _border_visible,
+                    "borderTop": _border_hidden,
+                    "borderLeft": _border_hidden,
+                    "borderRight": _border_hidden,
+                },
+                "fields": "borderBottom,borderTop,borderLeft,borderRight",
+            },
+        })
     return requests_list
 
 
@@ -1173,10 +1314,10 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
         if all_terminal:
             summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)} passed"
             by_offering = _aggregate_results_by_offering(results)
-            # Resolve evaluated agent (client of parent job) for the report.
             parent_job = _get_job_fresh(parent_job_id)
-            wallet_address = getattr(parent_job, "client_address", None) if parent_job else None
-            agent_name = getattr(parent_job, "client_name", None) or getattr(parent_job, "agent_name", None) if parent_job else None
+            agent_evaluated = acp_client.get_agent(parent_job.requirement.get("agentWalletAddress"))
+            wallet_address = agent_evaluated.wallet_address
+            agent_name = agent_evaluated.name
             detailed_requests = _format_detailed_report(
                 results, summary_str, agent_name=agent_name, wallet_address=wallet_address
             )
@@ -1184,7 +1325,14 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 title=f"Graduation Evaluation Report - Job {parent_job_id}",
                 requests=detailed_requests,
             )
-            report = _build_delivery_payload(results, by_offering, summary_str, details_url)
+            report = _build_delivery_payload(
+                results,
+                by_offering,
+                summary_str,
+                details_url,
+                agent_name=agent_name,
+                wallet_address=wallet_address,
+            )
             logger.info("Parent %s: all children terminal, attempting delivery (up to 3 attempts this cycle).", parent_job_id)
             delivered = False
             for attempt in range(3):
@@ -1401,7 +1549,7 @@ def _main_processor_loop() -> None:
                 if is_parent_transaction:
                     with _evaluation_children_lock:
                         if job.id in _parent_evaluation_started:
-                            logger.info("Main processor: job %s skipped (evaluation already started for this parent)", job.id)
+                            logger.info("Main processor: job %s skipped (agent evaluation already started for this parent)", job.id)
                             continue
                         _parent_evaluation_started.add(job.id)
                 logger.info(
@@ -1432,7 +1580,7 @@ def _main_processor_loop() -> None:
                         prompt = (
                             f"Agent graduation request (you are the provider). job_id: {job.id}. "
                             f"requirement (use only what was passed in): {req_json}. "
-                            "If requirement is invalid (not an object with agentName and agentWalletAddress), call reject_job. "
+                            "If requirement is invalid (not providing agentName and agentWalletAddress), call reject_job. "
                             "Otherwise verify agent identity with verify_agent_identity, then call accept_job or reject_job to accept or reject the graduation request."
                         )
                     elif is_parent_transaction:
