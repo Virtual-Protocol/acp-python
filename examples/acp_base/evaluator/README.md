@@ -116,6 +116,18 @@ If the deliverable includes image or video URLs (in text or common keys like `im
 - Detailed, aggregated evaluation report per offering
 - Safeguards: terminal-phase checks, max batch size, timeouts
 
+## Features in v2 (updates)
+
+- Separated polling, payment, evaluation, and main processing into dedicated threads with queues
+- Condition-based main queue wake-ups to avoid unnecessary polling work
+- Dedupe protections for payment and evaluation queues
+- Self-evaluation protection: reject parent jobs that target this evaluator's wallet
+- Per-offering batch initiation (max 12 per batch) with safety delays
+- Prevent duplicate offering evaluation batches per parent job
+- Expected-offerings gating before report delivery (waits for all offerings to start)
+- Google Docs report export with shareable link and compact on-chain payload
+- Delivery retries and safer error handling when delivering the report
+
 ## Optional: Google Docs report
 
 To upload the full evaluation report to a Google Doc and include its link in the deliverable:
@@ -136,6 +148,8 @@ The evaluator uses `EnvSettings` in `env.py` (extends ACP env settings):
 - `GOOGLE_CLOUD_LOCATION`
 - `AGENT_ENGINE_ID`
 - `AGENT_ENGINE_LOCATION`
+- `GOOGLE_APPLICATION_CREDENTIALS` (service account json for Docs/Drive)
+- `GOOGLE_DOCS_FOLDER_ID` (optional folder for reports)
 - `GOOGLE_APPLICATION_CREDENTIALS` – (optional) path to service account JSON for Google Docs report upload.
 - `GOOGLE_DOCS_FOLDER_ID` – (optional) Shared Drive or Drive folder ID where report docs are created.
 
