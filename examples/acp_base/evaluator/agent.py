@@ -5,13 +5,17 @@ import queue
 import re
 import threading
 import time
+import warnings
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, List, Optional, Set, Tuple, Union
 
+from google.oauth2 import service_account
 import requests
 
 from dotenv import load_dotenv
 
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from google.adk.agents.llm_agent import Agent
 from google.adk.events.event import Event
 from google.adk.runners import Runner
@@ -39,12 +43,27 @@ load_dotenv(override=True)
 env = EnvSettings()
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    force=True,
 )
 logger = logging.getLogger("EvaluatorAgent")
-# Suppress noisy GenAI warning when model returns function_call parts; ADK handles them correctly.
+# Suppress noisy GenAI / Google lib warnings from logs.
 logging.getLogger("google_genai.types").setLevel(logging.ERROR)
+logging.getLogger("google_genai.models").setLevel(logging.ERROR)  # AFC/tools compatibility; ADK handles tools.
+warnings.filterwarnings(
+    "ignore",
+    message=".*end user credentials.*quota project.*",
+)
+warnings.filterwarnings(
+    "ignore",
+    message=".*google-cloud-storage.*will be removed.*",
+    category=FutureWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=".*experimental.*and may change in future versions.*",
+)
 
 # Poller thread fetches active jobs on this interval and routes to payment queue or job queue.
 POLL_INTERVAL_SECONDS = 20
@@ -272,23 +291,6 @@ def _log_agent_event(event: Event, job_id: int) -> None:
     if text_parts:
         full_text = " ".join(text_parts).strip()
         logger.info("[job %s] %s > %s", job_id, event.author, full_text)
-
-
-def _get_job_from_queue(job_id: int) -> Optional[ACPJob]:
-    """Get a job from the shared queue (updated each poll). Returns None if not in queue."""
-    with _job_queue_lock:
-        return _job_queue.get(job_id)
-
-
-def _get_job_or_none(job_id: int) -> Optional[ACPJob]:
-    """Get job from queue first, else fetch by id. Returns None if job not found."""
-    job = _get_job_from_queue(job_id)
-    if job is not None:
-        return job
-    try:
-        return acp_client.get_job_by_onchain_id(job_id)
-    except ACPApiError:
-        return None
 
 
 def _get_job_fresh(job_id: int) -> Optional[ACPJob]:
@@ -779,7 +781,8 @@ def initiate_evaluation_jobs_batch(
 
 
 def _deliver_evaluation_report(parent_job_id: int, report: Union[Dict[str, Any], str]) -> str:
-    """Internal: deliver compiled report to parent job. Parent job delivery by us only happens in TRANSACTION phase (we are the provider)."""
+    """Internal: deliver compiled report to parent job. Parent job delivery by us only happens in TRANSACTION phase (we are the provider).
+    Returns a success message on success; on failure returns an error string so the caller can retry. Never raises."""
     job = _get_job_fresh(parent_job_id)
     if job is None:
         return f"Parent job {parent_job_id} not found."
@@ -789,6 +792,12 @@ def _deliver_evaluation_report(parent_job_id: int, report: Union[Dict[str, Any],
         job.deliver(report)
         return f"Evaluation report delivered to parent job {parent_job_id}."
     except ValueError as e:
+        return f"Deliver failed: {e}"
+    except ACPApiError as e:
+        logger.warning("Parent %s: deliver ACPApiError (will retry): %s", parent_job_id, e)
+        return f"Deliver failed: {e}"
+    except Exception as e:
+        logger.warning("Parent %s: deliver error (will retry): %s", parent_job_id, e, exc_info=True)
         return f"Deliver failed: {e}"
 
 
@@ -882,6 +891,95 @@ def _aggregate_results_by_offering(results: List[Dict[str, Any]]) -> Dict[str, L
         item = {k: v for k, v in r.items() if k != "offering_name"}
         by_offering.setdefault(name, []).append(item)
     return by_offering
+
+
+def _create_gdocs_report(title: str, body_text: str) -> Optional[str]:
+    """Create a Google Doc with the given title and body text; return the view URL (anyone with link) or edit URL on success, None on failure."""
+    try:
+        SCOPES = [
+            "https://www.googleapis.com/auth/documents",
+            "https://www.googleapis.com/auth/drive",
+        ]
+        creds = service_account.Credentials.from_service_account_file(
+            env.GOOGLE_APPLICATION_CREDENTIALS,
+            scopes=SCOPES,
+        )
+        drive_service = build("drive", "v3", credentials=creds)
+        docs_service = build("docs", "v1", credentials=creds)
+        folder_id = env.GOOGLE_DOCS_FOLDER_ID
+
+        if folder_id:
+            file = drive_service.files().create(
+                body={
+                    "name": title,
+                    "mimeType": "application/vnd.google-apps.document",
+                    "parents": [folder_id],
+                },
+                fields="id",
+                supportsAllDrives=True,
+            ).execute()
+            doc_id = file.get("id")
+        else:
+            doc = docs_service.documents().create(body={"title": title}).execute()
+            doc_id = doc.get("documentId")
+        if not doc_id:
+            return None
+        docs_service.documents().batchUpdate(
+            documentId=doc_id,
+            body={
+                "requests": [
+                    {"insertText": {"location": {"index": 1}, "text": body_text}}
+                ]
+            },
+        ).execute()
+        try:
+            perm_kw = {"fileId": doc_id, "body": {"type": "anyone", "role": "reader"}, "fields": "id"}
+            if folder_id:
+                perm_kw["supportsAllDrives"] = True
+            drive_service.permissions().create(**perm_kw).execute()
+            return f"https://docs.google.com/document/d/{doc_id}/view"
+        except HttpError:
+            return f"https://docs.google.com/document/d/{doc_id}/edit"
+    except HttpError as e:
+        if e.resp.status == 403 and "insufficient authentication scopes" in str(e).lower():
+            logger.warning(
+                "Google Docs: 403 insufficient scopes. Use a service account with Docs+Drive. See evaluator README."
+            )
+        else:
+            logger.warning("Google Docs report creation failed: %s", e)
+        return None
+    except Exception as e:
+        logger.warning("Google Docs report creation failed: %s", e, exc_info=True)
+        return None
+
+
+def _build_delivery_payload(
+    results: List[Dict[str, Any]],
+    by_offering: Dict[str, List[Dict[str, Any]]],
+    summary_str: str,
+    details_url: Optional[str],
+) -> Dict[str, Any]:
+    """Build the compact payload for job.deliver: overall score, summary, per-offering score/summary, and optional details URL."""
+    total = len(results)
+    passed = sum(1 for r in results if r.get("passed"))
+    by_offering_list = []
+    for offering_name in sorted(by_offering.keys()):
+        offering_results = by_offering[offering_name]
+        p = sum(1 for r in offering_results if r.get("passed"))
+        n = len(offering_results)
+        by_offering_list.append({
+            "offering_name": offering_name,
+            "score": f"{p}/{n} passed",
+            "summary": f"{p}/{n} test cases passed for this offering.",
+        })
+    payload = {
+        "overall_score": f"{passed}/{total} passed",
+        "summary": f"Graduation evaluation completed with {summary_str} pass rate.",
+        "by_offering": by_offering_list,
+    }
+    if details_url:
+        payload["details_url"] = details_url
+    return payload
 
 
 def _format_detailed_report(results: List[Dict[str, Any]], summary: str) -> str:
@@ -1037,12 +1135,14 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
         if all_terminal:
             summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)} passed"
             by_offering = _aggregate_results_by_offering(results)
-            report = {
-                "test_results": by_offering,
-                "summary": summary_str,
-                "details": _format_detailed_report(results, summary_str),
-            }
-            # Use fresh parent and retry delivery a few times (phase can change or API can fail transiently).
+            detailed_text = _format_detailed_report(results, summary_str)
+            # Upload full details to Google Docs and get link; deliver compact payload (link + overall score + per-offering summary).
+            details_url = _create_gdocs_report(
+                title=f"Graduation Evaluation Report - Job {parent_job_id}",
+                body_text=detailed_text,
+            )
+            report = _build_delivery_payload(results, by_offering, summary_str, details_url)
+            logger.info("Parent %s: all children terminal, attempting delivery (up to 3 attempts this cycle).", parent_job_id)
             delivered = False
             for attempt in range(3):
                 parent_job = _get_job_fresh(parent_job_id)
@@ -1310,10 +1410,22 @@ def _main_processor_loop() -> None:
                             _current_parent_id_for_offerings.value = None
                     logger.info("Job %s: agent run finished", job.id)
                     if is_parent_transaction:
-                        # Run child-wait in background so poll loop keeps running (to pay child jobs and evaluate deliverables)
+                        # Run child-wait in background so poll loop keeps running (to pay child jobs and evaluate deliverables).
+                        # On unexpected exception we restart the wait thread so delivery can still be retried (state is left intact).
                         def _run_wait_and_deliver(pid: int) -> None:
-                            _wait_for_children_and_deliver_report(pid)
-                            logger.info("Job %s: child wait finished, report delivered or timeout.", pid)
+                            try:
+                                _wait_for_children_and_deliver_report(pid)
+                                logger.info("Job %s: child wait finished, report delivered or timeout.", pid)
+                            except Exception as e:
+                                logger.error(
+                                    "Job %s: wait-and-deliver thread crashed, restarting to retry delivery: %s",
+                                    pid, e, exc_info=True,
+                                )
+                                threading.Thread(
+                                    target=_run_wait_and_deliver,
+                                    args=(pid,),
+                                    daemon=True,
+                                ).start()
 
                         threading.Thread(
                             target=_run_wait_and_deliver,

@@ -47,7 +47,13 @@ The evaluator acts as the **evaluator**:
 - Calls `evaluate_job_deliverable(job_id, accept, reason)` to accept or reject.
 
 ### 5) Report delivery
-Once all child jobs are terminal, the evaluator builds a detailed report and delivers it to the **parent** job (TRANSACTION phase only).
+Once all child jobs are terminal, the evaluator builds a detailed report and delivers it to the **parent** job (TRANSACTION phase only). The full report is written to a **Google Doc** (when the Docs/Drive API is available); the on-chain deliverable is kept short and includes:
+- **details_url**: link to the Google Doc with the full report
+- **overall_score**: e.g. `8/12 passed`
+- **summary**: one-line overall summary
+- **by_offering**: per-offering score and short summary
+
+If Google Docs creation fails (missing dependency or API disabled), the delivery payload still includes overall score, summary, and by_offering, but no `details_url`.
 
 ## Evaluation Logic
 
@@ -110,6 +116,18 @@ If the deliverable includes image or video URLs (in text or common keys like `im
 - Detailed, aggregated evaluation report per offering
 - Safeguards: terminal-phase checks, max batch size, timeouts
 
+## Optional: Google Docs report
+
+To upload the full evaluation report to a Google Doc and include its link in the deliverable:
+1. Install: `pip install google-api-python-client`
+2. Enable **Google Docs API** and **Google Drive API** for your Google Cloud project.
+3. Create a **service account** (JSON key) with access to Docs and Drive, and a **Shared Drive or Drive folder** for report docs.
+4. In `.env` (or environment) set:
+   - **GOOGLE_APPLICATION_CREDENTIALS** – path to the service account JSON key file.
+   - **GOOGLE_DOCS_FOLDER_ID** – the folder ID where report docs should be created (Shared Drive supported).
+
+If these are not set, the evaluator still delivers a compact payload (overall score, summary, by_offering) without `details_url`.
+
 ## Configuration
 
 The evaluator uses `EnvSettings` in `env.py` (extends ACP env settings):
@@ -118,6 +136,8 @@ The evaluator uses `EnvSettings` in `env.py` (extends ACP env settings):
 - `GOOGLE_CLOUD_LOCATION`
 - `AGENT_ENGINE_ID`
 - `AGENT_ENGINE_LOCATION`
+- `GOOGLE_APPLICATION_CREDENTIALS` – (optional) path to service account JSON for Google Docs report upload.
+- `GOOGLE_DOCS_FOLDER_ID` – (optional) Shared Drive or Drive folder ID where report docs are created.
 
 ## Running
 
