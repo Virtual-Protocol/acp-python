@@ -34,7 +34,8 @@ from virtuals_acp.exceptions import ACPApiError
 from virtuals_acp.job import ACPJob
 from virtuals_acp.contract_clients.contract_client_v2 import ACPContractClientV2
 from virtuals_acp.memo import ACPMemo
-from virtuals_acp.models import ACPJobPhase
+from virtuals_acp.models import ACPJobPhase, MemoType
+from virtuals_acp.fare import FareAmount
 
 # Phases where the job is already terminal; reject_job cannot be used.
 _TERMINAL_PHASES = {ACPJobPhase.COMPLETED, ACPJobPhase.REJECTED, ACPJobPhase.EXPIRED}
@@ -503,10 +504,15 @@ def _build_evaluation_content(job_id: int, prompt: str, deliverable: Any) -> typ
     return types.UserContent(parts=parts)
 
 
+# Estimated number of child jobs per offering (accept + reject cases); used to compute payable requirement.
+_ESTIMATED_JOBS_PER_OFFERING = 6
+
+
 def accept_job(job_id: int, reason: str) -> str:
     """
     Accept a job request (REQUEST phase only). Use after verifying agent identity.
-    Signs the request memo and creates the payment requirement. Fails if job is not in REQUEST phase or job not found.
+    Signs the request memo and creates a payable requirement for the estimated total
+    needed to invoke all children jobs. Fails if job is not in REQUEST phase or job not found.
 
     Args:
         job_id: The on-chain job id.
@@ -519,6 +525,26 @@ def accept_job(job_id: int, reason: str) -> str:
         return f"Job {job_id} is in {job.phase.name} phase. accept_job only works in REQUEST phase."
     try:
         job.accept(reason)
+        agent_wallet = (
+            job.requirement.get("agentWalletAddress")
+            if isinstance(job.requirement, dict)
+            else None
+        )
+        if agent_wallet:
+            agent = acp_client.get_agent(agent_wallet)
+            if agent and agent.job_offerings:
+                estimated_total = sum(
+                    off.price * _ESTIMATED_JOBS_PER_OFFERING
+                    for off in agent.job_offerings
+                )
+                if estimated_total > 0:
+                    job.create_payable_requirement(
+                        f"Job accepted, please make payment to proceed (estimated cost for evaluation jobs: {estimated_total}).",
+                        MemoType.PAYABLE_REQUEST,
+                        FareAmount(estimated_total, job.base_fare),
+                        job.provider_address
+                    )
+                    return f"Job {job_id} accepted with payable requirement (estimated {estimated_total}). {reason}"
         job.create_requirement("Job accepted, please make payment to proceed")
         return f"Job {job_id} accepted. {reason}"
     except ValueError as e:
@@ -784,8 +810,13 @@ def initiate_evaluation_jobs_batch(
     }, indent=2)
 
 
-def _deliver_evaluation_report(parent_job_id: int, report: Union[Dict[str, Any], str]) -> str:
+def _deliver_evaluation_report(
+    parent_job_id: int,
+    report: Union[Dict[str, Any], str],
+    remainder_amount: Optional[float] = None,
+) -> str:
     """Internal: deliver compiled report to parent job. Parent job delivery by us only happens in TRANSACTION phase (we are the provider).
+    If remainder_amount is provided and > 0, delivers report and returns remainder to parent client via deliver_payable.
     Returns a success message on success; on failure returns an error string so the caller can retry. Never raises."""
     job = _get_job_fresh(parent_job_id)
     if job is None:
@@ -793,6 +824,12 @@ def _deliver_evaluation_report(parent_job_id: int, report: Union[Dict[str, Any],
     if job.phase != ACPJobPhase.TRANSACTION:
         return f"Parent job {parent_job_id} is in {job.phase.name}; delivery only in TRANSACTION phase."
     try:
+        if remainder_amount is not None and remainder_amount > 0:
+            job.deliver_payable(
+                report,
+                FareAmount(remainder_amount, job.base_fare),
+            )
+            return f"Evaluation report delivered to parent job {parent_job_id} with remainder {remainder_amount} returned to client."
         job.deliver(report)
         return f"Evaluation report delivered to parent job {parent_job_id}."
     except ValueError as e:
@@ -964,9 +1001,12 @@ def _build_delivery_payload(
     detailed_report: Optional[str],
     *,
     agent_name: str,
-    wallet_address: str
+    wallet_address: str,
+    amount_collected: Optional[float] = None,
+    amount_consumed: Optional[float] = None,
+    amount_returned: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Build the compact payload for job.deliver: overall score, summary, per-offering score/summary, and optional details URL."""
+    """Build the compact payload for job.deliver: overall score, summary, per-offering score/summary, optional details URL, and optional payment summary."""
     total = len(results)
     passed = sum(1 for r in results if r.get("passed"))
     by_offering_list = []
@@ -985,9 +1025,16 @@ def _build_delivery_payload(
         "overall_score": f"{passed}/{total} passed",
         "test_results": by_offering_list,
         "summary": f"Graduation evaluation completed with {summary_str} pass rate.",
+        "butler_instruction": "Please mention the total_job_fee_collected, total_job_fee_consumed, and total_job_fee_returned in the deliverable if provided, otherwise no need to mention these fields.",
     }
     if detailed_report:
         payload["details_url"] = detailed_report
+    if amount_collected is not None:
+        payload["total_job_fee_collected"] = amount_collected
+    if amount_consumed is not None:
+        payload["total_job_fee_consumed"] = amount_consumed
+    if amount_returned is not None:
+        payload["total_job_fee_returned"] = amount_returned
     return payload
 
 
@@ -1270,10 +1317,12 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                     "job_id": job_id, "expected_outcome": expected, "actual_phase": "unknown", "passed": False,
                     "reason": "Could not fetch job phase.",
                     "requirement": None, "deliverable_summary": None, "offering_name": offering_name,
+                    "price": 0,
                 })
                 all_terminal = False
                 continue
             phase_name = phase.name if hasattr(phase, "name") else str(phase)
+            child_price = getattr(child_job, "price", 0) or 0
             if phase not in _TERMINAL_PHASES:
                 all_terminal = False
                 results.append({
@@ -1281,6 +1330,7 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                     "reason": f"Job not yet terminal (current phase: {phase_name}).",
                     "requirement": _summary_for_report(getattr(child_job, "requirement", None), max_len=500),
                     "deliverable_summary": None, "offering_name": offering_name,
+                    "price": child_price,
                 })
                 continue
             evaluator_reason = _get_evaluator_rejection_reason(child_job) if phase == ACPJobPhase.REJECTED else None
@@ -1310,12 +1360,18 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 "requirement": _summary_for_report(getattr(child_job, "requirement", None), max_len=500),
                 "deliverable_summary": deliverable_summary,
                 "offering_name": offering_name,
+                "price": child_price,
             })
         if all_terminal:
             summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)} passed"
             by_offering = _aggregate_results_by_offering(results)
             parent_job = _get_job_fresh(parent_job_id)
-            agent_evaluated = acp_client.get_agent(parent_job.requirement.get("agentWalletAddress"))
+            agent_wallet_address = (
+                parent_job.requirement.get("agentWalletAddress")
+                if isinstance(parent_job.requirement, dict)
+                else None
+            )
+            agent_evaluated = acp_client.get_agent(agent_wallet_address)
             wallet_address = agent_evaluated.wallet_address
             agent_name = agent_evaluated.name
             detailed_requests = _format_detailed_report(
@@ -1325,6 +1381,15 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 title=f"Graduation Evaluation Report - Job {parent_job_id}",
                 requests=detailed_requests,
             )
+            # Remainder to return to parent client: total received minus amount spent on children that were not refunded (REJECTED/EXPIRED children are refunded to us).
+            net_received = parent_job.net_payable_amount or 0
+            amount_spent_non_refunded = sum(
+                r.get("price", 0) for r in results
+                if r.get("actual_phase") not in ("REJECTED", "EXPIRED")
+            )
+            remainder = net_received - amount_spent_non_refunded
+            remainder_amount: Optional[float] = remainder if remainder > 0 else None
+            amount_returned_for_payload = remainder_amount if remainder_amount is not None else 0
             report = _build_delivery_payload(
                 results,
                 by_offering,
@@ -1332,7 +1397,15 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 details_url,
                 agent_name=agent_name,
                 wallet_address=wallet_address,
+                amount_collected=net_received,
+                amount_consumed=amount_spent_non_refunded,
+                amount_returned=amount_returned_for_payload,
             )
+            if remainder_amount is not None:
+                logger.info(
+                    "Parent %s: returning remainder %s to client (net_received=%s, spent_non_refunded=%s).",
+                    parent_job_id, remainder_amount, net_received, amount_spent_non_refunded,
+                )
             logger.info("Parent %s: all children terminal, attempting delivery (up to 3 attempts this cycle).", parent_job_id)
             delivered = False
             for attempt in range(3):
@@ -1348,7 +1421,7 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                     )
                     time.sleep(5)
                     continue
-                result = _deliver_evaluation_report(parent_job_id, report)
+                result = _deliver_evaluation_report(parent_job_id, report, remainder_amount=remainder_amount)
                 if "delivered" in result.lower() or "Evaluation report delivered" in result:
                     delivered = True
                     break
@@ -1540,7 +1613,11 @@ def _main_processor_loop() -> None:
                     with _job_queue_condition:
                         _job_queue.pop(job_id, None)
                     continue
-                agent_wallet_to_evaluate = job.requirement.get("agentWalletAddress")
+                agent_wallet_to_evaluate = (
+                    job.requirement.get("agentWalletAddress")
+                    if isinstance(job.requirement, dict)
+                    else None
+                )
                 if agent_wallet_to_evaluate and agent_wallet_to_evaluate.lower() == acp_client.agent_wallet_address.lower():
                     result = reject_job(job.id, "Cannot evaluate self: the graduation request targets this evaluator agent.")
                     logger.info("Main processor: job %s rejected (self-evaluation not allowed): %s", job.id, result)
