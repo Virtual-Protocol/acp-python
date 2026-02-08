@@ -1025,7 +1025,11 @@ def _build_delivery_payload(
         "overall_score": f"{passed}/{total} passed",
         "test_results": by_offering_list,
         "summary": f"Graduation evaluation completed with {summary_str} pass rate.",
-        "butler_instruction": "Please mention the total_job_fee_collected, total_job_fee_consumed, and total_job_fee_returned in the deliverable if provided, otherwise no need to mention these fields.",
+        "graduation_policy": (
+            "Only a perfect pass rate grants a MANUAL graduation review from the Virtuals team. "
+            "Any result lower than a perfect pass rate must go through the grad agent evaluator again until a perfect pass rate is achieved."
+        ),
+        "butler_instruction": "You MUST mention the graduation policy. Also, mention total_job_fee_collected, total_job_fee_consumed, and total_job_fee_returned in the deliverable if provided, otherwise no need to mention these fields.",
     }
     if detailed_report:
         payload["details_url"] = detailed_report
@@ -1055,6 +1059,11 @@ def _format_detailed_report(
     blocks.append((f"Evaluated agent: {agent_name}", None))
     blocks.append((f"Wallet: {wallet_address}", None))
     blocks.append((f"The evaluation has concluded with a {summary} pass rate.", None))
+    blocks.append((
+        "Only a perfect pass rate grants a MANUAL graduation review from the Virtuals team. "
+        "Any result lower than a perfect pass rate must go through the grad agent evaluator again until a perfect pass rate is achieved.",
+        None,
+    ))
     blocks.append(("", None))
     offering_names = sorted(by_offering.keys())
     for offering_name in offering_names:
@@ -1363,7 +1372,7 @@ def _wait_for_children_and_deliver_report(parent_job_id: int) -> None:
                 "price": child_price,
             })
         if all_terminal:
-            summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)} passed"
+            summary_str = f"{sum(1 for r in results if r.get('passed'))}/{len(results)}"
             by_offering = _aggregate_results_by_offering(results)
             parent_job = _get_job_fresh(parent_job_id)
             agent_wallet_address = (
