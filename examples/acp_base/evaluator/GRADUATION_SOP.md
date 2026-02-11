@@ -29,7 +29,7 @@ Required inputs for pending evaluation:
 ### Part 2: Pre-Evaluation Validation
 Before running jobs, the evaluator checks the request has `agentName` and `agentWalletAddress`, then verifies identity on-chain.
 
-The identity check uses fuzzy similarity matching with a threshold of **85%**:
+The identity check uses fuzzy similarity matching with a threshold of **75%**:
 - If the wallet address is correct but the agent name is incorrect -> Fail
 - If the agent name is correct but the wallet address is incorrect -> Fail
 
