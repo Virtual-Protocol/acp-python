@@ -28,7 +28,8 @@ class ACPJobOffering(BaseModel):
     provider_address: str
     name: str
     price: float
-    price_type: PriceType = PriceType.FIXED
+    price_type: PriceType
+    required_funds: bool
     requirement: Optional[Union[Dict[str, Any], str]] = None
     deliverable: Optional[Union[Dict[str, Any], str]] = None
 

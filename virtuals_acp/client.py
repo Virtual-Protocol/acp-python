@@ -296,12 +296,12 @@ class VirtualsACP:
         provider_address = agent_data.get("walletAddress")
 
         job_offerings: List[ACPJobOffering] = []
-        for job in agent_data.get("jobs", []):
-            if "priceV2" in job:
-                price = job["priceV2"]["value"]
-                price_type = PriceType(job["priceV2"]["type"])
-            elif "price" in job:
-                price = job["price"]
+        for offering in agent_data.get("jobs", []):
+            if "priceV2" in offering:
+                price = offering["priceV2"]["value"]
+                price_type = PriceType(offering["priceV2"]["type"])
+            elif "price" in offering:
+                price = offering["price"]
                 price_type = PriceType.FIXED
             else:
                 continue
@@ -311,10 +311,12 @@ class VirtualsACP:
                     acp_client=self,
                     contract_client=contract_client,
                     provider_address=provider_address,
-                    name=job["name"],
+                    name=offering["name"],
                     price=price,
                     price_type=price_type,
-                    requirement=job.get("requirement", None),
+                    required_funds=offering["requiredFunds"],
+                    requirement=offering.get("requirement", None),
+                    deliverable=offering.get("deliverable", None),
                 )
             )
 
