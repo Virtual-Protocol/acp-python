@@ -56,6 +56,7 @@ class TestACPJobOffering:
             name="Test Service",
             price=10.0,
             price_type=PriceType.FIXED,
+            sla_minutes=60,
             requirement=None,
             deliverable=None
         )
@@ -71,6 +72,7 @@ class TestACPJobOffering:
             name="Test Service",
             price=10.0,
             price_type=PriceType.FIXED,
+            sla_minutes=60,
             requirement={
                 "type": "object",
                 "properties": {
@@ -96,6 +98,7 @@ class TestACPJobOffering:
                 name="Test Service",
                 price=10.0,
                 price_type=PriceType.FIXED,
+                sla_minutes=60,
                 requirement=None,
                 deliverable=None
             )
@@ -123,6 +126,7 @@ class TestACPJobOffering:
                 name="Test Service",
                 price=10.0,
                 price_type=PriceType.PERCENTAGE,
+                sla_minutes=60,
                 requirement=requirement,
                 deliverable=deliverable,
             )
@@ -145,6 +149,7 @@ class TestACPJobOffering:
                 name="Test Service",
                 price=10.0,
                 price_type=PriceType.FIXED,
+                sla_minutes=60,
                 requirement='{"type": "string"}',
                 deliverable=None
             )
@@ -165,6 +170,7 @@ class TestACPJobOffering:
                 name="Test Service",
                 price=10.0,
                 price_type=PriceType.FIXED,
+                sla_minutes=60,
                 requirement=requirement,
                 deliverable=None
             )
@@ -195,10 +201,10 @@ class TestACPJobOffering:
         class TestExpiryHandling:
             """Test expiry date handling"""
 
-            def test_should_use_default_expiry_when_none(
+            def test_should_use_sla_minutes_for_expiry(
                 self, basic_offering, mock_contract_client
             ):
-                """Should use default 1 day expiry when not provided"""
+                """Should use offering sla_minutes for job expiration"""
                 mock_contract_client.get_job_id.return_value = 123
                 mock_contract_client.handle_operation.return_value = {}
                 basic_offering.acp_client.get_by_client_and_provider.return_value = None
@@ -213,34 +219,11 @@ class TestACPJobOffering:
                         service_requirement={"task": "test"}
                     )
 
-                    # Check that create_job was called
                     create_call = mock_contract_client.create_job.call_args
                     expired_at = create_call[0][2]  # Third positional arg
 
-                    # Should be 1 day after now
-                    expected = mock_now + timedelta(days=1)
+                    expected = mock_now + timedelta(minutes=basic_offering.sla_minutes)
                     assert expired_at == expected
-
-            def test_should_use_custom_expiry_when_provided(
-                self, basic_offering, mock_contract_client
-            ):
-                """Should use custom expiry when provided"""
-                mock_contract_client.get_job_id.return_value = 123
-                mock_contract_client.handle_operation.return_value = {}
-                basic_offering.acp_client.get_by_client_and_provider.return_value = None
-
-                custom_expiry = datetime(
-                    2024, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
-
-                basic_offering.initiate_job(
-                    service_requirement={"task": "test"},
-                    expired_at=custom_expiry
-                )
-
-                create_call = mock_contract_client.create_job.call_args
-                expired_at = create_call[0][2]
-
-                assert expired_at == custom_expiry
 
         class TestServiceRequirementValidation:
             """Test service requirement validation"""

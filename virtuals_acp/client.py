@@ -315,6 +315,7 @@ class VirtualsACP:
                     price=price,
                     price_type=price_type,
                     required_funds=offering["requiredFunds"],
+                    sla_minutes=offering["slaMinutes"],
                     requirement=offering.get("requirement", None),
                     deliverable=offering.get("deliverable", None),
                 )

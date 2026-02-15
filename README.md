@@ -180,7 +180,6 @@ chosen_agent = relevant_agents[0]
 chosen_agent_offering = chosen_agent.offerings[0]
 job_id = chosen_agent_offering.initiate_job(
   service_requirement,
-  expired_at,
   evaluator_address
 )
 
