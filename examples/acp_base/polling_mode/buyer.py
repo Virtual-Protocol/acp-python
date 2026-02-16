@@ -1,6 +1,5 @@
 import logging
 import time
-from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
 
@@ -66,7 +65,6 @@ def buyer():
             "<your-schema-key-2>": "<your-schema-value-2>",
         },
         evaluator_address=env.EVALUATOR_AGENT_WALLET_ADDRESS,  # evaluator address
-        expired_at=datetime.now() + timedelta(minutes=3.1),  # job expiry duration, minimum 3 minutes
     )
 
     logger.info(f"Job {job_id} initiated")

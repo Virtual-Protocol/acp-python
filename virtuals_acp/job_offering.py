@@ -30,6 +30,7 @@ class ACPJobOffering(BaseModel):
     price: float
     price_type: PriceType
     required_funds: bool
+    sla_minutes: int
     requirement: Optional[Union[Dict[str, Any], str]] = None
     deliverable: Optional[Union[Dict[str, Any], str]] = None
 
@@ -54,10 +55,8 @@ class ACPJobOffering(BaseModel):
         self,
         service_requirement: Union[Dict[str, Any], str],
         evaluator_address: Optional[str] = None,
-        expired_at: Optional[datetime] = None,
     ) -> int:
-        if expired_at is None:
-            expired_at = datetime.now(timezone.utc) + timedelta(days=1)
+        expired_at = datetime.now(timezone.utc) + timedelta(minutes=self.sla_minutes)
 
         # Validate against requirement schema if present
         if self.requirement:
@@ -139,7 +138,7 @@ class ACPJobOffering(BaseModel):
                 evaluator_address or self.contract_client.agent_wallet_address,
                 fare_amount.amount,
                 fare_amount.fare.contract_address,
-                expired_at or datetime.utcnow(),
+                expired_at,
                 is_x402_job=is_x402_job,
             )
 
