@@ -1,14 +1,13 @@
 # virtuals_acp/configs.py
 from web3 import Web3
 
-from typing import Literal, Optional, List, Dict, Any
+from typing import Literal, Optional, List, Dict, Any, TypedDict
 from virtuals_acp.fare import Fare
 from virtuals_acp.abis.abi import ACP_ABI
 from virtuals_acp.abis.abi_v2 import ACP_V2_ABI
-from virtuals_acp.models import X402Config
+from virtuals_acp.models import ChainConfig, X402Config
 
 ChainEnv = Literal["base-sepolia", "base"]
-
 
 class ACPContractConfig:
     def __init__(
@@ -24,6 +23,7 @@ class ACPContractConfig:
         abi: List[Dict[str, Any]],
         rpc_endpoint: Optional[str] = None,
         x402_config: Optional[X402Config] = None,
+        chains: Optional[List[ChainConfig]] = None,
     ):
         self.chain = chain
         self.rpc_url = rpc_url
@@ -36,6 +36,7 @@ class ACPContractConfig:
         self.abi = abi
         self.rpc_endpoint = rpc_endpoint
         self.x402_config = x402_config
+        self.chains = chains
 
 
 BASE_SEPOLIA_CONFIG = ACPContractConfig(

@@ -11,7 +11,7 @@ from eth_account.messages import encode_typed_data
 from eth_utils.conversions import to_hex
 
 from virtuals_acp.configs.configs import BASE_SEPOLIA_CONFIG, ACPContractConfig
-from virtuals_acp.models import OperationPayload
+from virtuals_acp.models import ChainConfig, OperationPayload
 
 MAX_RETRIES = 10
 
@@ -101,6 +101,7 @@ class AlchemyAccountKit:
         entity_id: int,
         owner_account: Account,
         chain_id: Optional[int] = None,
+        chains: Optional[List[ChainConfig]] = None,
     ):
         """
         Initialize the Alchemy Account Kit
@@ -114,6 +115,11 @@ class AlchemyAccountKit:
         self.rpc_client = AlchemyRPCClient(config.alchemy_base_url)
         self.account_address = agent_wallet_address
         self.owner_account = owner_account
+        self.rpc_clients = {}
+
+        if chains:
+            for chain in chains:
+                self.rpc_clients[chain.chain_id] = AlchemyRPCClient(f"{config.alchemy_base_url}?chainId={chain.chain_id}")
 
         self.permissions_context = self.create_session(entity_id)
 
@@ -174,6 +180,7 @@ class AlchemyAccountKit:
         self,
         calls: List[OperationPayload],
         capabilities: Optional[Dict[str, Any]] = None,
+        chain_id: Optional[int] = None,
     ) -> Dict[str, Any]:
         if not self.account_address:
             raise ValueError("Must request account first")
@@ -191,15 +198,18 @@ class AlchemyAccountKit:
 
         params = {
             "from": self.account_address,
-            "chainId": to_hex(self.chain_id),
+            "chainId": to_hex(chain_id or self.chain_id),
             "calls": [call.model_dump(exclude_none=True) for call in calls],
             "capabilities": final_capabilities,
         }
 
-        return self.rpc_client.wallet_prepare_calls(params)
+        if chain_id:
+            return self.rpc_clients[chain_id].wallet_prepare_calls(params)
+        else:
+            return self.rpc_client.wallet_prepare_calls(params)
 
     def send_prepared_calls(
-        self, prepare_calls_result: Dict[str, Any]
+        self, prepare_calls_result: Dict[str, Any], chain_id: Optional[int] = None
     ) -> Dict[str, Any]:
         if not self.permissions_context:
             raise ValueError("Must create session first")
@@ -229,7 +239,10 @@ class AlchemyAccountKit:
             "permissions": {"context": self.permissions_context}
         }
 
-        return self.rpc_client.wallet_send_prepared_calls(send_prepared_calls_params)
+        if chain_id:
+            return self.rpc_clients[chain_id].wallet_send_prepared_calls(send_prepared_calls_params)
+        else:
+            return self.rpc_client.wallet_send_prepared_calls(send_prepared_calls_params)
 
     def wait_for_call_status(self, prepared_call_id: str) -> Dict[str, Any]:
         retries = MAX_RETRIES
@@ -250,7 +263,7 @@ class AlchemyAccountKit:
             time.sleep(0.1 * (MAX_RETRIES - retries))
 
     def handle_user_operation(
-        self, calls: List[OperationPayload], capabilities=None
+        self, calls: List[OperationPayload], capabilities=None, chain_id: Optional[int] = None
     ) -> Dict[str, Any]:
         if capabilities is None:
             capabilities = {}
@@ -261,11 +274,10 @@ class AlchemyAccountKit:
         additional_capabilities = {"maxFeePerGas": {"multiplier": 1.1}}
         capabilities.update(additional_capabilities)
 
-        prepare_result = self.prepare_calls(calls, capabilities)
-
         while True:
             try:
-                result = self.send_prepared_calls(prepare_result)
+                prepare_result = self.prepare_calls(calls, capabilities, chain_id)
+                result = self.send_prepared_calls(prepare_result, chain_id)
                 return self.wait_for_call_status(result["preparedCallIds"][0])
             except Exception as e:
                 retries -= 1

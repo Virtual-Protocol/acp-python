@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 from virtuals_acp.models import (
     ACPJobPhase,
+    ACPMemoState,
     MemoType,
     PayloadType,
     GenericPayload,
@@ -33,6 +34,7 @@ class ACPMemo(BaseModel):
     payable_details: Optional[Dict[str, Any]] = None
     txn_hash: Optional[str] = None
     signed_txn_hash: Optional[str] = None
+    state: Optional[ACPMemoState] = None
 
     structured_content: Optional[GenericPayload] = None
 

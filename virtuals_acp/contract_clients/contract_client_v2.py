@@ -7,6 +7,7 @@ from eth_account import Account
 from web3 import Web3
 
 from virtuals_acp.abis.job_manager import JOB_MANAGER_ABI
+from virtuals_acp.abis.memo_manager import MEMO_MANAGER_ABI
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG_V2
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
@@ -38,10 +39,14 @@ class ACPContractClientV2(BaseAcpContractClient):
             entity_id=entity_id,
             owner_account=self.account,
             chain_id=config.chain_id,
+            chains=config.chains,
         )
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
         self.x402 = ACPX402(config, self.account, self.w3, self.agent_wallet_address, self.entity_id)
 
+        self.public_clients = {}
+        for c in config.chains:
+            self.public_clients[c.chain_id] = Web3(Web3.HTTPProvider(c.rpc_url))
 
         def multicall_read(
             w3: Web3, contract_address: str, abi: list[Dict[str, Any]], calls: list[str]
@@ -64,9 +69,13 @@ class ACPContractClientV2(BaseAcpContractClient):
             raise ACPError("Failed to fetch sub-manager contract addresses")
 
         self.job_manager_address = Web3.to_checksum_address(job_manager)
-
         self.job_manager_contract = self.w3.eth.contract(
             address=self.job_manager_address, abi=JOB_MANAGER_ABI
+        )
+
+        self.memo_manager_address = Web3.to_checksum_address(memo_manager)
+        self.memo_manager_contract = self.w3.eth.contract(
+            address=self.memo_manager_address, abi=MEMO_MANAGER_ABI
         )
 
         self.validate_session_key_on_chain(self.account.address, self.entity_id)
@@ -92,8 +101,8 @@ class ACPContractClientV2(BaseAcpContractClient):
         random_bytes = secrets.token_bytes(bytes_len)
         return int.from_bytes(random_bytes, byteorder="big")
 
-    def handle_operation(self, trx_data: List[OperationPayload]) -> Dict[str, Any]:
-        return self.alchemy_kit.handle_user_operation(trx_data)
+    def handle_operation(self, trx_data: List[OperationPayload], chain_id: Optional[int] = None) -> Dict[str, Any]:
+        return self.alchemy_kit.handle_user_operation(trx_data, chain_id=chain_id)
 
     def get_job_id(
         self, response: Dict[str, Any], client_address: str, provider_address: str
@@ -187,3 +196,6 @@ class ACPContractClientV2(BaseAcpContractClient):
             )
         except Exception as e:
             raise ACPError("Failed to get X402 payment details", e)
+
+    def get_asset_manager_address(self) -> str:
+        return self.memo_manager_contract.functions.assetManager().call()

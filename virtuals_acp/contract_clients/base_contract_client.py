@@ -37,6 +37,7 @@ class BaseAcpContractClient(ABC):
         self.agent_wallet_address = Web3.to_checksum_address(agent_wallet_address)
         self.config = config
         self.w3 = Web3(Web3.HTTPProvider(config.rpc_url))
+        self.public_clients: Dict[int, Web3] = {}
 
         self.chain = config.chain
         self.abi = config.abi
@@ -145,7 +146,7 @@ class BaseAcpContractClient(ABC):
         return {"to": target_address, "data": encoded_data}
 
     @abstractmethod
-    def handle_operation(self, trx_data: List[OperationPayload]) -> Dict[str, Any]:
+    def handle_operation(self, trx_data: List[OperationPayload], chain_id: Optional[int] = None) -> Dict[str, Any]:
         pass
 
     @abstractmethod
@@ -231,10 +232,11 @@ class BaseAcpContractClient(ABC):
         self,
         amount_base_unit: int,
         payment_token_address: Optional[str] = None,
+        spender_address: Optional[str] = None,
     ) -> OperationPayload:
         operation = self._build_user_operation(
             "approve",
-            [self.config.contract_address, amount_base_unit],
+            [spender_address or self.config.contract_address, amount_base_unit],
             contract_address=payment_token_address,
             abi=ERC20_ABI,
         )
@@ -272,6 +274,45 @@ class BaseAcpContractClient(ABC):
                 math.floor(expired_at.timestamp()),
                 secured,
                 next_phase,
+            ],
+            self.config.contract_address,
+        )
+
+        return OperationPayload(
+            data=operation["data"],
+            to=operation["to"],
+        )
+
+    def create_cross_chain_payable_memo(
+        self,
+        job_id: int,
+        content: str,
+        token: str,
+        amount_base_unit: int,
+        recipient: str,
+        fee_amount_base_unit: int,
+        fee_type: FeeType,
+        memo_type: MemoType,
+        expired_at: datetime,
+        next_phase: ACPJobPhase,
+        destination_eid: int,
+        secured: bool = True,
+    ) -> OperationPayload:
+        operation = self._build_user_operation(
+            "createCrossChainPayableMemo",
+            [
+                job_id,
+                content,
+                token,
+                amount_base_unit,
+                Web3.to_checksum_address(recipient),
+                fee_amount_base_unit,
+                fee_type,
+                memo_type,
+                math.floor(expired_at.timestamp()),
+                secured,
+                next_phase,
+                destination_eid,
             ],
             self.config.contract_address,
         )
