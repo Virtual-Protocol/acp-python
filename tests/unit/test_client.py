@@ -772,7 +772,7 @@ class TestAcpClient:
 
             assert client.contract_clients == [mock_contract_client]
             assert client.contract_client == mock_contract_client
-            assert client.agent_wallet_address == TEST_AGENT_ADDRESS
+            assert client.wallet_address == TEST_AGENT_ADDRESS
 
         @patch('virtuals_acp.client.socketio.Client')
         def test_should_initialize_with_list_of_clients(self, mock_socketio, mock_contract_client):

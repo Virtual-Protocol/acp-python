@@ -5,6 +5,8 @@ import logging
 import signal
 import sys
 import threading
+
+import time
 from datetime import datetime, timezone, timedelta
 from importlib.metadata import version
 from typing import List, Optional, Union, Dict, Any, Callable
@@ -46,12 +48,142 @@ logging.basicConfig(
 logger = logging.getLogger("ACPClient")
 
 
+
+import jwt
+import requests
+
+from requests.auth import AuthBase
+
+class BearerAuth(AuthBase):
+    def __init__(self, get_access_token: Callable[[], str]):
+        self._get_access_token = get_access_token
+        self._access_token: Optional[str] = None
+
+    def __call__(self, req: requests.PreparedRequest):
+        if not self._access_token:
+            self._access_token = self._get_access_token()
+        req.headers["authorization"] = f"Bearer {self._access_token}"
+        return req
+
+    def clear_token(self):
+        self._access_token = None
+
+
+class ACPApiClient:
+    def __init__(self, acp_url: str, wallet_address: str, require_auth: bool = False):
+        self.session = requests.Session()
+        self.base_url = f"{acp_url}/api"
+        self.wallet_address = wallet_address
+        self.access_token: Optional[str] = None
+        self.auth = BearerAuth(self.get_access_token)
+        self.session.auth = self.auth
+
+        if require_auth:
+            self.session.headers["wallet-address"] = wallet_address
+            
+
+    def request(
+        self,
+        method: str,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+        data: Optional[Dict[str, Any]] = None,
+        err_callback: Optional[Callable[[requests.RequestException], None]] = None,
+    ) -> Optional[Any]:
+        url = f"{self.base_url}{path}"
+        try:
+            resp = self.session.request(method, url, params=params, json=data)
+
+            if resp.status_code == 401:
+                self.auth.clear_token()
+                resp = self.session.request(method, url, params=params, json=data)
+
+            resp.raise_for_status()
+            return resp.json().get("data")
+        except requests.RequestException as err:
+            if err_callback:
+                err_callback(err)
+                return None
+
+            if hasattr(err, "response") and err.response is not None:
+                try:
+                    error_message = err.response.json().get("error", {}).get("message")
+                    if error_message:
+                        raise ACPApiError(error_message) from err
+                except (ValueError, AttributeError, KeyError):
+                    pass
+
+            raise ACPApiError(f"Failed to fetch {path}: {err}") from err
+        except Exception as err:
+            raise ACPApiError(
+                f"Failed to fetch ACP Endpoint: {path} (network error)"
+            ) from err
+
+    def get_access_token(self) -> str:
+        needs_refresh = self.access_token is None
+
+        if self.access_token:
+            decoded = jwt.decode(self.access_token, options={"verify_signature": False})
+            if decoded.get("exp") and decoded["exp"] - 300 < time.time():
+                needs_refresh = True
+
+        if not needs_refresh:
+            return self.access_token
+
+        self.access_token = self.refresh_token()
+        return self.access_token
+
+    def refresh_token(self) -> str:
+        challenge = self.get_auth_challenge(self.wallet_address)
+        signature = self.acp_contract_client.sign_typed_data(challenge)
+
+        verified = self.verify_auth_challenge(
+            wallet_address=challenge["message"]["walletAddress"],
+            nonce=challenge["message"]["nonce"],
+            expires_at=challenge["message"]["expiresAt"],
+            signature=signature,
+        )
+
+        return verified["accessToken"]
+
+    def get_auth_challenge(self):
+        try:
+            response = requests.get(
+                f"{self.base_url}/auth/challenge",
+                params={"walletAddress": self.wallet_address},
+            )
+            response.raise_for_status()
+            return response.json()["data"]
+        except requests.RequestException as err:
+            error_data = err.response.json() if err.response is not None else None
+            print(f"Failed to get auth challenge: {error_data}")
+            raise Exception("Failed to get auth challenge") from err
+
+    def verify_auth_challenge(self, wallet_address: str, nonce: str, expires_at: int, signature: str):
+        try:
+            response = requests.post(
+                f"{self.base_url}/auth/verify-typed-signature",
+                json={
+                    "walletAddress": wallet_address,
+                    "nonce": nonce,
+                    "expiresAt": expires_at,
+                    "signature": signature,
+                },
+            )
+            response.raise_for_status()
+            return response.json()["data"]
+        except requests.RequestException as err:
+            raise Exception("Failed to verify auth challenge") from err
+
+
 class VirtualsACP:
     def __init__(
         self,
         acp_contract_clients: Union[BaseAcpContractClient, List[BaseAcpContractClient]],
         on_new_task: Optional[Callable] = None,
         on_evaluate: Optional[Callable] = None,
+        custom_rpc_url: Optional[str] = None,
+        skip_socket_connection: Optional[bool] = False,
     ):
         # Handle both single client and list of clients
         if isinstance(acp_contract_clients, list):
@@ -70,20 +202,16 @@ class VirtualsACP:
                     "All contract clients must have the same agent wallet address"
                 )
 
-        # Use the first client for common properties
-        self.contract_client = self.contract_clients[0]
-        self.agent_wallet_address = first_agent_address
-        self.config = self.contract_client.config
-        self.acp_api_url = self.config.acp_api_url
-
-        self._agent_wallet_address = Web3.to_checksum_address(self.agent_wallet_address)
+        self.acp_client = ACPApiClient(self.acp_url, self.wallet_address)
+        self.no_auth_acp_client = ACPApiClient(self.acp_url, self.wallet_address, require_auth=False)
 
         # Socket.IO setup
         self.on_new_task = on_new_task
         self.on_evaluate = on_evaluate or self._default_on_evaluate
-        self.sio = socketio.Client()
-        self._setup_socket_handlers()
-        self._connect_socket()
+
+        if not skip_socket_connection:
+            self.sio = socketio.Client()
+            self.init()
 
     @property
     def acp_contract_client(self):
@@ -91,15 +219,52 @@ class VirtualsACP:
         return self.contract_clients[0]
 
     @property
-    def acp_url(self):
-        """Get the ACP URL from the first contract client."""
-        return self.contract_client.config.acp_api_url
-
-    @property
     def wallet_address(self):
         """Get the wallet address from the first contract client."""
-        return self.contract_client.agent_wallet_address
+        # return Web3.to_checksum_address(self.acp_contract_client.agent_wallet_address)
+        return self.acp_contract_client.agent_wallet_address
 
+    @property
+    def acp_url(self):
+        """Get the ACP URL from the first contract client."""
+        return self.acp_contract_client.config.acp_api_url
+
+    def init(self):
+        logger.info(f"Initializing socket")
+        
+        try:
+            # TODO: auth needs to include access token now
+            auth_data = {
+                "walletAddress": self.wallet_address,
+                "accessToken": self.acp_client.get_access_token()
+            }
+            headers_data = {
+                "x-sdk-version": version("virtuals_acp"),
+                "x-sdk-language": "python",
+                "x-contract-address": self.contract_clients[0].contract_address,
+            }
+
+            self.sio.connect(
+                url=self.acp_url,
+                auth=auth_data,
+                headers=headers_data,
+                transports=["websocket"],
+                retry=True,
+            )
+
+            def cleanup(sig, frame):
+                self.sio.disconnect()
+                sys.exit(0)
+
+            self.sio.on("roomJoined", self._on_room_joined)
+            self.sio.on("onEvaluate", self._on_evaluate)
+            self.sio.on("onNewTask", self._on_new_task)
+
+            signal.signal(signal.SIGINT, cleanup)
+            signal.signal(signal.SIGTERM, cleanup)
+        except Exception as e:
+            logger.error(f"Failed to connect to socket server: {e}")
+    
     def contract_client_by_address(self, address: Optional[str]):
         """Find contract client by contract address."""
         if not address:
@@ -119,7 +284,7 @@ class VirtualsACP:
         job.evaluate(True, "Evaluated by default")
 
     def _on_room_joined(self, data):
-        logger.info("Connected to room", data)  # Send acknowledgment back to server
+        logger.info("Joined ACP Room", data)  # Send acknowledgment back to server
         return True
 
     def _on_evaluate(self, data):
@@ -245,50 +410,10 @@ class VirtualsACP:
         )
         self.on_evaluate(job)
 
-    def _setup_socket_handlers(self) -> None:
-        self.sio.on("roomJoined", self._on_room_joined)
-        self.sio.on("onEvaluate", self._on_evaluate)
-        self.sio.on("onNewTask", self._on_new_task)
-
-    def _connect_socket(self) -> None:
-        """Connect to the socket server with appropriate authentication."""
-        headers_data = {
-            "x-sdk-version": version("virtuals_acp"),
-            "x-sdk-language": "python",
-            "x-contract-address": self.contract_clients[0].contract_address,
-        }
-        auth_data = {"walletAddress": self.agent_address}
-
-        if self.on_evaluate != self._default_on_evaluate:
-            auth_data["evaluatorAddress"] = self.agent_address
-
-        try:
-            self.sio.connect(
-                self.acp_api_url,
-                auth=auth_data,
-                headers=headers_data,
-                transports=["websocket"],
-                retry=True,
-            )
-
-            def signal_handler(sig, frame):
-                self.sio.disconnect()
-                sys.exit(0)
-
-            signal.signal(signal.SIGINT, signal_handler)
-            signal.signal(signal.SIGTERM, signal_handler)
-
-        except Exception as e:
-            logger.warning(f"Failed to connect to socket server: {e}")
-
     def __del__(self):
         """Cleanup when the object is destroyed."""
         if hasattr(self, "sio") and self.sio is not None:
             self.sio.disconnect()
-
-    @property
-    def agent_address(self) -> str:
-        return self._agent_wallet_address
 
     def _hydrate_agent(self, agent_data: Dict[str, Any]) -> IACPAgent:
         contract_address = Web3.to_checksum_address(agent_data.get("contractAddress"))
@@ -358,7 +483,7 @@ class VirtualsACP:
         online_status: Optional[ACPOnlineStatus] = None,
         show_hidden_offerings: bool = False,
     ) -> List[IACPAgent]:
-        url = f"{self.acp_api_url}/agents/v4/search?search={keyword}"
+        url = f"{self.acp_url}/agents/v4/search?search={keyword}"
         top_k = 5 if top_k is None else top_k
 
         if sort_by:
@@ -439,7 +564,7 @@ class VirtualsACP:
 
         # Lookup existing account between client and provider
         account = self.get_by_client_and_provider(
-            self.agent_address, provider_address, self.contract_client
+            self.agent_address, provider_address, self.acp_contract_client
         )
 
         # Determine whether to call createJob or createJobWithAccount
@@ -452,17 +577,17 @@ class VirtualsACP:
         }
 
         use_simple_create = (
-            self.contract_client.config.contract_address.lower()
+            self.acp_contract_client.config.contract_address.lower()
             in base_contract_addresses
         )
 
-        chain_id = self.contract_client.config.chain_id
+        chain_id = self.acp_contract_client.config.chain_id
         usdc_token_address = USDC_TOKEN_ADDRESS[chain_id]
         is_usdc_payment_token = usdc_token_address == fare_amount.fare.contract_address
-        is_x402_job = bool(getattr(self.contract_client.config, "x402_config", None) and is_usdc_payment_token)
+        is_x402_job = bool(getattr(self.acp_contract_client.config, "x402_config", None) and is_usdc_payment_token)
 
         if use_simple_create or not account:
-            create_job_operation = self.contract_client.create_job(
+            create_job_operation = self.acp_contract_client.create_job(
                 provider_address,
                 eval_addr or self.wallet_address,
                 expired_at,
@@ -472,7 +597,7 @@ class VirtualsACP:
                 is_x402_job=is_x402_job,
             )
         else:
-            create_job_operation = self.contract_client.create_job_with_account(
+            create_job_operation = self.acp_contract_client.create_job_with_account(
                 account.id,
                 eval_addr or self.wallet_address,
                 fare_amount.amount,
@@ -481,13 +606,13 @@ class VirtualsACP:
                 is_x402_job=is_x402_job,
             )
 
-        response = self.contract_client.handle_operation([create_job_operation])
+        response = self.acp_contract_client.handle_operation([create_job_operation])
 
-        job_id = self.contract_client.get_job_id(
+        job_id = self.acp_contract_client.get_job_id(
             response, self.agent_address, provider_address
         )
 
-        operations = self.contract_client.create_memo(
+        operations = self.acp_contract_client.create_memo(
             job_id,
             (
                 service_requirement
@@ -499,7 +624,7 @@ class VirtualsACP:
             next_phase=ACPJobPhase.NEGOTIATION,
         )
 
-        self.contract_client.handle_operation([operations])
+        self.acp_contract_client.handle_operation([operations])
 
         return job_id
 
@@ -572,22 +697,22 @@ class VirtualsACP:
             )
 
     def get_active_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={page_size}"
+        url = f"{self.acp_url}/jobs/active?pagination[page]={page}&pagination[pageSize]={page_size}"
         raw_jobs = self._fetch_job_list(url)
         return self._hydrate_jobs(raw_jobs, log_prefix="Active jobs")
 
     def get_pending_memo_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/pending-memos?pagination[page]={page}&pagination[pageSize]={page_size}"
+        url = f"{self.acp_url}/jobs/pending-memos?pagination[page]={page}&pagination[pageSize]={page_size}"
         raw_jobs = self._fetch_job_list(url)
         return self._hydrate_jobs(raw_jobs, log_prefix="Pending memo jobs")
 
     def get_completed_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/completed?pagination[page]={page}&pagination[pageSize]={page_size}"
+        url = f"{self.acp_url}/jobs/completed?pagination[page]={page}&pagination[pageSize]={page_size}"
         raw_jobs = self._fetch_job_list(url)
         return self._hydrate_jobs(raw_jobs, log_prefix="Completed jobs")
 
     def get_cancelled_jobs(self, page: int = 1, page_size: int = 10) -> List["ACPJob"]:
-        url = f"{self.acp_api_url}/jobs/cancelled?pagination[page]={page}&pagination[pageSize]={page_size}"
+        url = f"{self.acp_url}/jobs/cancelled?pagination[page]={page}&pagination[pageSize]={page_size}"
         raw_jobs = self._fetch_job_list(url)
         return self._hydrate_jobs(raw_jobs, log_prefix="Cancelled jobs")
 
@@ -700,7 +825,7 @@ class VirtualsACP:
         return jobs
 
     def get_job_by_onchain_id(self, onchain_job_id: int) -> "ACPJob":
-        url = f"{self.acp_api_url}/jobs/{onchain_job_id}"
+        url = f"{self.acp_url}/jobs/{onchain_job_id}"
         headers = {"wallet-address": self.agent_address}
 
         try:
@@ -715,7 +840,7 @@ class VirtualsACP:
             for memo in data.get("data", {}).get("memos", []):
                 memos.append(
                     ACPMemo(
-                        contract_client=self.contract_client,
+                        contract_client=self.acp_contract_client,
                         id=memo.get("id"),
                         type=MemoType(int(memo.get("memoType"))),
                         content=memo.get("content"),
@@ -760,7 +885,7 @@ class VirtualsACP:
             raise ACPApiError(f"Failed to get job by onchain ID: {e}")
 
     def get_memo_by_id(self, onchain_job_id: int, memo_id: int) -> "ACPMemo":
-        url = f"{self.acp_api_url}/jobs/{onchain_job_id}/memos/{memo_id}"
+        url = f"{self.acp_url}/jobs/{onchain_job_id}/memos/{memo_id}"
         headers = {"wallet-address": self.agent_address}
 
         try:
@@ -774,7 +899,7 @@ class VirtualsACP:
             memo = data.get("data", {})
 
             return ACPMemo(
-                contract_client=self.contract_client,
+                contract_client=self.acp_contract_client,
                 id=memo.get("id"),
                 type=MemoType(memo.get("memoType")),
                 content=memo.get("content"),
@@ -796,7 +921,7 @@ class VirtualsACP:
             raise ACPApiError(f"Failed to get memo by ID: {e}")
 
     def get_agent(self, wallet_address: str, *, show_hidden_offerings: bool = False) -> Optional[IACPAgent]:
-        url = f"{self.acp_api_url}/agents?filters[walletAddress]={wallet_address}"
+        url = f"{self.acp_url}/agents?filters[walletAddress]={wallet_address}"
 
         if show_hidden_offerings:
             url += f"&showHiddenOfferings=true"

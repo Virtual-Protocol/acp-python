@@ -60,7 +60,7 @@ class ACPJob(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         if self.acp_client:
-            self._base_fare = self.acp_client.config.base_fare
+            self._base_fare = self.acp_client.acp_contract_client.config.base_fare
 
         memo = next(
             (

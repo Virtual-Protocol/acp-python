@@ -40,7 +40,7 @@ def seller():
 
     while True:
         logger.info(
-            f"\nPolling for active jobs for {acp_client.agent_address}."
+            f"\nPolling for active jobs for {acp_client.wallet_address}."
         )
         active_jobs_list: List[ACPJob] = acp_client.get_active_jobs()
 
@@ -51,7 +51,7 @@ def seller():
 
         for job in active_jobs_list:
             # Ensure this job is for the current seller
-            if job.provider_address != acp_client.agent_address:
+            if job.provider_address != acp_client.wallet_address:
                 continue
 
             try:

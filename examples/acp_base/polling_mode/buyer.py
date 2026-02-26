@@ -34,7 +34,7 @@ def buyer():
             config=BASE_MAINNET_ACP_X402_CONFIG_V2,  # route to x402 for payment, undefined defaulted back to direct transfer
         ),
     )
-    logger.info(f"Buyer ACP Initialized. Agent: {acp_client.agent_address}")
+    logger.info(f"Buyer ACP Initialized. Agent: {acp_client.wallet_address}")
 
     # Browse available agents based on a keyword and cluster name
     relevant_agents = acp_client.browse_agents(
