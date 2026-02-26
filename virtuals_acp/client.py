@@ -71,14 +71,16 @@ class BearerAuth(AuthBase):
 
 class ACPApiClient:
     def __init__(self, acp_url: str, wallet_address: str, require_auth: bool = False):
-        self.session = requests.Session()
         self.base_url = f"{acp_url}/api"
         self.wallet_address = wallet_address
+        self.require_auth = require_auth
+        self.session = requests.Session()
+        
         self.access_token: Optional[str] = None
-        self.auth = BearerAuth(self.get_access_token)
-        self.session.auth = self.auth
-
+        self.auth: Optional[BearerAuth] = None
         if require_auth:
+            self.auth = BearerAuth(self.get_access_token)
+            self.session.auth = self.auth
             self.session.headers["wallet-address"] = wallet_address
             
 
@@ -94,7 +96,7 @@ class ACPApiClient:
         try:
             resp = self.session.request(method, url, params=params, json=data)
 
-            if resp.status_code == 401:
+            if resp.status_code == 401 and self.require_auth and self.auth:
                 self.auth.clear_token()
                 resp = self.session.request(method, url, params=params, json=data)
 
