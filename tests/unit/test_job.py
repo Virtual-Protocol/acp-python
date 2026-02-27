@@ -30,10 +30,15 @@ class TestACPJob:
         client = MagicMock()
         base_fare = Fare(
             contract_address="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-            decimals=6
+            decimals=6,
+            chain_id=8453
         )
         client.config.base_fare = base_fare
-        client.contract_client.config.base_fare = base_fare
+        client.config.chain_id = 8453
+        client.acp_contract_client.config.base_fare = base_fare
+        client.acp_contract_client.config.chain_id = 8453
+        client.contract_client_by_address.return_value.config.base_fare = base_fare
+        client.contract_client_by_address.return_value.config.chain_id = 8453
         # Mock format_amount to return the value directly (for testing)
         client.contract_client_by_address.return_value.config.base_fare.format_amount = lambda x: int(
             x)
@@ -219,7 +224,7 @@ class TestACPJob:
 
             result = basic_job.acp_contract_client
 
-            assert result == mock_acp_client.contract_client
+            assert result == mock_acp_client.acp_contract_client
 
         def test_acp_contract_client_should_find_client_by_address(
             self, basic_job, mock_acp_client
@@ -753,6 +758,7 @@ class TestACPJob:
             # Setup transaction memo
             mock_memo = MagicMock(spec=ACPMemo)
             mock_memo.id = 999
+            mock_memo.type = MemoType.MESSAGE
             mock_memo.next_phase = ACPJobPhase.TRANSACTION
             mock_memo.payable_details = None
             basic_job.memos = [mock_memo]
@@ -789,6 +795,7 @@ class TestACPJob:
             # Setup transaction memo with payable details in different token
             mock_memo = MagicMock(spec=ACPMemo)
             mock_memo.id = 999
+            mock_memo.type = MemoType.MESSAGE
             mock_memo.next_phase = ACPJobPhase.TRANSACTION
             mock_memo.payable_details = {
                 "amount": "2000000",  # 2 USDC
@@ -827,6 +834,7 @@ class TestACPJob:
             """Should call perform_x402_payment when job is x402"""
             mock_memo = MagicMock(spec=ACPMemo)
             mock_memo.id = 999
+            mock_memo.type = MemoType.MESSAGE
             mock_memo.next_phase = ACPJobPhase.TRANSACTION
             mock_memo.payable_details = None
             basic_job.memos = [mock_memo]

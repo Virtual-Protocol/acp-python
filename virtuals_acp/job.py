@@ -468,6 +468,12 @@ class ACPJob(BaseModel):
         return next((m for m in self.memos if m.id == memo_id), None)
 
     def deliver(self, deliverable: DeliverablePayload) -> str | None:
+        if (
+            self.latest_memo is None
+            or self.latest_memo.next_phase != ACPJobPhase.EVALUATION
+        ):
+            raise ValueError("No transaction memo found")
+        
         operations: List[OperationPayload] = []
 
         operations.append(
@@ -490,6 +496,12 @@ class ACPJob(BaseModel):
         skip_fee: bool = False,
         expired_at: Optional[datetime] = None,
     ) -> str | None:
+        if (
+            self.latest_memo is None
+            or self.latest_memo.next_phase != ACPJobPhase.EVALUATION
+        ):
+            raise ValueError("No transaction memo found")
+
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
