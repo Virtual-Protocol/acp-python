@@ -193,7 +193,8 @@ class TestAcpClient:
                             "expiry": None,
                             "payableDetails": None,
                             "txHash": None,
-                            "signedTxHash": None
+                            "signedTxHash": None,
+                            "state": 1
                         }
                     ]
                 }
@@ -620,7 +621,8 @@ class TestAcpClient:
                             "expiry": None,
                             "payableDetails": None,
                             "txHash": None,
-                            "signedTxHash": None
+                            "signedTxHash": None,
+                            "state": 1
                         }
                     ]
                 }
@@ -718,7 +720,8 @@ class TestAcpClient:
                     "expiry": None,
                     "payableDetails": None,
                     "txHash": None,
-                    "signedTxHash": None
+                    "signedTxHash": None,
+                    "state": 1
                 }
             }
             mock_get.return_value = mock_response
