@@ -59,7 +59,7 @@ def main():
                 msg = (
                         f"[on_new_task] Job {job_id} {job_phase}. "
                         + (
-                            f"Deliverable received: {job.deliverable}"
+                            f"Deliverable received: {job.get_deliverable()}"
                             if job_phase == ACPJobPhase.COMPLETED
                             else f"Rejection reason: {job.rejection_reason}"
                         )

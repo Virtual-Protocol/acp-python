@@ -60,7 +60,7 @@ def evaluator():
                 if job.phase == ACPJobPhase.EVALUATION:
                     logger.info(f"Found Job {job.id} in EVALUATION phase.")
                     logger.info(
-                        f"Job {job.id}: Evaluating deliverable: {job.deliverable} with requirement: {job.requirement}"
+                        f"Job {job.id}: Evaluating deliverable: {job.get_deliverable()} with requirement: {job.requirement}"
                     )
                     job.evaluate(
                         accept=ACCEPT_EVALUATION,
