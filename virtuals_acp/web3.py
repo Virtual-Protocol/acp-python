@@ -3,6 +3,7 @@ from typing import Union
 from web3 import Web3
 from virtuals_acp.abis.erc20_abi import ERC20_ABI
 
+# TODO: implement wrapper methods in base_contract_client
 
 def getERC20Balance(
     public_client: Web3,

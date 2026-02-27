@@ -121,7 +121,11 @@ class BaseAcpContractClient(ABC):
             )
 
     @abstractmethod
-    def get_acp_version(self) -> str:
+    def get_asset_manager_address(self) -> str:
+        pass
+
+    @abstractmethod
+    def sign_typed_data(self, typed_data: dict[str, Any]) -> str:
         pass
 
     def _build_user_operation(
@@ -151,7 +155,7 @@ class BaseAcpContractClient(ABC):
 
     @abstractmethod
     def get_job_id(
-        self, receipt: Dict[str, Any], client_address: str, provider_address: str
+        self, response: Dict[str, Any], client_address: str, provider_address: str
     ) -> int:
         """Abstract method to retrieve a job ID from a transaction hash and related addresses."""
         pass

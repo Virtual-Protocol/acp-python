@@ -5,15 +5,16 @@ import logging
 import signal
 import sys
 import threading
-
+import jwt
+import socketio
+import requests
 import time
+
 from datetime import datetime, timezone, timedelta
 from importlib.metadata import version
 from typing import List, Optional, Union, Dict, Any, Callable
-
-import requests
-import socketio
 from web3 import Web3
+from requests.auth import AuthBase
 
 from virtuals_acp.account import ACPAccount
 from virtuals_acp.configs.configs import (
@@ -49,11 +50,6 @@ logger = logging.getLogger("ACPClient")
 
 
 
-import jwt
-import requests
-
-from requests.auth import AuthBase
-
 class BearerAuth(AuthBase):
     def __init__(self, get_access_token: Callable[[], str]):
         self._get_access_token = get_access_token
@@ -70,7 +66,8 @@ class BearerAuth(AuthBase):
 
 
 class ACPApiClient:
-    def __init__(self, acp_url: str, wallet_address: str, require_auth: bool = False):
+    def __init__(self, acp_contract_client: BaseAcpContractClient, acp_url: str, wallet_address: str, require_auth: bool = False):
+        self.acp_contract_client = acp_contract_client
         self.base_url = f"{acp_url}/api"
         self.wallet_address = wallet_address
         self.require_auth = require_auth
@@ -130,13 +127,17 @@ class ACPApiClient:
                 needs_refresh = True
 
         if not needs_refresh:
-            return self.access_token
+            # Access token is still valid
+            if self.access_token:
+                return self.access_token
+            else:
+                raise Exception("Access token needs refreshing!")
 
         self.access_token = self.refresh_token()
         return self.access_token
 
     def refresh_token(self) -> str:
-        challenge = self.get_auth_challenge(self.wallet_address)
+        challenge = self.get_auth_challenge()
         signature = self.acp_contract_client.sign_typed_data(challenge)
 
         verified = self.verify_auth_challenge(
@@ -204,8 +205,8 @@ class VirtualsACP:
                     "All contract clients must have the same agent wallet address"
                 )
 
-        self.acp_client = ACPApiClient(self.acp_url, self.wallet_address)
-        self.no_auth_acp_client = ACPApiClient(self.acp_url, self.wallet_address, require_auth=False)
+        self.acp_client = ACPApiClient(self.acp_contract_client, self.acp_url, self.wallet_address)
+        self.no_auth_acp_client = ACPApiClient(self.acp_contract_client, self.acp_url, self.wallet_address, require_auth=False)
 
         # Socket.IO setup
         self.on_new_task = on_new_task
@@ -235,7 +236,6 @@ class VirtualsACP:
         logger.info(f"Initializing socket")
         
         try:
-            # TODO: auth needs to include access token now
             auth_data = {
                 "walletAddress": self.wallet_address,
                 "accessToken": self.acp_client.get_access_token()

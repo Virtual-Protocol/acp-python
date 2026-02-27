@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from eth_account import Account
+from eth_account.messages import encode_typed_data
 from web3 import Web3
 
 from virtuals_acp.alchemy import AlchemyAccountKit
@@ -238,3 +239,21 @@ class ACPContractClient(BaseAcpContractClient):
 
     def get_asset_manager_address(self) -> str:
         raise ACPError("Not Supported")
+
+    def sign_typed_data(self, typed_data: dict[str, Any]) -> str:
+        domain = typed_data["domain"]
+        types = typed_data["types"]
+        primary_type = typed_data["primaryType"]
+        message = typed_data["message"]
+
+        # encode_typed_data expects (domain_data, types, primary_type, message_data)
+        # It handles EIP-712 hashing internally
+        signable = encode_typed_data(
+            domain,
+            types,
+            primary_type,
+            message,
+        )
+
+        signed = self.account.sign_message(signable)
+        return signed.signature.hex()
