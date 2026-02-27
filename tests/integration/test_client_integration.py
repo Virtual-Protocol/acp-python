@@ -58,7 +58,7 @@ class TestClientIntegration:
 
             # Verify none of the agents are the client itself
             for agent in agents:
-                assert agent.wallet_address.lower() != acp_client.agent_address.lower()
+                assert agent.wallet_address.lower() != acp_client.wallet_address.lower()
 
         def test_should_respect_top_k_parameter(self, acp_client):
             """Should respect the top_k parameter for result limiting"""
@@ -92,12 +92,12 @@ class TestClientIntegration:
 
         def test_should_get_own_agent_info(self, acp_client):
             """Should successfully retrieve own agent information"""
-            agent = acp_client.get_agent(acp_client.agent_address)
+            agent = acp_client.get_agent(acp_client.wallet_address)
 
             # Should return the agent or None
             # If the agent exists
             if agent:
-                assert agent.wallet_address.lower() == acp_client.agent_address.lower()
+                assert agent.wallet_address.lower() == acp_client.wallet_address.lower()
                 assert hasattr(agent, 'id')
                 assert hasattr(agent, 'job_offerings')
                 assert hasattr(agent, 'name')
@@ -161,7 +161,7 @@ class TestClientIntegration:
             fake_provider = "0x0000000000000000000000000000000000000001"
 
             account = acp_client.get_by_client_and_provider(
-                acp_client.agent_address,
+                acp_client.wallet_address,
                 fake_provider
             )
 

@@ -224,8 +224,7 @@ class VirtualsACP:
     @property
     def wallet_address(self):
         """Get the wallet address from the first contract client."""
-        # return Web3.to_checksum_address(self.acp_contract_client.agent_wallet_address)
-        return self.acp_contract_client.agent_wallet_address
+        return Web3.to_checksum_address(self.acp_contract_client.agent_wallet_address)
 
     @property
     def acp_url(self):
@@ -494,8 +493,8 @@ class VirtualsACP:
         if top_k:
             url += f"&top_k={top_k}"
 
-        if self.agent_address:
-            url += f"&walletAddressesToExclude={self.agent_address}"
+        if self.wallet_address:
+            url += f"&walletAddressesToExclude={self.wallet_address}"
 
         if cluster:
             url += f"&cluster={cluster}"
@@ -525,7 +524,7 @@ class VirtualsACP:
             filtered_agents = [
                 agent
                 for agent in agents_data
-                if agent["walletAddress"].lower() != self.agent_address.lower()
+                if agent["walletAddress"].lower() != self.wallet_address.lower()
                    and agent.get("contractAddress", "").lower()
                    in available_contract_addresses
             ]
@@ -555,18 +554,18 @@ class VirtualsACP:
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(days=1)
 
-        if provider_address == self.agent_address:
+        if provider_address == self.wallet_address:
             raise ACPError("Provider address cannot be the same as the client address")
 
         eval_addr = (
             Web3.to_checksum_address(evaluator_address)
             if evaluator_address
-            else self.agent_address
+            else self.wallet_address
         )
 
         # Lookup existing account between client and provider
         account = self.get_by_client_and_provider(
-            self.agent_address, provider_address, self.acp_contract_client
+            self.wallet_address, provider_address, self.acp_contract_client
         )
 
         # Determine whether to call createJob or createJobWithAccount
@@ -611,7 +610,7 @@ class VirtualsACP:
         response = self.acp_contract_client.handle_operation([create_job_operation])
 
         job_id = self.acp_contract_client.get_job_id(
-            response, self.agent_address, provider_address
+            response, self.wallet_address, provider_address
         )
 
         operations = self.acp_contract_client.create_memo(
@@ -828,7 +827,7 @@ class VirtualsACP:
 
     def get_job_by_onchain_id(self, onchain_job_id: int) -> "ACPJob":
         url = f"{self.acp_url}/jobs/{onchain_job_id}"
-        headers = {"wallet-address": self.agent_address}
+        headers = {"wallet-address": self.wallet_address}
 
         try:
             response = requests.get(url, headers=headers)
@@ -888,7 +887,7 @@ class VirtualsACP:
 
     def get_memo_by_id(self, onchain_job_id: int, memo_id: int) -> "ACPMemo":
         url = f"{self.acp_url}/jobs/{onchain_job_id}/memos/{memo_id}"
-        headers = {"wallet-address": self.agent_address}
+        headers = {"wallet-address": self.wallet_address}
 
         try:
             response = requests.get(url, headers=headers)
