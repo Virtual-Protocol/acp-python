@@ -31,6 +31,12 @@ from virtuals_acp.models import (
     OffChainJob,
 )
 
+#  TODO: This function is not used anywhere, should we add it to Python SDK?
+# createMemoWithMetadata
+# signTypedData
+# signMessage
+# sendTransaction
+
 
 class BaseAcpContractClient(ABC):
     def __init__(self, agent_wallet_address: str, config: ACPContractConfig):
