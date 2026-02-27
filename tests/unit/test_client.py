@@ -771,7 +771,7 @@ class TestAcpClient:
             client = VirtualsACP(acp_contract_clients=mock_contract_client)
 
             assert client.contract_clients == [mock_contract_client]
-            assert client.contract_client == mock_contract_client
+            assert client.acp_contract_client == mock_contract_client
             assert client.wallet_address == TEST_AGENT_ADDRESS
 
         @patch('virtuals_acp.client.socketio.Client')
@@ -785,7 +785,7 @@ class TestAcpClient:
             client = VirtualsACP(acp_contract_clients=[mock_contract_client, client2])
 
             assert len(client.contract_clients) == 2
-            assert client.contract_client == mock_contract_client
+            assert client.acp_contract_client == mock_contract_client
 
         @patch('virtuals_acp.client.socketio.Client')
         def test_should_raise_error_when_no_clients_provided(self, mock_socketio):

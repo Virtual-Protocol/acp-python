@@ -124,7 +124,7 @@ class ACPJob(BaseModel):
     @property
     def acp_contract_client(self):
         if not self.contract_address:
-            return self.acp_client.contract_client
+            return self.acp_client.acp_contract_client
         return self.acp_client.contract_client_by_address(self.contract_address)
 
     @property
