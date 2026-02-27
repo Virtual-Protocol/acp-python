@@ -945,6 +945,14 @@ class VirtualsACP:
         except Exception as e:
             raise ACPError(f"An unexpected error occurred while getting agent: {e}")
 
+    def get_memo_content(self, url: str) -> str:
+        response = self.acp_client.request("GET", url)
+
+        if not response:
+            raise ACPApiError("Failed to get memo content")
+
+        return response["content"]
+
 
 # Rebuild the AcpJob model after VirtualsACP is defined
 ACPJob.model_rebuild()
