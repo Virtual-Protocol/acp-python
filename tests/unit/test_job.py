@@ -15,6 +15,7 @@ from virtuals_acp.models import (
     FeeType,
     OperationPayload,
 )
+from virtuals_acp.exceptions import ACPError
 from virtuals_acp.fare import Fare, FareAmount
 
 TEST_AGENT_ADDRESS = "0x1234567890123456789012345678901234567890"
@@ -558,6 +559,7 @@ class TestACPJob:
             mock_memo = MagicMock(spec=ACPMemo)
             mock_memo.next_phase = ACPJobPhase.EVALUATION
             basic_job.memos = [mock_memo]
+            basic_job.phase = ACPJobPhase.TRANSACTION
 
             mock_operation = MagicMock(spec=OperationPayload)
             mock_contract_client = mock_acp_client.contract_client_by_address.return_value
@@ -575,16 +577,13 @@ class TestACPJob:
             mock_contract_client.create_memo.assert_called_once()
             assert result == "0xdelivery"
 
-        def test_should_raise_error_when_no_evaluation_memo(self, basic_job):
-            """Should raise ValueError when latest memo is not EVALUATION phase"""
-            mock_memo = MagicMock(spec=ACPMemo)
-            mock_memo.next_phase = ACPJobPhase.TRANSACTION
-            basic_job.memos = [mock_memo]
+        def test_should_raise_error_when_not_in_transaction_phase(self, basic_job):
+            """Should raise ACPError when job is not in transaction phase"""
+            basic_job.phase = ACPJobPhase.NEGOTIATION
 
-            # DeliverablePayload is Union[str, Dict], so just use a string
             deliverable = "Test deliverable"
 
-            with pytest.raises(ValueError, match="No transaction memo found"):
+            with pytest.raises(ACPError, match="Job is not in transaction phase"):
                 basic_job.deliver(deliverable)
 
     class TestEvaluate:
@@ -937,6 +936,7 @@ class TestACPJob:
             mock_memo = MagicMock(spec=ACPMemo)
             mock_memo.next_phase = ACPJobPhase.EVALUATION
             basic_job.memos = [mock_memo]
+            basic_job.phase = ACPJobPhase.TRANSACTION
 
             mock_contract_client = mock_acp_client.contract_client_by_address.return_value
             mock_contract_client.approve_allowance.return_value = MagicMock()
@@ -967,6 +967,7 @@ class TestACPJob:
             mock_memo = MagicMock(spec=ACPMemo)
             mock_memo.next_phase = ACPJobPhase.EVALUATION
             basic_job.memos = [mock_memo]
+            basic_job.phase = ACPJobPhase.TRANSACTION
 
             mock_contract_client = mock_acp_client.contract_client_by_address.return_value
             mock_contract_client.approve_allowance.return_value = MagicMock()
@@ -988,15 +989,13 @@ class TestACPJob:
             call_args = mock_contract_client.create_payable_memo.call_args[1]
             assert call_args['fee_type'] == FeeType.NO_FEE
 
-        def test_should_raise_error_when_no_evaluation_memo(self, basic_job):
-            """Should raise ValueError when not in EVALUATION phase"""
-            mock_memo = MagicMock(spec=ACPMemo)
-            mock_memo.next_phase = ACPJobPhase.TRANSACTION
-            basic_job.memos = [mock_memo]
+        def test_should_raise_error_when_not_in_transaction_phase(self, basic_job):
+            """Should raise ACPError when job is not in transaction phase"""
+            basic_job.phase = ACPJobPhase.NEGOTIATION
 
             fare = FareAmount(1000000, basic_job.base_fare)
 
-            with pytest.raises(ValueError, match="No transaction memo found"):
+            with pytest.raises(ACPError, match="Job is not in transaction phase"):
                 basic_job.deliver_payable({}, fare)
 
     class TestCreatePayableNotification:
