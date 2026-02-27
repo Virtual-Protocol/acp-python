@@ -68,7 +68,7 @@ class BearerAuth(AuthBase):
 class ACPApiClient:
     def __init__(self, acp_contract_client: BaseAcpContractClient, acp_url: str, wallet_address: str, require_auth: bool = False):
         self.acp_contract_client = acp_contract_client
-        self.base_url = f"{acp_url}/api"
+        self.base_url = acp_url
         self.wallet_address = wallet_address
         self.require_auth = require_auth
         self.session = requests.Session()
@@ -89,7 +89,7 @@ class ACPApiClient:
         data: Optional[Dict[str, Any]] = None,
         err_callback: Optional[Callable[[requests.RequestException], None]] = None,
     ) -> Optional[Any]:
-        url = f"{self.base_url}{path}"
+        url = f"{self.base_url}/{path}"
         try:
             resp = self.session.request(method, url, params=params, json=data)
 
