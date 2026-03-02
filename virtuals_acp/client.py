@@ -89,7 +89,12 @@ class ACPApiClient:
         data: Optional[Dict[str, Any]] = None,
         err_callback: Optional[Callable[[requests.RequestException], None]] = None,
     ) -> Optional[Any]:
-        url = f"{self.base_url}/{path}"
+        if self.base_url in path:
+            # absolute URL, use as is
+            url = path
+        else:
+            url = f"{self.base_url}/{path}"
+        
         try:
             resp = self.session.request(method, url, params=params, json=data)
 
@@ -205,8 +210,8 @@ class VirtualsACP:
                     "All contract clients must have the same agent wallet address"
                 )
 
-        self.acp_client = ACPApiClient(self.acp_contract_client, self.acp_url, self.wallet_address)
-        self.no_auth_acp_client = ACPApiClient(self.acp_contract_client, self.acp_url, self.wallet_address, require_auth=False)
+        self.acp_client = ACPApiClient(self.acp_contract_client, self.acp_url, self.wallet_address, require_auth=True)
+        self.no_auth_acp_client = ACPApiClient(self.acp_contract_client, self.acp_url, self.wallet_address)
 
         # Socket.IO setup
         self.on_new_task = on_new_task
