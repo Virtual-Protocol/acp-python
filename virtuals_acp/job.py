@@ -246,7 +246,12 @@ class ACPJob(BaseModel):
         if not memo:
             raise Exception("No negotiation memo found")
 
-        if memo.type == MemoType.PAYABLE_REQUEST and memo.state != ACPMemoState.PENDING and memo.payable_details is not None and memo.payable_details['lzDstEid'] is not None:
+        if (
+            memo.type == MemoType.PAYABLE_REQUEST and
+            memo.state != ACPMemoState.PENDING and
+            memo.payable_details is not None and
+            memo.payable_details.get('lzDstEid') is not None
+        ):
             print(f"Memo not ready to be signed, state: {memo.state}, payable_details: {memo.payable_details}")
             return
 
