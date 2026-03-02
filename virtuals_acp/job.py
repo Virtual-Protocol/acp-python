@@ -50,6 +50,7 @@ class ACPJob(BaseModel):
     context: Dict[str, Any] | None
     contract_address: Optional[str] = None
     net_payable_amount: Optional[float] = None
+    deliverable: Optional[DeliverablePayload] = None # TODO: turn this into private attr
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -58,7 +59,6 @@ class ACPJob(BaseModel):
     _requirement: Optional[Union[str, Dict[str, Any]]] = PrivateAttr(default=None)
     _price_type: PriceType = PrivateAttr(default=PriceType.FIXED)
     _price_value: float = PrivateAttr(default=0.0)
-    _deliverable: Optional[DeliverablePayload] = PrivateAttr(default=None)
 
     def model_post_init(self, __context: Any) -> None:
         if self.acp_client:
@@ -744,7 +744,7 @@ class ACPJob(BaseModel):
         self.acp_contract_client.handle_operation([create_memo_op])
 
     def get_deliverable(self) -> Optional[DeliverablePayload]:
-        deliverable = self._deliverable
+        deliverable = self.deliverable
         if not deliverable:
             return None
 

@@ -328,7 +328,7 @@ class VirtualsACP:
                 payable_details=memo.get("payableDetails"),
                 txn_hash=memo.get("txHash"),
                 signed_txn_hash=memo.get("signedTxHash"),
-                state=ACPMemoState(memo.get("state")),
+                state=ACPMemoState(memo.get("state")) if memo.get("state") else None,
             )
             for memo in data["memos"]
         ]
@@ -359,6 +359,7 @@ class VirtualsACP:
             context=context,
             contract_address=data.get("contractAddress"),
             net_payable_amount=data.get("netPayableAmount"),
+            deliverable=data.get("deliverable"),
         )
         if self.on_new_task:
             self.on_new_task(job, memo_to_sign)
@@ -383,7 +384,7 @@ class VirtualsACP:
                 payable_details=memo.get("payableDetails"),
                 txn_hash=memo.get("txHash"),
                 signed_txn_hash=memo.get("signedTxHash"),
-                state=ACPMemoState(memo.get("state")),
+                state=ACPMemoState(memo.get("state")) if memo.get("state") else None,
             )
             for memo in data["memos"]
         ]
@@ -408,6 +409,7 @@ class VirtualsACP:
             context=context,
             contract_address=data.get("contractAddress"),
             net_payable_amount=data.get("netPayableAmount"),
+            deliverable=data.get("deliverable"),
         )
         self.on_evaluate(job)
 
@@ -770,7 +772,7 @@ class VirtualsACP:
                         payable_details=memo.get("payableDetails"),
                         txn_hash=memo.get("txHash"),
                         signed_txn_hash=memo.get("signedTxHash"),
-                        state=ACPMemoState(memo.get("state")),
+                        state=ACPMemoState(memo.get("state")) if memo.get("state") else None,
                     )
                     for memo in job.get("memos", [])
                 ]
@@ -796,6 +798,7 @@ class VirtualsACP:
                         context=context,
                         contract_address=job.get("contractAddress"),
                         net_payable_amount=job.get("netPayableAmount"),
+                        deliverable=job.get("deliverable"),
                     )
                 )
 
@@ -856,7 +859,7 @@ class VirtualsACP:
                         payable_details=memo.get("payableDetails"),
                         txn_hash=memo.get("txHash"),
                         signed_txn_hash=memo.get("signedTxHash"),
-                        state=ACPMemoState(memo.get("state")),
+                        state=ACPMemoState(memo.get("state")) if memo.get("state") else None,
                     )
                 )
 
@@ -881,6 +884,7 @@ class VirtualsACP:
                 context=context,
                 contract_address=job.get("contractAddress"),
                 net_payable_amount=job.get("netPayableAmount"),
+                deliverable=data.get("deliverable"),
             )
         except Exception as e:
             raise ACPApiError(f"Failed to get job by onchain ID: {e}")
@@ -915,7 +919,7 @@ class VirtualsACP:
                 payable_details=memo.get("payableDetails"),
                 txn_hash=memo.get("txHash"),
                 signed_txn_hash=memo.get("signedTxHash"),
-                state=ACPMemoState(memo.get("state")),
+                state=ACPMemoState(memo.get("state")) if memo.get("state") else None,
             )
 
         except Exception as e:
