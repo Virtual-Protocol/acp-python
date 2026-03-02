@@ -241,19 +241,20 @@ class ACPContractClient(BaseAcpContractClient):
         raise ACPError("Not Supported")
 
     def sign_typed_data(self, typed_data: dict[str, Any]) -> str:
-        domain = typed_data["domain"]
-        types = typed_data["types"]
-        primary_type = typed_data["primaryType"]
-        message = typed_data["message"]
-
-        # encode_typed_data expects (domain_data, types, primary_type, message_data)
-        # It handles EIP-712 hashing internally
-        signable = encode_typed_data(
-            domain,
-            types,
-            primary_type,
-            message,
-        )
-
+        signable = encode_typed_data(full_message=typed_data)
         signed = self.account.sign_message(signable)
-        return signed.signature.hex()
+        raw_signature = signed.signature.hex()
+        return f"0x{self._pack_1271_eoa_signature(raw_signature)}"
+
+    def _pack_1271_eoa_signature(self, validation_signature: str) -> str:
+        if validation_signature.startswith("0x"):
+            validation_signature = validation_signature[2:]
+
+        prefix = b"\x00"
+        entity_id_bytes = self.entity_id.to_bytes(4, "big")
+        separator = b"\xff"
+        eoa_type = b"\x00"
+        sig_bytes = bytes.fromhex(validation_signature)
+
+        packed = prefix + entity_id_bytes + separator + eoa_type + sig_bytes
+        return packed.hex()
