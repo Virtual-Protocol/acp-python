@@ -9,6 +9,22 @@ from virtuals_acp.models import ChainConfig, X402Config
 
 ChainEnv = Literal["base-sepolia", "base"]
 
+TESTNET_CHAINS = [
+    ChainConfig(chain_id=84532, rpc_url="https://base-sepolia.g.alchemy.com/v2"), # baseSepolia,
+    # ChainConfig(chain_id=11_155_111, rpc_url="https://eth-sepolia.g.alchemy.com/v2"), #   sepolia
+    # ChainConfig(chain_id=80_002, rpc_url="https://polygon-amoy.g.alchemy.com/v2"), #   polygonAmoy
+    # ChainConfig(chain_id=421_614, rpc_url="https://arb-sepolia.g.alchemy.com/v2"), #   arbitrumSepolia
+    # ChainConfig(chain_id=56, rpc_url="https://bnb-testnet.g.alchemy.com/v2"), #   bscTestnet
+]
+
+MAINNET_CHAINS = [
+    ChainConfig(chain_id=8453, rpc_url="https://base.g.alchemy.com/v2"), # base
+    # ChainConfig(chain_id=1, rpc_url="https://eth-mainnet.g.alchemy.com/v2"), # mainnet
+    # ChainConfig(chain_id=137, rpc_url="https://polygon-mainnet.g.alchemy.com/v2"), # polygon
+    # ChainConfig(chain_id=42_161, rpc_url="https://arb-mainnet.g.alchemy.com/v2"), # arbitrum
+    # ChainConfig(chain_id=56, rpc_url="https://bnb-mainnet.g.alchemy.com/v2"), # bsc
+]
+
 class ACPContractConfig:
     def __init__(
         self,
@@ -49,6 +65,7 @@ BASE_SEPOLIA_CONFIG = ACPContractConfig(
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.gg/api",
     abi=ACP_ABI,
+    chains=TESTNET_CHAINS,
 )
 
 
@@ -65,6 +82,7 @@ BASE_SEPOLIA_ACP_X402_CONFIG = ACPContractConfig(
     x402_config=X402Config(
         url="https://dev-acp-x402.virtuals.io",
     ),
+    chains=TESTNET_CHAINS,
 )
 
 
@@ -78,6 +96,7 @@ BASE_SEPOLIA_CONFIG_V2 = ACPContractConfig(
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.gg/api",
     abi=ACP_V2_ABI,
+    chains=TESTNET_CHAINS,
 )
 
 
@@ -93,7 +112,8 @@ BASE_SEPOLIA_ACP_X402_CONFIG_V2 = ACPContractConfig(
     abi=ACP_V2_ABI,
     x402_config=X402Config(
         url="https://dev-acp-x402.virtuals.io",
-    )
+    ),
+    chains=TESTNET_CHAINS,
 )
 
 
@@ -107,6 +127,7 @@ BASE_MAINNET_CONFIG = ACPContractConfig(
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.io/api",
     abi=ACP_ABI,
+    chains=MAINNET_CHAINS,
 )
 
 
@@ -123,6 +144,7 @@ BASE_MAINNET_ACP_X402_CONFIG = ACPContractConfig(
     x402_config=X402Config(
         url="https://acp-x402.virtuals.io",
     ),
+    chains=MAINNET_CHAINS,
 )
 
 
@@ -137,6 +159,7 @@ BASE_MAINNET_CONFIG_V2 = ACPContractConfig(
     alchemy_policy_id="186aaa4a-5f57-4156-83fb-e456365a8820",
     acp_api_url="https://acpx.virtuals.io/api",
     abi=ACP_V2_ABI,
+    chains=MAINNET_CHAINS,
 )
 
 
@@ -153,6 +176,7 @@ BASE_MAINNET_ACP_X402_CONFIG_V2 = ACPContractConfig(
     x402_config=X402Config(
         url="https://acp-x402.virtuals.io",
     ),
+    chains=MAINNET_CHAINS,
 )
 
 
