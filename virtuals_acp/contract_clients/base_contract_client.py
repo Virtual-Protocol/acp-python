@@ -127,6 +127,10 @@ class BaseAcpContractClient(ABC):
             )
 
     @abstractmethod
+    def get_acp_version(self) -> str:
+        pass
+
+    @abstractmethod
     def get_asset_manager_address(self) -> str:
         pass
 
