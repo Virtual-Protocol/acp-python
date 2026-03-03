@@ -890,7 +890,7 @@ class VirtualsACP:
                 context=context,
                 contract_address=job.get("contractAddress"),
                 net_payable_amount=job.get("netPayableAmount"),
-                deliverable=data.get("deliverable"),
+                deliverable=job.get("deliverable"),
             )
         except Exception as e:
             raise ACPApiError(f"Failed to get job by onchain ID: {e}")
