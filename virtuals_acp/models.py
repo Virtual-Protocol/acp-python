@@ -110,6 +110,7 @@ class IACPAgent:
     job_offerings: List["ACPJobOffering"] = field(default_factory=list)
 
     resources: List["ACPResourceOffering"] = field(default_factory=list)
+    cluster: Optional[str] = None
     twitter_handle: Optional[str] = None
     metrics: Optional[Dict[str, Any]] = None
 
