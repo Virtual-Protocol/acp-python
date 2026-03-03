@@ -476,6 +476,7 @@ class VirtualsACP:
             wallet_address=Web3.to_checksum_address(agent_data["walletAddress"]),
             job_offerings=job_offerings,
             resources=resources,
+            cluster=agent_data.get("cluster"),
             twitter_handle=agent_data.get("twitterHandle"),
             metrics=agent_data.get("metrics"),
             contract_address=contract_address,
