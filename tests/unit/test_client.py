@@ -193,7 +193,8 @@ class TestAcpClient:
                             "expiry": None,
                             "payableDetails": None,
                             "txHash": None,
-                            "signedTxHash": None
+                            "signedTxHash": None,
+                            "state": 1
                         }
                     ]
                 }
@@ -620,7 +621,8 @@ class TestAcpClient:
                             "expiry": None,
                             "payableDetails": None,
                             "txHash": None,
-                            "signedTxHash": None
+                            "signedTxHash": None,
+                            "state": 1
                         }
                     ]
                 }
@@ -718,7 +720,8 @@ class TestAcpClient:
                     "expiry": None,
                     "payableDetails": None,
                     "txHash": None,
-                    "signedTxHash": None
+                    "signedTxHash": None,
+                    "state": 1
                 }
             }
             mock_get.return_value = mock_response
@@ -771,8 +774,8 @@ class TestAcpClient:
             client = VirtualsACP(acp_contract_clients=mock_contract_client)
 
             assert client.contract_clients == [mock_contract_client]
-            assert client.contract_client == mock_contract_client
-            assert client.agent_wallet_address == TEST_AGENT_ADDRESS
+            assert client.acp_contract_client == mock_contract_client
+            assert client.wallet_address == TEST_AGENT_ADDRESS
 
         @patch('virtuals_acp.client.socketio.Client')
         def test_should_initialize_with_list_of_clients(self, mock_socketio, mock_contract_client):
@@ -785,7 +788,7 @@ class TestAcpClient:
             client = VirtualsACP(acp_contract_clients=[mock_contract_client, client2])
 
             assert len(client.contract_clients) == 2
-            assert client.contract_client == mock_contract_client
+            assert client.acp_contract_client == mock_contract_client
 
         @patch('virtuals_acp.client.socketio.Client')
         def test_should_raise_error_when_no_clients_provided(self, mock_socketio):
@@ -1002,7 +1005,7 @@ class TestAcpClient:
             """Should raise ACPError when provider address is same as client"""
             with pytest.raises(ACPError, match="Provider address cannot be the same as the client address"):
                 acp_client.initiate_job(
-                    provider_address=acp_client.agent_address,
+                    provider_address=acp_client.wallet_address,
                     service_requirement={"task": "test"},
                     fare_amount=mock_fare_amount
                 )
@@ -1017,12 +1020,12 @@ class TestAcpClient:
 
             # Mock contract client methods
             mock_create_op = MagicMock()
-            acp_client.contract_client.create_job = MagicMock(return_value=mock_create_op)
-            acp_client.contract_client.handle_operation = MagicMock(return_value="tx_response")
-            acp_client.contract_client.get_job_id = MagicMock(return_value=42)
+            acp_client.acp_contract_client.create_job = MagicMock(return_value=mock_create_op)
+            acp_client.acp_contract_client.handle_operation = MagicMock(return_value="tx_response")
+            acp_client.acp_contract_client.get_job_id = MagicMock(return_value=42)
 
             mock_memo_op = MagicMock()
-            acp_client.contract_client.create_memo = MagicMock(return_value=mock_memo_op)
+            acp_client.acp_contract_client.create_memo = MagicMock(return_value=mock_memo_op)
 
             job_id = acp_client.initiate_job(
                 provider_address=TEST_PROVIDER_ADDRESS,
@@ -1031,7 +1034,7 @@ class TestAcpClient:
             )
 
             # Verify create_job was called (not create_job_with_account)
-            acp_client.contract_client.create_job.assert_called_once()
+            acp_client.acp_contract_client.create_job.assert_called_once()
             assert job_id == 42
 
         @patch('virtuals_acp.client.VirtualsACP.get_by_client_and_provider')
@@ -1046,15 +1049,15 @@ class TestAcpClient:
 
             # Mock contract client methods
             mock_create_op = MagicMock()
-            acp_client.contract_client.create_job_with_account = MagicMock(return_value=mock_create_op)
-            acp_client.contract_client.handle_operation = MagicMock(return_value="tx_response")
-            acp_client.contract_client.get_job_id = MagicMock(return_value=43)
+            acp_client.acp_contract_client.create_job_with_account = MagicMock(return_value=mock_create_op)
+            acp_client.acp_contract_client.handle_operation = MagicMock(return_value="tx_response")
+            acp_client.acp_contract_client.get_job_id = MagicMock(return_value=43)
 
             mock_memo_op = MagicMock()
-            acp_client.contract_client.create_memo = MagicMock(return_value=mock_memo_op)
+            acp_client.acp_contract_client.create_memo = MagicMock(return_value=mock_memo_op)
 
             # Set config to NOT be a base contract (to trigger account path)
-            acp_client.contract_client.config.contract_address = "0xCustomContract123456789012345678901234567"
+            acp_client.acp_contract_client.config.contract_address = "0xCustomContract123456789012345678901234567"
 
             job_id = acp_client.initiate_job(
                 provider_address=TEST_PROVIDER_ADDRESS,
@@ -1063,8 +1066,8 @@ class TestAcpClient:
             )
 
             # Verify create_job_with_account was called with account ID
-            acp_client.contract_client.create_job_with_account.assert_called_once()
-            call_args = acp_client.contract_client.create_job_with_account.call_args[0]
+            acp_client.acp_contract_client.create_job_with_account.assert_called_once()
+            call_args = acp_client.acp_contract_client.create_job_with_account.call_args[0]
             assert call_args[0] == 5  # account.id
             assert job_id == 43
 
@@ -1076,12 +1079,12 @@ class TestAcpClient:
             mock_get_account.return_value = None
 
             mock_create_op = MagicMock()
-            acp_client.contract_client.create_job = MagicMock(return_value=mock_create_op)
-            acp_client.contract_client.handle_operation = MagicMock(return_value="tx_response")
-            acp_client.contract_client.get_job_id = MagicMock(return_value=44)
+            acp_client.acp_contract_client.create_job = MagicMock(return_value=mock_create_op)
+            acp_client.acp_contract_client.handle_operation = MagicMock(return_value="tx_response")
+            acp_client.acp_contract_client.get_job_id = MagicMock(return_value=44)
 
             mock_memo_op = MagicMock()
-            acp_client.contract_client.create_memo = MagicMock(return_value=mock_memo_op)
+            acp_client.acp_contract_client.create_memo = MagicMock(return_value=mock_memo_op)
 
             requirement_dict = {"task": "translate", "language": "spanish"}
 
@@ -1092,8 +1095,8 @@ class TestAcpClient:
             )
 
             # Verify create_memo was called with JSON string
-            acp_client.contract_client.create_memo.assert_called_once()
-            call_args = acp_client.contract_client.create_memo.call_args[0]
+            acp_client.acp_contract_client.create_memo.assert_called_once()
+            call_args = acp_client.acp_contract_client.create_memo.call_args[0]
 
             # The second argument should be the JSON-stringified requirement
             import json
@@ -1107,12 +1110,12 @@ class TestAcpClient:
             mock_get_account.return_value = None
 
             mock_create_op = MagicMock()
-            acp_client.contract_client.create_job = MagicMock(return_value=mock_create_op)
-            acp_client.contract_client.handle_operation = MagicMock(return_value="tx_response")
-            acp_client.contract_client.get_job_id = MagicMock(return_value=45)
+            acp_client.acp_contract_client.create_job = MagicMock(return_value=mock_create_op)
+            acp_client.acp_contract_client.handle_operation = MagicMock(return_value="tx_response")
+            acp_client.acp_contract_client.get_job_id = MagicMock(return_value=45)
 
             mock_memo_op = MagicMock()
-            acp_client.contract_client.create_memo = MagicMock(return_value=mock_memo_op)
+            acp_client.acp_contract_client.create_memo = MagicMock(return_value=mock_memo_op)
 
             requirement_str = "Please translate this document"
 
@@ -1123,8 +1126,8 @@ class TestAcpClient:
             )
 
             # Verify create_memo was called with the string as-is
-            acp_client.contract_client.create_memo.assert_called_once()
-            call_args = acp_client.contract_client.create_memo.call_args[0]
+            acp_client.acp_contract_client.create_memo.assert_called_once()
+            call_args = acp_client.acp_contract_client.create_memo.call_args[0]
             assert call_args[1] == requirement_str
 
         @patch('virtuals_acp.client.VirtualsACP.get_by_client_and_provider')
@@ -1137,12 +1140,12 @@ class TestAcpClient:
             mock_get_account.return_value = None
 
             mock_create_op = MagicMock()
-            acp_client.contract_client.create_job = MagicMock(return_value=mock_create_op)
-            acp_client.contract_client.handle_operation = MagicMock(return_value="tx_response")
-            acp_client.contract_client.get_job_id = MagicMock(return_value=46)
+            acp_client.acp_contract_client.create_job = MagicMock(return_value=mock_create_op)
+            acp_client.acp_contract_client.handle_operation = MagicMock(return_value="tx_response")
+            acp_client.acp_contract_client.get_job_id = MagicMock(return_value=46)
 
             mock_memo_op = MagicMock()
-            acp_client.contract_client.create_memo = MagicMock(return_value=mock_memo_op)
+            acp_client.acp_contract_client.create_memo = MagicMock(return_value=mock_memo_op)
 
             before = datetime.now(timezone.utc) + timedelta(days=1)
 
@@ -1156,8 +1159,8 @@ class TestAcpClient:
             after = datetime.now(timezone.utc) + timedelta(days=1)
 
             # Verify create_job was called with an expiry around 1 day from now
-            acp_client.contract_client.create_job.assert_called_once()
-            call_args = acp_client.contract_client.create_job.call_args[0]
+            acp_client.acp_contract_client.create_job.assert_called_once()
+            call_args = acp_client.acp_contract_client.create_job.call_args[0]
             expired_at = call_args[2]  # Third argument is expired_at
 
             # Should be within a few seconds of 1 day from now
@@ -1171,12 +1174,12 @@ class TestAcpClient:
             mock_get_account.return_value = None
 
             mock_create_op = MagicMock()
-            acp_client.contract_client.create_job = MagicMock(return_value=mock_create_op)
-            acp_client.contract_client.handle_operation = MagicMock(return_value="tx_response")
-            acp_client.contract_client.get_job_id = MagicMock(return_value=47)
+            acp_client.acp_contract_client.create_job = MagicMock(return_value=mock_create_op)
+            acp_client.acp_contract_client.handle_operation = MagicMock(return_value="tx_response")
+            acp_client.acp_contract_client.get_job_id = MagicMock(return_value=47)
 
             mock_memo_op = MagicMock()
-            acp_client.contract_client.create_memo = MagicMock(return_value=mock_memo_op)
+            acp_client.acp_contract_client.create_memo = MagicMock(return_value=mock_memo_op)
 
             custom_evaluator = "0x7777777777777777777777777777777777777777"
 
@@ -1188,8 +1191,8 @@ class TestAcpClient:
             )
 
             # Verify create_job was called with custom evaluator
-            acp_client.contract_client.create_job.assert_called_once()
-            call_args = acp_client.contract_client.create_job.call_args[0]
+            acp_client.acp_contract_client.create_job.assert_called_once()
+            call_args = acp_client.acp_contract_client.create_job.call_args[0]
 
             # Second argument is evaluator address
             from web3 import Web3

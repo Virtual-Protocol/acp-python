@@ -36,11 +36,11 @@ def evaluator():
             entity_id=env.EVALUATOR_ENTITY_ID,
         ),
     )
-    logger.info(f"Evaluator ACP Initialized. Agent: {acp_client.agent_address}")
+    logger.info(f"Evaluator ACP Initialized. Agent: {acp_client.wallet_address}")
 
     while True:
         logger.info(
-            f"\nPolling for jobs assigned to {acp_client.agent_address} requiring evaluation."
+            f"\nPolling for jobs assigned to {acp_client.wallet_address} requiring evaluation."
         )
         active_jobs_list: List[ACPJob] = acp_client.get_active_jobs()
 
@@ -54,13 +54,13 @@ def evaluator():
             try:
 
                 # Ensure this job is for the current evaluator
-                if job.evaluator_address != acp_client.agent_address:
+                if job.evaluator_address != acp_client.wallet_address:
                     continue
 
                 if job.phase == ACPJobPhase.EVALUATION:
                     logger.info(f"Found Job {job.id} in EVALUATION phase.")
                     logger.info(
-                        f"Job {job.id}: Evaluating deliverable: {job.deliverable} with requirement: {job.requirement}"
+                        f"Job {job.id}: Evaluating deliverable: {job.get_deliverable()} with requirement: {job.requirement}"
                     )
                     job.evaluate(
                         accept=ACCEPT_EVALUATION,

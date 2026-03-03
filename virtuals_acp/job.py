@@ -1,7 +1,8 @@
-from datetime import datetime, timezone, timedelta
+import json
+import re
 import time
+from datetime import datetime, timezone, timedelta
 from typing import TYPE_CHECKING, List, Optional, Dict, Any, Union, Literal
-
 from pydantic import BaseModel, Field, ConfigDict, PrivateAttr
 
 from virtuals_acp.account import ACPAccount
@@ -49,6 +50,7 @@ class ACPJob(BaseModel):
     context: Dict[str, Any] | None
     contract_address: Optional[str] = None
     net_payable_amount: Optional[float] = None
+    deliverable: Optional[DeliverablePayload] = None # TODO: turn this into private attr
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -60,7 +62,7 @@ class ACPJob(BaseModel):
 
     def model_post_init(self, __context: Any) -> None:
         if self.acp_client:
-            self._base_fare = self.acp_client.config.base_fare
+            self._base_fare = self.acp_client.acp_contract_client.config.base_fare
 
         memo = next(
             (
@@ -124,7 +126,7 @@ class ACPJob(BaseModel):
     @property
     def acp_contract_client(self):
         if not self.contract_address:
-            return self.acp_client.contract_client
+            return self.acp_client.acp_contract_client
         return self.acp_client.contract_client_by_address(self.contract_address)
 
     @property
@@ -139,18 +141,6 @@ class ACPJob(BaseModel):
     def account(self) -> Optional[ACPAccount]:
         return self.acp_client.get_account_by_job_id(self.id, self.acp_contract_client)
 
-    @property
-    def deliverable(self) -> Optional[str]:
-        """Get the deliverable from the completed memo"""
-        memo = next(
-            (
-                m
-                for m in self.memos
-                if ACPJobPhase(m.next_phase) == ACPJobPhase.COMPLETED
-            ),
-            None,
-        )
-        return memo.content if memo else None
 
     @property
     def rejection_reason(self) -> Optional[str]:
@@ -256,7 +246,12 @@ class ACPJob(BaseModel):
         if not memo:
             raise Exception("No negotiation memo found")
 
-        if memo.type == MemoType.PAYABLE_REQUEST and memo.state != ACPMemoState.PENDING and memo.payable_details is not None and memo.payable_details['lzDstEid'] is not None:
+        if (
+            memo.type == MemoType.PAYABLE_REQUEST and
+            memo.state != ACPMemoState.PENDING and
+            memo.payable_details is not None and
+            memo.payable_details.get('lzDstEid') is not None
+        ):
             print(f"Memo not ready to be signed, state: {memo.state}, payable_details: {memo.payable_details}")
             return
 
@@ -474,10 +469,13 @@ class ACPJob(BaseModel):
         """Get the latest memo in the job"""
         return self.memos[-1] if self.memos else None
 
-    def _get_memo_by_id(self, memo_id) -> Optional[ACPMemo]:
+    def _get_memo_by_id(self, memo_id: int) -> Optional[ACPMemo]:
         return next((m for m in self.memos if m.id == memo_id), None)
 
     def deliver(self, deliverable: DeliverablePayload) -> str | None:
+        if self.phase != ACPJobPhase.TRANSACTION:
+            raise ACPError("Job is not in transaction phase")
+        
         operations: List[OperationPayload] = []
 
         operations.append(
@@ -500,6 +498,9 @@ class ACPJob(BaseModel):
         skip_fee: bool = False,
         expired_at: Optional[datetime] = None,
     ) -> str | None:
+        if self.phase != ACPJobPhase.TRANSACTION:
+            raise ACPError("Job is not in transaction phase")
+
         if expired_at is None:
             expired_at = datetime.now(timezone.utc) + timedelta(minutes=5)
 
@@ -747,4 +748,21 @@ class ACPJob(BaseModel):
 
         self.acp_contract_client.handle_operation([create_memo_op])
 
+    def get_deliverable(self) -> Optional[DeliverablePayload]:
+        deliverable = self.deliverable
+        if not deliverable:
+            return None
 
+        if not isinstance(deliverable, str):
+            return deliverable
+
+        if not re.search(r"api/memo-contents/([0-9]+)$", deliverable):
+            return deliverable
+
+        content = self.acp_client.get_memo_content(deliverable)
+
+        try:
+            return json.loads(content)
+        except (json.JSONDecodeError, TypeError):
+            return content
+    

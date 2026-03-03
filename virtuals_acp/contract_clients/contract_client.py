@@ -6,11 +6,14 @@ from datetime import datetime
 from typing import Dict, Any, Optional, List
 
 from eth_account import Account
+from eth_account.messages import encode_typed_data
+from eth_utils.crypto import keccak
 from web3 import Web3
 
 from virtuals_acp.alchemy import AlchemyAccountKit
 from virtuals_acp.configs.configs import ACPContractConfig, BASE_MAINNET_CONFIG
 from virtuals_acp.contract_clients.base_contract_client import BaseAcpContractClient
+from virtuals_acp.constants import SINGLE_SIGNER_VALIDATION_MODULE_ADDRESS
 from virtuals_acp.exceptions import ACPError
 from virtuals_acp.models import (
     ACPJobPhase,
@@ -238,3 +241,36 @@ class ACPContractClient(BaseAcpContractClient):
 
     def get_asset_manager_address(self) -> str:
         raise ACPError("Not Supported")
+
+    def sign_typed_data(self, typed_data: dict[str, Any]) -> str:
+        encoded = encode_typed_data(full_message=typed_data)
+        typed_data_hash = keccak(b"\x19\x01" + encoded.header + encoded.body)
+
+        replay_safe_typed_data = {
+            "domain": {
+                "chainId": self.config.chain_id,
+                "verifyingContract": SINGLE_SIGNER_VALIDATION_MODULE_ADDRESS,
+                "salt": "0x" + "00" * 12 + self.agent_wallet_address[2:],
+            },
+            "types": {"ReplaySafeHash": [{"name": "hash", "type": "bytes32"}]},
+            "message": {"hash": "0x" + typed_data_hash.hex()},
+            "primaryType": "ReplaySafeHash",
+        }
+
+        signable = encode_typed_data(full_message=replay_safe_typed_data)
+        signed = self.account.sign_message(signable)
+        raw_signature = signed.signature.hex()
+        return self._pack_1271_eoa_signature(raw_signature)
+
+    def _pack_1271_eoa_signature(self, validation_signature: str) -> str:
+        if validation_signature.startswith("0x"):
+            validation_signature = validation_signature[2:]
+
+        prefix = b"\x00"
+        entity_id_bytes = self.entity_id.to_bytes(4, "big")
+        separator = b"\xff"
+        eoa_type = b"\x00"
+        sig_bytes = bytes.fromhex(validation_signature)
+
+        packed = prefix + entity_id_bytes + separator + eoa_type + sig_bytes
+        return packed.hex()

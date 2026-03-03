@@ -69,7 +69,7 @@ def buyer():
             logger.info(f"Job {job.id} rejection memo signed")
 
         elif job.phase == ACPJobPhase.COMPLETED:
-            logger.info(f"Job {job.id} completed, received deliverable: {job.deliverable}")
+            logger.info(f"Job {job.id} completed, received deliverable: {job.get_deliverable()}")
 
         elif job.phase == ACPJobPhase.REJECTED:
             logger.info(f"Job {job.id} rejected by seller")

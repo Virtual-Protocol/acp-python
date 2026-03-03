@@ -231,7 +231,8 @@ def handle_task_transaction(job: ACPJob):
             ),
             Fare.from_contract_address(
                 to_contract,
-                config
+                config,
+                config.chain_id
             )
         )
         logger.info(f"Returning swapped token: {swapped_amount}")
