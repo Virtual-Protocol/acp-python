@@ -40,6 +40,16 @@ from virtuals_acp.models import (
     IACPAgent,
     ACPMemoStatus,
     PriceType,
+    AgentCard,
+    AgentCardDetails,
+    AgentCardPendingRequest,
+    AgentCardSignupResult,
+    AgentCardSignupPollResult,
+    AgentCardPurchaseResult,
+    AgentCardPurchaseStatusResult,
+    AgentCardListResult,
+    AgentCardRefundResult,
+    AgentCardRefundStatusResult,
 )
 
 logging.basicConfig(
@@ -961,6 +971,116 @@ class VirtualsACP:
             raise ACPApiError("Failed to get memo content")
 
         return response["content"]
+
+    # -- AgentCard (virtual card) methods --
+
+    def card_signup(self, email: str) -> AgentCardSignupResult:
+        response = self.acp_client.request(
+            "POST", "me/card/signup", data={"email": email}
+        )
+        return AgentCardSignupResult(state=response["state"])
+
+    def card_signup_poll(self, state: str) -> AgentCardSignupPollResult:
+        response = self.acp_client.request(
+            "GET", "me/card/signup/poll", params={"state": state}
+        )
+        return AgentCardSignupPollResult(
+            done=response["done"],
+            email=response.get("email"),
+        )
+
+    def card_whoami(self) -> str:
+        response = self.acp_client.request("GET", "me/card/whoami")
+        return response["email"]
+
+    def card_purchase(self, amount_cents: int) -> AgentCardPurchaseResult:
+        response = self.acp_client.request(
+            "POST", "me/card/purchase", data={"amountCents": amount_cents}
+        )
+        return AgentCardPurchaseResult(
+            url=response["url"],
+            session_id=response["sessionId"],
+            manual_fulfillment=response.get("manualFulfillment", False),
+        )
+
+    def card_purchase_status(self, session_id: str) -> AgentCardPurchaseStatusResult:
+        response = self.acp_client.request(
+            "GET", "me/card/purchase/status", params={"session_id": session_id}
+        )
+        return AgentCardPurchaseStatusResult(
+            status=response["status"],
+            card=response.get("card"),
+            error=response.get("error"),
+        )
+
+    def card_list(self) -> AgentCardListResult:
+        response = self.acp_client.request("GET", "me/card")
+        cards = [
+            AgentCard(
+                id=c["id"],
+                last4=c["last4"],
+                amount_cents=c["amountCents"],
+                purchased_at=c.get("purchasedAt"),
+            )
+            for c in response.get("cards", [])
+        ]
+        pending = [
+            AgentCardPendingRequest(
+                amount_cents=r["amountCents"],
+                status=r["status"],
+                created_at=r["createdAt"],
+            )
+            for r in response.get("requests", [])
+        ]
+        return AgentCardListResult(cards=cards, requests=pending)
+
+    def card_details(self, card_id: str) -> AgentCardDetails:
+        response = self.acp_client.request("GET", f"me/card/{card_id}/details")
+        return AgentCardDetails(
+            pan=response["pan"],
+            cvv=response["cvv"],
+            expiry_month=response["expiryMonth"],
+            expiry_year=response["expiryYear"],
+            amount_cents=response["amountCents"],
+        )
+
+    def card_balance(self, card_id: str) -> int:
+        response = self.acp_client.request("GET", f"me/card/{card_id}/balance")
+        return response["amountCents"]
+
+    def card_track(
+        self,
+        name: str,
+        amount: float,
+        store: Optional[str] = None,
+        intent: Optional[str] = None,
+        incomplete: bool = False,
+    ) -> None:
+        data: Dict[str, Any] = {"name": name, "amount": amount, "incomplete": incomplete}
+        if store is not None:
+            data["store"] = store
+        if intent is not None:
+            data["intent"] = intent
+        self.acp_client.request("POST", "me/card/track", data=data)
+
+    def card_refund(self, card_id: str, amount_cents: int) -> AgentCardRefundResult:
+        response = self.acp_client.request(
+            "POST", f"me/card/{card_id}/refund", data={"amountCents": amount_cents}
+        )
+        return AgentCardRefundResult(
+            url=response["url"],
+            session_id=response["sessionId"],
+        )
+
+    def card_refund_status(self, session_id: str) -> AgentCardRefundStatusResult:
+        response = self.acp_client.request(
+            "GET", "me/card/refund/status", params={"session_id": session_id}
+        )
+        return AgentCardRefundStatusResult(
+            status=response["status"],
+            refunded_amount_cents=response.get("refundedAmountCents"),
+            error=response.get("error"),
+        )
 
 
 # Rebuild the AcpJob model after VirtualsACP is defined

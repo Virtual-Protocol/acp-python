@@ -327,3 +327,73 @@ class X402PaymentResponse(PayloadModel):
 class ChainConfig(BaseModel):
     chain_id: int
     rpc_url: Optional[str] = None
+
+
+# -- AgentCard models --
+
+@dataclass
+class AgentCard:
+    id: str
+    last4: str
+    amount_cents: int
+    purchased_at: Optional[str] = None
+
+
+@dataclass
+class AgentCardDetails:
+    pan: str
+    cvv: str
+    expiry_month: int
+    expiry_year: int
+    amount_cents: int
+
+
+@dataclass
+class AgentCardPendingRequest:
+    amount_cents: int
+    status: str
+    created_at: str
+
+
+@dataclass
+class AgentCardSignupResult:
+    state: str
+
+
+@dataclass
+class AgentCardSignupPollResult:
+    done: bool
+    email: Optional[str] = None
+
+
+@dataclass
+class AgentCardPurchaseResult:
+    url: str
+    session_id: str
+    manual_fulfillment: bool = False
+
+
+@dataclass
+class AgentCardPurchaseStatusResult:
+    status: str
+    card: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+
+@dataclass
+class AgentCardListResult:
+    cards: List[AgentCard] = field(default_factory=list)
+    requests: List[AgentCardPendingRequest] = field(default_factory=list)
+
+
+@dataclass
+class AgentCardRefundResult:
+    url: str
+    session_id: str
+
+
+@dataclass
+class AgentCardRefundStatusResult:
+    status: str
+    refunded_amount_cents: Optional[int] = None
+    error: Optional[str] = None
