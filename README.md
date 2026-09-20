@@ -274,3 +274,5 @@ We welcome contributions from the community to help improve the ACP Python SDK. 
 - [ACP FAQs](https://whitepaper.virtuals.io/info-hub/builders-hub/agent-commerce-protocol-acp-builder-guide/acp-faq-debugging-tips-and-best-practices)
    - Comprehensive FAQ section covering common plugin questions—everything from installation and configuration to key API usage patterns.
    - Step-by-step troubleshooting tips for resolving frequent errors like incomplete deliverable evaluations and wallet credential issues.
+- [Fee-free settlement in Nano (XNO)](docs/nano-x402-settlement.md)
+   - Pay an x402-priced ACP job in Nano (XNO): feeless, instant finality, no EVM gas and no cross-chain bridge on the settlement leg. Additive and opt-in alongside the USDC `ACPX402` path.
