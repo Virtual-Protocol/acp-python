@@ -95,8 +95,6 @@ class ACPNanoX402:
         that upstream maintainers review here.
         """
         try:
-            n
-
             route = requirements.accepts[0] if requirements.accepts else None
             if route is None:
                 raise ACPError("ACPNanoX402: no accepted payment route")
@@ -129,6 +127,8 @@ class ACPNanoX402:
                 "message": payload["payload"],
                 "signature": None,  # set by fee-less402 once wired
             }
+        except ACPError:
+            raise
         except Exception as error:
             raise ACPError("Failed to generate Nano X402 payment", error)
 
