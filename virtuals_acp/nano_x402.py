@@ -44,11 +44,13 @@ from virtuals_acp.constants import HTTP_STATUS_CODES_X402
 from virtuals_acp.exceptions import ACPError
 
 # Optional, MIT-licensed Nano x402 client used only when a Nano rail is selected.
-# The SDK does not depend on it; install with:  pip install feeless402
+# feeless402 installs as the `nano_pay` package; the x402 signing primitive is
+# `nano_pay.x402.request_with_payment` (verified present in the installed wheel,
+# 2026-09-21). The SDK does not depend on it; install with:  pip install feeless402
 try:  # pragma: no cover - import is optional
-    from feeless402 import NanoX402Client  # type: ignore
+    from nano_pay.x402 import request_with_payment  # type: ignore
 except Exception:  # pragma: no cover
-    NanoX402Client = None  # type: ignore
+    request_with_payment = None  # type: ignore
 
 # x402 exact-scheme pair for the Nano DAG layer-1.
 NANO_MAINNET = {"scheme": "exact", "network": "nano:mainnet"}
@@ -67,16 +69,19 @@ class ACPNanoX402:
         self,
         agent_wallet_address: str,
         entity_id: int,
-        nano_secret_key: Optional[str] = None,
-        rpc_url: str = "https://rpc.nano.to",
+        nano_wallet=None,
+        rpc=None,
     ):
-        if NanoX402Client is None:
+        if request_with_payment is None:
             raise ACPError(
                 "ACPNanoX402 requires 'feeless402'. Install it with: pip install feeless402"
             )
         self.agent_wallet_address = agent_wallet_address
         self.entity_id = entity_id
-        self._client = NanoX402Client(secret_key=nano_secret_key, rpc_url=rpc_url)
+        # The feeless402 Wallet/RPC objects (from nano_pay.wallet / nano_pay.rpc)
+        # used by request_with_payment. STUB: assigned by the caller; not created here.
+        self._wallet = nano_wallet
+        self._rpc = rpc
 
     # -- The two ACPX402 entry points a buyer agent calls -------------------
 

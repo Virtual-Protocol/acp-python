@@ -35,9 +35,9 @@ NANO_AGENT = "nano_3agent00000000000000000000000000000000000000000000000000"
 
 
 def _make_adapter():
-    # The optional feeless402 client is CLI-only on PyPI today; mock it so the
-    # stub constructor resolves without the real package being importable.
-    with patch("virtuals_acp.nano_x402.NanoX402Client", MagicMock()):
+    # The optional feeless402 signing primitive (nano_pay.x402.request_with_payment)
+    # may be absent in a minimal env; mock it so the stub constructor resolves.
+    with patch("virtuals_acp.nano_x402.request_with_payment", MagicMock()):
         return ACPNanoX402(agent_wallet_address=NANO_AGENT, entity_id=42)
 
 
