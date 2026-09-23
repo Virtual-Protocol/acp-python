@@ -63,11 +63,14 @@ requirements, data = request_with_payment(
 `402 Payment Required` it sends the XNO and retries with the proof — no gas, no
 bridge, sub-second finality.
 
-## Adding it to an ACP agent
+## In this SDK: the `ACPNanoX402` adapter
 
-The change to an ACP job is small because the HTTP-402 protocol shape is the
-same as `ACPX402.perform_request`: the seller still returns `402 + a body`; the
-only difference is that the buyer proves the XNO transfer instead of an EIP-712
-`TransferWithAuthorization`. If you would like it, a follow-up can add a
-`virtuals_acp/nano_x402.py` that mirrors `ACPX402`'s interface against
-`feeless402`, with tests alongside `tests/unit/test_x402.py`.
+This repository now includes `virtuals_acp/nano_x402.py` — `ACPNanoX402`, a
+buildable adapter that mirrors `ACPX402`'s call surface (`generate_payment`,
+`perform_request`) but produces an x402 `exact`-scheme `nano:mainnet` payment
+instead of an EIP-712 `TransferWithAuthorization` against a USDC contract. It
+is additive and opt-in: the existing USDC `ACPX402` path is untouched, and
+`feeless402` is an optional extra (`pip install feeless402`), not a dependency
+of `virtuals-acp`. Unit tests live alongside `tests/unit/test_x402.py` in
+`tests/unit/test_nano_x402.py` and prove the payload shape, the `nano:mainnet`
+route guard and the 402/2xx handling.
